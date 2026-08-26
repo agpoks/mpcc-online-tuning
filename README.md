@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/source/_static/logo-banner.svg" alt="mpcc-online-tuning" width="560">
+</p>
+
 # mpcc-online-tuning
 
 **Tuning an MPCC's cost weights online, every control tick, from one scalar.**
@@ -11,6 +15,8 @@ This is a **spike**: a small, deliberately throwaway prototype built to answer
 one question — is this real-time feasible, and does the gradient it needs
 actually exist in closed form? Both answers are yes, and both are checked here
 rather than asserted. It is not a finished tool.
+
+Docs: see [`docs/`](docs) (built on Read the Docs).
 
 ## The idea in one equation
 
@@ -28,8 +34,10 @@ sweep. It falls out of a solve that was happening anyway, which is the whole
 argument for why an MPC's parameters can be tuned at control rate when a neural
 policy's cannot.
 
-Verified against finite differences in `tests/`: cosine 1.0000, relative error
-< 1e-3.
+Verified against finite differences across 15 states and three weight settings
+(`python examples/gradient_check.py`): **cosine 1.00000**, max relative error
+3.7e-4 — and the gradient costs **0.079% of the solve it comes from**. That
+last number is the entire argument for why this can run at control rate.
 
 ## The algorithm
 
@@ -57,9 +65,13 @@ the second solve is skipped entirely.
 
 ```bash
 pip install -e .
-python examples/tune_online.py --episodes 20 --plot runs/tuning.png
+python examples/gradient_check.py                # check the premise first
+python examples/tune_online.py --episodes 30 --plot runs/tuning.png
 python examples/tune_online.py --frozen          # the control: no tuning
 ```
+
+Both examples have a notebook version (`examples/*.ipynb`), regenerated with
+`python scripts/make_notebooks.py`.
 
 The MPCC starts with deliberately bad weights (far too much lag penalty, almost
 no reward for progress, so it crawls) and has to find better ones from driving.
@@ -132,6 +144,22 @@ controller does not know about shows up as cost weights that are wrong for the
 real vehicle, and compensating for it is exactly what an online tuner should be
 able to do. A shared model between plant and controller would make the question
 unaskable.
+
+## Layout
+
+```
+mpcc-online-tuning/
+├── mpcc_tuning/     mpcc.py (the NLP + the gradient), learner.py (TD(lambda)),
+│                    track.py (the path as a CasADi spline), model.py
+├── examples/        gradient_check.py, tune_online.py -- .py and .ipynb
+├── notes/           formulation.md: the algebra, and the three traps in it
+├── tests/           the gradient identity, checked against finite differences
+└── docs/            Sphinx / Read the Docs source
+```
+
+There is **no dataset and nothing to download**. The plant is a kinematic
+bicycle in `model.py` and the track is generated; every number here is
+reproducible from a seed.
 
 ## Status, honestly
 

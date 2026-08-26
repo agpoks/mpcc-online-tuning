@@ -8,6 +8,18 @@ control tick. The MPCC is the policy and the critic at the same time; all that
 is learned is six numbers.
 """
 
+# %% [markdown]
+# # Tuning an MPCC while it drives
+#
+# The MPCC starts with deliberately bad cost weights — far too much lag
+# penalty, almost no reward for progress, so it crawls — and has to find better
+# ones from driving. Nothing is pre-trained, there is no dataset, and the tuner
+# sees one scalar per control tick. All that is learned is six numbers.
+#
+# The controller is unchanged: same solver, same constraints, same guarantees.
+# Only its cost weights move.
+
+# %%
 from __future__ import annotations
 
 import argparse
@@ -26,6 +38,17 @@ from mpcc_tuning.mpcc import MPCC, MPCCWeights
 from mpcc_tuning.track import Track
 
 
+# %% [markdown]
+# ## The plant
+#
+# The car and the track — the thing the controller is wrong about. It has a
+# tyre grip limit (a cap on yaw rate at `A_LAT_MAX·grip/v`) that the MPCC does
+# not model, and the reward is the **real** objective: metres of track covered,
+# with leaving it treated as the failure it is. That is deliberately not the
+# MPCC's internal cost. If they were the same quantity there would be nothing
+# to learn.
+
+# %%
 class Plant:
     """The car and the track: the thing the controller is wrong about."""
 
@@ -69,6 +92,13 @@ class Plant:
         return self.state5(), reward, off, self.t >= self.max_steps
 
 
+# %% [markdown]
+# ## The loop
+#
+# Per tick: solve, apply, observe one reward, update six weights. No buffer, no
+# batch, no episode boundary to wait for.
+
+# %%
 def run(args):
     track = Track.oval(half_width=args.half_width)
     plant = Plant(track, grip=args.grip, dt=args.dt, max_steps=args.steps)
@@ -108,6 +138,7 @@ def run(args):
     return history, track
 
 
+# %%
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -155,6 +186,19 @@ def main(argv=None):
     return history
 
 
+# %% [markdown]
+# ## What to look for
+#
+# **The weights should move the way you would move them by hand** — `q_v` up,
+# `q_l` down — and coverage should rise with them. That part works.
+#
+# **Then watch for the collapse.** Once performance saturates the TD error stays
+# slightly positive, so `q_v` keeps climbing and `q_c` keeps falling long after
+# either helps, until the MPCC rides the constraint boundary and the unmodelled
+# tyre limit puts it off the track. There is no stopping criterion. That is the
+# open problem, and it is the honest result of this spike.
+
+# %%
 def plot(history, path):
     import matplotlib
     matplotlib.use("Agg")
