@@ -64,6 +64,46 @@ python examples/tune_online.py --frozen          # the control: no tuning
 The MPCC starts with deliberately bad weights (far too much lag penalty, almost
 no reward for progress, so it crawls) and has to find better ones from driving.
 
+## What it does, measured
+
+Starting from deliberately bad weights (`q_l = 200`, `q_v = 0.05` — far too
+much lag penalty, almost no reward for progress, so the MPCC crawls), 200 ticks
+per episode, `alpha = 2e-4`:
+
+| episode | metres covered | `q_l` | `q_v` |
+|---|---|---|---|
+| 0 | 19.3 | 195 | 0.05 |
+| 3 | 23.7 | 183 | 0.06 |
+| 6 | 30.9 | 144 | 0.10 |
+| 8 | 37.1 | 101 | 0.48 |
+| 10 | **37.2** | 66 | 3.5 |
+| 12 | 37.1 | 43 | 27 |
+| **13** | **20.1  OFF-TRACK** | 41 | 36 |
+| 20 | 5.2  OFF-TRACK | 37 | 37 |
+
+**It works.** Distance covered nearly doubles in a dozen episodes, with no
+crashes on the way up, and 37.2 m in 200 ticks is 3.7 m/s average against a
+grip-limited corner speed of 3.9 — it has essentially found the optimum. The
+weights move the way you would move them by hand, and nobody moved them.
+
+**Then it destroys itself, and the mechanism is worth more than the success.**
+Once performance saturates the TD error stays slightly positive, so `q_v` keeps
+climbing and `q_c` keeps falling long after either helps. By episode 13 the
+MPCC is willing to ride the constraint boundary, the tyre limit it does not
+model puts it off the track, and with `q_c ~ 0.2` it has no way back. The tuner
+optimised a proxy past the point where the proxy was valid, with nothing to
+stop it.
+
+That is the honest result of the spike: **the gradient is exact and cheap, the
+loop works, and it has no stopping criterion.** Candidate fixes, none tried
+here: a decaying step size; keeping the best `theta` and reverting on
+regression; a trust region on `theta`; or -- the interesting one -- putting a
+predictive safety filter around the whole thing, which is exactly the failure
+mode it exists for. That construction is in
+[`rtrrl-playground`](https://github.com/agpoks/rtrrl-playground)'s `safety.py`,
+and on a comparable task it took an unfiltered learner from crashing in 61% of
+training episodes to 0%.
+
 ## Why a separate repo, and not a branch of `scuderia_gym_jax`
 
 Asked and answered deliberately, because the alternative was tempting:
@@ -104,6 +144,9 @@ unaskable.
       slow for 20 Hz on a car. The fix is acados with an RTI scheme (one SQP
       iteration per tick), which is what `MPCC_planner_acados` already uses; the
       envelope gradient is available there too.
+- [ ] **A stopping criterion.** See "What it does, measured" -- the loop is
+      stable while it improves and then over-optimises. This is the next thing
+      to fix, not a footnote.
 - [ ] `scuderia_gym_jax` as the plant
 - [ ] Tuning the *model* parameters, not only the cost weights (the Lagrangian
       term in the gradient is already implemented for it)
