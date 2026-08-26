@@ -1,0 +1,140 @@
+# mpcc-online-tuning
+
+**Tuning an MPCC's cost weights online, every control tick, from one scalar.**
+
+The controller stays an MPCC — same solver, same constraints, same guarantees.
+What changes is that its cost weights are treated as the parameters of a
+reinforcement-learning policy and updated *while the car drives*, from a single
+TD error per tick.
+
+This is a **spike**: a small, deliberately throwaway prototype built to answer
+one question — is this real-time feasible, and does the gradient it needs
+actually exist in closed form? Both answers are yes, and both are checked here
+rather than asserted. It is not a finished tool.
+
+## The idea in one equation
+
+The reason this is affordable is the **envelope theorem**. At the solution of
+the MPCC's NLP, the derivative of the optimal value with respect to a cost
+weight is the *partial* derivative of the Lagrangian, with the primal and dual
+variables held fixed:
+
+```
+d/dθ  J*(s; θ)  =  ∂/∂θ [ f(w*, θ) + λ*ᵀ g(w*, θ) ]
+```
+
+No implicit function theorem. No differentiating through the solver. No adjoint
+sweep. It falls out of a solve that was happening anyway, which is the whole
+argument for why an MPC's parameters can be tuned at control rate when a neural
+policy's cannot.
+
+Verified against finite differences in `tests/`: cosine 1.0000, relative error
+< 1e-3.
+
+## The algorithm
+
+Gros & Zanon's MPC-as-function-approximator, plus eligibility traces. Per tick:
+
+```
+a       = argmin of the MPCC at s                 # this is π_θ(s)
+Q(s,a)  = the MPCC's optimal value with u₀ pinned to a
+δ       = r + γ V(s') − Q(s,a)                    # one scalar
+e      ← γλ e + ∇_θ Q
+θ      ← θ + α δ e
+```
+
+`r` is the **real** objective — metres of track covered, with leaving it
+penalised — and deliberately not the MPCC's internal cost. If the two were the
+same quantity there would be nothing to learn.
+
+One NLP is built, and solved twice per tick: once unconstrained (that is `V`,
+and its first control is what gets applied) and once with `u₀` pinned (that is
+`Q`). The second is not a second problem, just tighter bounds on two decision
+variables — and when the applied action *is* the argmin, `Q(s,π(s)) = V(s)` and
+the second solve is skipped entirely.
+
+## Run it
+
+```bash
+pip install -e .
+python examples/tune_online.py --episodes 20 --plot runs/tuning.png
+python examples/tune_online.py --frozen          # the control: no tuning
+```
+
+The MPCC starts with deliberately bad weights (far too much lag penalty, almost
+no reward for progress, so it crawls) and has to find better ones from driving.
+
+## Why a separate repo, and not a branch of `scuderia_gym_jax`
+
+Asked and answered deliberately, because the alternative was tempting:
+
+* **`scuderia_gym_jax` is a validated simulator.** It has parity tests against
+  the numba original at every level and its own published docs. Its value is
+  that you can trust its numbers. Adding CasADi, IPOPT and an RL loop to it
+  widens its dependency surface and blurs what it is for.
+* **The dependency arrow points the wrong way for a branch.** This repo needs
+  a simulator; the simulator does not need a tuner. A branch inverts that, and
+  branches that invert a dependency never merge.
+* **`scuderia_gym_jax` is pure JAX on purpose.** CasADi/IPOPT is a different
+  numerical stack with a different build story. Keeping them in separate
+  environments is what lets either one be installed without the other.
+
+So: separate repo, and the simulator is an optional dependency. The plant here
+is a plain kinematic bicycle so the spike runs with nothing installed; swapping
+in `scuderia_gym_jax`'s ST/STD models is the obvious next step and is a change
+to one class.
+
+## What is deliberately wrong with the controller
+
+The plant has a **tyre grip limit** — a cap on yaw rate at `A_LAT_MAX·grip/v` —
+and the MPCC does not model it. That mismatch is the point. A limit the
+controller does not know about shows up as cost weights that are wrong for the
+real vehicle, and compensating for it is exactly what an online tuner should be
+able to do. A shared model between plant and controller would make the question
+unaskable.
+
+## Status, honestly
+
+- [x] Parametrised MPCC in CasADi, contouring/lag/progress/effort weights
+- [x] `V(s)`, `Q(s,a)` and `π(s)` from one NLP
+- [x] Envelope-theorem gradient, validated against finite differences
+- [x] TD(λ) Q-learning outer loop with eligibility traces
+- [x] Plant/controller model mismatch as a first-class knob
+- [ ] **Solve time is ~150 ms per NLP with IPOPT** — fine for a spike, far too
+      slow for 20 Hz on a car. The fix is acados with an RTI scheme (one SQP
+      iteration per tick), which is what `MPCC_planner_acados` already uses; the
+      envelope gradient is available there too.
+- [ ] `scuderia_gym_jax` as the plant
+- [ ] Tuning the *model* parameters, not only the cost weights (the Lagrangian
+      term in the gradient is already implemented for it)
+- [ ] Deterministic policy gradient as an alternative to Q-learning — needs
+      `du*/dθ` from the KKT system, which is a real but larger piece of machinery
+
+**No convergence guarantee.** Q-learning with a nonlinear function
+approximator — and an MPC certainly is one — has none, and eligibility traces
+do not add one. This is an empirical procedure with a good structural prior.
+
+## References
+
+* Gros & Zanon, *Data-driven Economic NMPC using Reinforcement Learning*, IEEE
+  TAC 2020 — the MPC-as-function-approximator framework this implements
+* Zanon & Gros, *Safe Reinforcement Learning Using Robust MPC*, IEEE TAC 2021
+* Gros & Zanon, *Reinforcement Learning for MPC: Fundamentals and Current
+  Challenges*, IFAC 2023 — the survey to read first
+* [`mpcrl`](https://github.com/FilippoAiraldi/mpc-reinforcement-learning) —
+  a fuller CasADi implementation of the same framework
+* [MPC4RL](https://arxiv.org/html/2501.15897) — the acados-based counterpart
+* Nguyen, Nguyen, Amine, Vo-Duy, Mangharam, Nghiem, *AD-MPCC: Adaptive
+  Differentiable Model Predictive Contouring Control for Autonomous Racing*,
+  2026 — [arXiv:2607.00141](https://arxiv.org/abs/2607.00141); the closest
+  neighbour, adapting MPCC weights per tick by differentiating the solver
+* Liniger, Domahidi & Morari, *Optimization-based autonomous racing of 1:43
+  scale RC cars*, 2015 — the MPCC formulation itself
+
+Eligibility traces and the TD(λ) machinery are shared in spirit with
+[`rtrrl-playground`](https://github.com/agpoks/rtrrl-playground), where the same
+outer loop drives a recurrent network instead of a solver.
+
+## License
+
+MIT, see [`LICENSE`](LICENSE).

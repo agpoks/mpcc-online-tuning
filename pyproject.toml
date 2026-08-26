@@ -1,0 +1,32 @@
+[project]
+name = "mpcc-online-tuning"
+version = "0.1.0"
+description = "Tuning an MPCC's cost weights online, every control tick, with TD(lambda) and the envelope theorem."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "agpoks", email = "agnespoks2@gmail.com" }]
+
+dependencies = [
+    "numpy>=1.24",
+    "casadi>=3.6",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+gym = ["scuderia-gym-jax"]     # the simulator this is aimed at; see README
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[tool.setuptools.packages.find]
+include = ["mpcc_tuning*"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110

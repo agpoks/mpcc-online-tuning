@@ -1,0 +1,22 @@
+# --- Claude / AI assistant artifacts (never commit) ---
+.claude/
+CLAUDE.md
+.claude.json
+.mcp.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- run artifacts ---
+runs/
+*.png
+c_generated_code/
+acados_ocp*.json
