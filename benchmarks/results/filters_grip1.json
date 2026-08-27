@@ -1,0 +1,150 @@
+{
+  "_meta": {
+    "grip": 1.0,
+    "steps": 400
+  },
+  "none": {
+    "good": {
+      "covered": 72.51009200725495,
+      "steps": 400,
+      "off": false,
+      "iv": 0.0,
+      "no_safe": 0,
+      "us_per_tick": 0.0
+    },
+    "bad": {
+      "covered": 7.601753921260892,
+      "steps": 68,
+      "off": true,
+      "iv": 0.0,
+      "no_safe": 0,
+      "us_per_tick": 0.0
+    }
+  },
+  "asif": {
+    "good": {
+      "covered": 72.51009200725495,
+      "steps": 400,
+      "off": false,
+      "iv": 0.0,
+      "no_safe": 0,
+      "us_per_tick": 7977.3752664914355
+    },
+    "bad": {
+      "covered": 77.31076016773528,
+      "steps": 400,
+      "off": false,
+      "iv": 0.0825,
+      "no_safe": 0,
+      "us_per_tick": 9169.817525544204
+    }
+  },
+  "tube": {
+    "good": {
+      "covered": 72.51009200725495,
+      "steps": 400,
+      "off": false,
+      "iv": 0.0,
+      "no_safe": 0,
+      "us_per_tick": 8345.365520508494
+    },
+    "bad": {
+      "covered": 78.41091328784537,
+      "steps": 400,
+      "off": false,
+      "iv": 0.1525,
+      "no_safe": 0,
+      "us_per_tick": 9571.012597589288
+    }
+  },
+  "adaptive": {
+    "good": {
+      "covered": 72.51009200725495,
+      "steps": 400,
+      "off": false,
+      "iv": 0.0,
+      "no_safe": 0,
+      "us_per_tick": 8227.970777370501
+    },
+    "bad": {
+      "covered": 78.41091328784537,
+      "steps": 400,
+      "off": false,
+      "iv": 0.1525,
+      "no_safe": 0,
+      "us_per_tick": 9124.258906813338
+    }
+  },
+  "cbf": {
+    "good": {
+      "covered": 68.30950736683467,
+      "steps": 400,
+      "off": false,
+      "iv": 0.08,
+      "no_safe": 27,
+      "us_per_tick": 2529.4458205462433
+    },
+    "bad": {
+      "covered": 78.9109828878954,
+      "steps": 400,
+      "off": false,
+      "iv": 0.285,
+      "no_safe": 49,
+      "us_per_tick": 3844.32912687771
+    }
+  },
+  "clf_cbf": {
+    "good": {
+      "covered": 68.30950736683467,
+      "steps": 400,
+      "off": false,
+      "iv": 0.08,
+      "no_safe": 27,
+      "us_per_tick": 17579.87112592673
+    },
+    "bad": {
+      "covered": 78.9109828878954,
+      "steps": 400,
+      "off": false,
+      "iv": 0.285,
+      "no_safe": 49,
+      "us_per_tick": 17356.714611232746
+    }
+  },
+  "viability": {
+    "good": {
+      "covered": 72.51009200725495,
+      "steps": 400,
+      "off": false,
+      "iv": 0.0,
+      "no_safe": 0,
+      "us_per_tick": 602.3411932983436
+    },
+    "bad": {
+      "covered": 76.91070448769524,
+      "steps": 400,
+      "off": false,
+      "iv": 0.085,
+      "no_safe": 19,
+      "us_per_tick": 1051.1920606950298
+    }
+  },
+  "mpcc_terminal": {
+    "good": {
+      "covered": 73.910286887395,
+      "steps": 400,
+      "off": false,
+      "iv": 0.4325,
+      "no_safe": 25,
+      "us_per_tick": 57301.912878174335
+    },
+    "bad": {
+      "covered": 79.21102464792534,
+      "steps": 400,
+      "off": false,
+      "iv": 0.99,
+      "no_safe": 46,
+      "us_per_tick": 76884.8213829915
+    }
+  }
+}
