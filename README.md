@@ -118,7 +118,7 @@ training episodes to 0%.
 
 ## The idea this is actually a stepping stone to
 
-[`notes/influence_through_a_solver.md`](notes/influence_through_a_solver.md)
+[`docs/source/influence_through_a_solver.md`](docs/source/influence_through_a_solver.md)
 works out what happens when you stop assuming the controller is memoryless.
 Under real-time iteration it is not: warm-starting makes the solver a
 *dynamical system*, `w_{t+1} = Phi(w_t, s_t, theta)`, which is structurally an

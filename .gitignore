@@ -18,5 +18,11 @@ venv/
 # --- run artifacts ---
 runs/
 *.png
+# ...except the docs figures, which are committed: a docs build cannot run
+# IPOPT, so the figures have to be in the tree.
+!docs/source/_static/plots/*.png
 c_generated_code/
 acados_ocp*.json
+
+# --- sphinx build output ---
+docs/_build/

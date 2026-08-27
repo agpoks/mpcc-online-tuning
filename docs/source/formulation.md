@@ -4,6 +4,32 @@ Notes to myself while building the spike. The point of writing these down is
 that three of the four things that went wrong were sign or scaling errors that
 looked like tuning problems, and each one is obvious in the algebra.
 
+## 0. What the two errors are
+
+Everything below assumes this picture, so it goes first.
+
+```{image} _static/plots/mpcc_geometry.png
+:alt: contouring error and lag error against the reference path
+:width: 100%
+```
+
+MPCC does not track a *trajectory* — a path plus a schedule saying where to be
+when. It tracks a **path**, and carries its own progress along that path as an
+optimisation variable $s$. The reference point $p(s)$ is therefore chosen by
+the solver, not obtained by projecting the car onto the path, and the vector
+from it to the car splits into two pieces:
+
+$$e_c = \sin\phi\,\Delta x - \cos\phi\,\Delta y \qquad
+  e_l = -\cos\phi\,\Delta x - \sin\phi\,\Delta y$$
+
+with $\phi$ the path heading at $s$. $e_c$ is **across** the path and is what
+you want small. $e_l$ is **along** it, and exists only because $s$ is free.
+
+The lag term is not a refinement. Drop it and the solver finds the cheapest
+possible way to collect the $-q_v v_s \Delta t$ progress reward: run $s$ forward
+and leave the car behind. Penalising $e_l$ is what keeps the progress variable
+honest, and it is why there are two error weights to tune rather than one.
+
 ## 1. The MPC is the function approximator
 
 Let the MPCC's parametrised optimal-control problem be

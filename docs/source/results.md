@@ -11,10 +11,21 @@ $$\frac{\mathrm{d}J^*}{\mathrm{d}\theta} \;=\; \frac{\partial \mathcal{L}}{\part
 
 Checked against central finite differences on the optimal value:
 
+```{image} _static/plots/gradient_check.png
+:alt: envelope-theorem gradient against finite differences
+:width: 70%
+```
+
+54 components, at states the controller actually visits during a run — the
+gradient is checked where it is used, not at points placed on the centreline.
+Each finite difference costs two extra solves; the envelope-theorem value costs
+one evaluation of an expression that CasADi already has.
+
 | | |
 |---|---|
-| cosine to finite differences | **1.0000** |
+| cosine to finite differences | **0.99999** |
 | relative error | **< 1e-3** |
+| cost, against the solve | 0.079% |
 
 `tests/test_gradient.py` asserts this, and `examples/gradient_check.py` shows
 it across states and weight settings. It costs one evaluation of a function

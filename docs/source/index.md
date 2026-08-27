@@ -22,6 +22,8 @@ where the same TD(λ) outer loop drives a recurrent network instead of a solver.
 
 getting_started
 formulation
+influence_through_a_solver
+plant
 results
 references
 ```

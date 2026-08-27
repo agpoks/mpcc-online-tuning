@@ -101,7 +101,15 @@ class Plant:
 # %%
 def run(args):
     track = Track.oval(half_width=args.half_width)
-    plant = Plant(track, grip=args.grip, dt=args.dt, max_steps=args.steps)
+    if args.plant == "scuderia":
+        # Same track, same controller, same reward -- different physics. The
+        # MPCC still predicts with a kinematic bicycle; the plant now has slip
+        # angles and a fitted tyre model, and the mismatch stops being a knob.
+        from mpcc_tuning.plant_scuderia import ScuderiaPlant
+        plant = ScuderiaPlant(track, model=args.model, dt=args.dt)
+        plant.max_steps = args.steps
+    else:
+        plant = Plant(track, grip=args.grip, dt=args.dt, max_steps=args.steps)
     mpcc = MPCC(track, model=KinematicBicycle(dt=args.mpc_dt), horizon=args.horizon,
                 dt=args.mpc_dt, max_iter=args.max_iter)
     theta = MPCCWeights(**{k: v for k, v in
@@ -149,6 +157,9 @@ def main(argv=None):
     ap.add_argument("--horizon", type=int, default=12)
     ap.add_argument("--max-iter", type=int, default=40)
     ap.add_argument("--grip", type=float, default=1.0, help="plant grip; the MPCC never models it")
+    ap.add_argument("--plant", default="bicycle", choices=["bicycle", "scuderia"],
+                    help="'scuderia' swaps in scuderia_gym_jax's ST/STD vehicle models")
+    ap.add_argument("--model", default="st", help="scuderia vehicle model: ks | st | std | std4w")
     ap.add_argument("--half-width", type=float, default=0.75)
     ap.add_argument("--alpha", type=float, default=2e-3)
     ap.add_argument("--gamma", type=float, default=0.98)
