@@ -170,7 +170,76 @@ def fig_gradient_check():
           f"{n_skipped} non-converged probes skipped)")
 
 
-FIGS = {"geometry": fig_geometry, "gradient_check": fig_gradient_check}
+def fig_rti():
+    """When is the memoryless gradient the one you think it is?
+
+    Two panels, both from experiments/rti_influence.py. Left: how far the
+    sensitivity computed through the warm-started loop is from the one the
+    envelope theorem predicts, as a function of solver effort. Right: how fast
+    a perturbation of the warm start decays, which is what sets how far back
+    the influence has to be carried.
+    """
+    import json
+    runs = []
+    for plant, label in (("bicycle", "kinematic bicycle"),
+                         ("scuderia", "fitted tyres (ST)")):
+        f = ROOT / "benchmarks" / "results" / f"rti_{plant}.json"
+        if f.exists():
+            runs.append((label, json.loads(f.read_text())))
+    if not runs:
+        print("  skipped rti: run experiments/rti_influence.py first")
+        return
+
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(11.0, 4.2))
+    marks = ["o", "s"]
+    for (label, d), mk in zip(runs, marks):
+        sw = d["sweep"]
+        ks = sorted(int(k) for k in sw)
+        ax.plot(ks, [sw[str(k)]["cos"] for k in ks], mk + "-", color=INK if mk == "o" else "0.45",
+                linewidth=1.6, markersize=5, label=label)
+    ax.axhline(1.0, color="0.6", linewidth=0.8, linestyle=(0, (4, 3)))
+    ax.axhline(0.0, color=RED, linewidth=0.8)
+    ax.set_xscale("log")
+    ax.set_xlabel("solver iterations per control tick")
+    ax.set_ylabel("cosine to the memoryless (envelope) gradient")
+    # Mark the SQP-RTI result, which is the paper's actual finding: one full
+    # QP agrees with the memoryless gradient exactly in direction. The
+    # max_iter=1 point on the same axis is a FAILED interior-point solve and is
+    # labelled as such, because it is the number that misleads.
+    for (label, d), mk in zip(runs, marks):
+        if d.get("cos_sqp") is not None:
+            ax.plot([1.0], [d["cos_sqp"]], "*", markersize=14,
+                    color=GREEN, zorder=6,
+                    label=None if mk == "s" else "genuine SQP-RTI (one full QP)")
+    ax.annotate("capped IPOPT:\nthe solve has failed", xy=(1.0, -0.30),
+                xytext=(2.0, -0.48), fontsize=8, color=RED,
+                arrowprops=dict(arrowstyle="->", color=RED, lw=0.9))
+    ax.set_title("a genuine RTI agrees exactly in direction;\n"
+                 "a capped interior-point solve does not converge",
+                 fontsize=10)
+    ax.set_ylim(-0.6, 1.15)
+    ax.grid(alpha=0.25, linewidth=0.6)
+    ax.legend(fontsize=8, loc="lower right")
+
+    for (label, d), mk in zip(runs, marks):
+        dec = d["decay"]
+        t = np.arange(len(dec)) * 0.05
+        bx.semilogy(t, np.maximum(dec, 1e-12), "-", linewidth=1.6,
+                    color=INK if mk == "o" else "0.45",
+                    label=f"{label}   $\\rho \\approx$ {d['rho']:.2f}")
+    bx.set_xlabel("time since the perturbation [s]")
+    bx.set_ylabel("relative size of the perturbation")
+    bx.set_title("the warm start is memory, and it decays\n"
+                 "geometrically -- over tens of ticks", fontsize=10)
+    bx.grid(alpha=0.25, linewidth=0.6, which="both")
+    bx.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(OUT / "rti_influence.png", dpi=170)
+    print("  wrote rti_influence.png")
+
+
+FIGS = {"geometry": fig_geometry, "gradient_check": fig_gradient_check,
+        "rti": fig_rti}
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

@@ -1,7 +1,14 @@
 # Influence through a solver
 
-*A formulation note. Not implemented yet — this is the algebra that decides
-whether the idea survives contact with it.*
+*A formulation note, and the experiment that settles it.*
+
+**Result, up front: the idea is not needed.** For a genuine real-time
+iteration the memoryless gradient everyone already uses is exact in direction
+(cosine $1.0000$) and $16\%$ off in magnitude. The recursion below is correct
+and the term it adds is negligible in practice. What follows is kept because
+the *question* was worth asking, because the measurement is the thing nobody
+had made, and because the obvious way to test it gives the opposite answer for
+a bad reason — see [The trap](#the-trap).
 
 ## The gap this addresses
 
@@ -112,7 +119,60 @@ When it is not — many parameters, long horizons — the same three bargains fr
 | RFLO-style | keep only the block-diagonal of $D$ — the per-shooting-node coupling, dropping the coupling *between* nodes |
 | UORO | a rank-1 sketch of $J$; unbiased, and needs only $D$-vector products, which the factorised KKT matrix gives for free |
 
-## What it predicts, and how to falsify it
+## Measured, and refuted
+
+`experiments/rti_influence.py`. A recorded state sequence is **replayed**, so
+the only path from $\theta$ to the iterate at tick $T$ is the chain of warm
+starts — the plant is out of the loop and the solver's memory is isolated.
+
+| how $\partial u_0/\partial\theta$ is obtained | $\|J\|$ | cosine to memoryless |
+|---|---|---|
+| **SQP-RTI, one full QP per tick, warm-started** | 1.681 | **1.0000** |
+| memoryless (converged, cold) | 1.994 | 1 |
+| warm-started *and* converged | 1.994 | 1.0000 |
+
+**The direction is identical.** The magnitude differs by 16%, which for a
+gradient method whose step size is a tuned hyperparameter anyway is not a
+distinction that survives contact with practice.
+
+The warm start *is* memory — a perturbation of it decays geometrically at a
+measured $\rho \approx 0.77$ (bicycle) and $0.87$ (fitted tyres), i.e. over
+tens of ticks. The recursion above is a correct description of that. It simply
+turns out that the component of it which reaches $\partial u_0/\partial\theta$
+is small, because one QP step from a good warm start lands very close to the
+converged solution: measured mean step $\|\Delta w\| = 0.748$, against a
+converged step of $0.748$.
+
+So the honest statement is the one the note said would be worth having:
+
+> The memoryless assumption in MPC-as-function-approximator is **justified for
+> real-time iteration**, and this is the measurement that justifies it. Nobody
+> currently states it as an assumption at all.
+
+(id trap)=
+## The trap
+
+There is an obvious way to test this that gives the opposite answer, and it is
+wrong.
+
+Approximating RTI by capping an interior-point solver at one iteration
+(`ipopt.max_iter = 1`) produces a gradient that looks **orthogonal** to the
+memoryless one — cosine $0.001$ on the bicycle, $-0.36$ on the fitted-tyre
+plant. That is not evidence of solver memory. It is the sensitivity of a
+*failed solve*:
+
+* **0 of 41** solves report success;
+* the iterate moves by $8.19$ on average, an order of magnitude **further**
+  than a converged step ($0.748$), because an interior-point method's first
+  step is large and not yet meaningful.
+
+Real-time iteration is an **SQP** scheme — linearise once, solve one full QP —
+and `mpcc_tuning/rti.py` implements that. The difference is not a detail: it
+inverts the result. An earlier version of this note reported the capped-IPOPT
+numbers as confirmation, and they are in `tests/test_rti_influence.py` now as a
+regression, so the mistake cannot come back quietly.
+
+## What it predicted, and how it was falsified
 
 Three testable claims, in increasing order of how much they would need to be true:
 

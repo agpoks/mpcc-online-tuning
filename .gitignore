@@ -25,3 +25,12 @@ acados_ocp*.json
 
 # --- sphinx build output ---
 docs/_build/
+
+# --- LaTeX build products ---
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.pdf
+paper/*.synctex.gz

@@ -123,6 +123,11 @@ class MPCC:
         self._lbw, self._ubw = np.array(lbw, float), np.array(ubw, float)
 
         gg = ca.vertcat(*g)
+        # Kept so an SQP/RTI step can be built from the same problem rather
+        # than a second transcription of it -- see mpcc_tuning/rti.py. Two
+        # transcriptions that drift apart would make the comparison between
+        # solvers meaningless.
+        self._w_sym, self._p_sym, self._f_sym, self._g_sym = w, p, J, gg
         nlp = {"x": w, "p": p, "f": J, "g": gg}
         self.solver = ca.nlpsol("mpcc", "ipopt", nlp, {
             "print_time": False,
