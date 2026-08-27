@@ -116,6 +116,24 @@ mode it exists for. That construction is in
 and on a comparable task it took an unfiltered learner from crashing in 61% of
 training episodes to 0%.
 
+## The idea this is actually a stepping stone to
+
+[`notes/influence_through_a_solver.md`](notes/influence_through_a_solver.md)
+works out what happens when you stop assuming the controller is memoryless.
+Under real-time iteration it is not: warm-starting makes the solver a
+*dynamical system*, `w_{t+1} = Phi(w_t, s_t, theta)`, which is structurally an
+RNN whose update happens to be a Newton step — so the influence obeys the same
+RTRL recursion, and the Newton contraction matrix plays the role of the
+recurrent Jacobian.
+
+The observation that makes it worth writing up: **the solver's contraction rate
+is the influence trace's decay rate**, and unlike an RNN's you do not have to
+guess it. It is a property of the QP you already solved, so the truncation
+horizon is *derived* rather than tuned.
+
+The note also lists the experiment that would kill the idea in an afternoon,
+and puts it first.
+
 ## Why a separate repo, and not a branch of `scuderia_gym_jax`
 
 Asked and answered deliberately, because the alternative was tempting:
