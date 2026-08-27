@@ -15,6 +15,8 @@ extensions = [
 ]
 
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
+# Level 3, so pages can cross-reference each other's sections.
+myst_heading_anchors = 3
 myst_enable_extensions = ["colon_fence", "dollarmath", "amsmath"]
 
 templates_path = ["_templates"]

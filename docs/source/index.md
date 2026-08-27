@@ -25,5 +25,6 @@ formulation
 influence_through_a_solver
 plant
 results
+animations
 references
 ```

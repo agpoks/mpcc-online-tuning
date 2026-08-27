@@ -76,6 +76,25 @@ Both examples have a notebook version (`examples/*.ipynb`), regenerated with
 The MPCC starts with deliberately bad weights (far too much lag penalty, almost
 no reward for progress, so it crawls) and has to find better ones from driving.
 
+## Watch it happen
+
+![the MPCC's predicted horizon, re-solved every tick](docs/source/_static/anim/mpcc_horizon.gif)
+
+Orange is the MPCC's predicted horizon, re-solved from scratch every 50 ms, and
+the orange dot is the reference point `p(s)` — which the solver *chooses*
+rather than obtaining by projecting the car onto the path.
+
+Drawing the horizon is the cheapest diagnostic a model-predictive controller
+has, because it makes model error visible before it becomes tracking error.
+[`docs/source/animations.md`](docs/source/animations.md) has the same controller
+on `scuderia_gym_jax`'s fitted tyres — where the prediction sails through a
+corner the car cannot take, every tick — and the tuning session collapsing.
+
+```python
+from mpcc_tuning.viz import animate_run
+animate_run(mpcc, plant, theta, "run.gif")
+```
+
 ## What it does, measured
 
 Starting from deliberately bad weights (`q_l = 200`, `q_v = 0.05` — far too
