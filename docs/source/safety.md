@@ -56,6 +56,57 @@ any filter: one that intervenes on a safe controller is not a filter, it is a
 controller, and the thing being tuned is then no longer the thing being
 measured.
 
+## Tuning behind the filter
+
+The previous section fixes a *fixed* set of bad weights. The real question is
+what happens when the tuner runs behind the filter from the start. Same seed,
+same 26 episodes, same everything except whether the filter is in the loop:
+
+| | no filter | **with filter** |
+|---|---|---|
+| last 8 episodes, mean | 7.6 m | **68.1 m** |
+| last 8 episodes, off-track | **8 / 8** | **0 / 8** |
+| best episode | 79.1 m (ep 4) | 78.9 m (ep 5) |
+| behaviour after ep 5 | collapsed, never recovered | kept running |
+
+Episode by episode, the filter does nothing at all until it is needed:
+
+| episode | no filter | with filter | overridden |
+|---|---|---|---|
+| 0–3 | 73.1 → 78.1 m | identical | **0%** |
+| 4 | 79.1 m | 78.3 m | 6% |
+| **5** | **8.5 m, off-track** | **78.9 m** | 2% |
+| 10 | 7.9 m, off-track | 76.9 m | 5% |
+| 20 | 7.9 m, off-track | 71.9 m | 2% |
+| 25 | 7.4 m, off-track | 48.6 m | 0% |
+
+**Nine times the distance and zero crashes.** For the first four episodes the two
+runs are bit-identical, because the filter has nothing to do — it only starts
+intervening at episode 4, one episode before the unfiltered run drives into a
+wall. That is the ordering you want: the filter is silent until the tuner is
+about to do something unrecoverable, and then it costs 2–6% of the actions.
+
+### But look at the last row
+
+`q_c` — the weight holding the car near the path — keeps falling anyway: 2.52 at
+episode 0, 0.44 at episode 10, **0.136 at episode 20**. And the distance covered
+drifts down with it: 78.9 → 76.9 → 71.9 → 48.6 m.
+
+**The filter converted a crash into a slow degradation.** It fixed the symptom
+and not the cause. Nothing in the reward now punishes the tuner for pushing
+$q_c$ towards zero, because the consequence of doing so — leaving the track — is
+being absorbed by the filter and never reaches the return. The weights are free
+to drift, and the performance that remains is increasingly being produced by the
+*filter*, not by the controller being tuned.
+
+This is the failure mode `rtrrl-playground` measured directly: a policy trained
+behind a filter scored 344 against 194 without one, and then under-performed
+when the filter was removed. It is not an argument against the filter — 0
+crashes against 8 is worth having on its own, and on hardware it is the whole
+ballgame — but it means **a filtered run has to be evaluated unfiltered** before
+any claim is made about the weights it found, and it means the filter is not a
+substitute for the missing trust region on $\theta$.
+
 ## Why it is not the `rtrrl-playground` filter, exactly
 
 Same idea, different action space. `rtrrl_playground.safety` filters **nine
