@@ -150,6 +150,77 @@ factor of three to six. Hold the line through the corners; let it run wide on
 the straight. That is the schedule, it is stable across seeds, and it was
 invisible while `q_v` was being read.
 
+## The same comparison on a different track reverses it
+
+`experiments/per_sector_weights.py`, `Track.circuit()` — a 47.2 m lap with
+straights, a chicane of two 90-degree corners, two 180-degree hairpins and a
+pair of sweepers, minimum radius 2.59 m. Six seeds, 26 episodes, everything else
+identical to the oval runs above.
+
+| | $\theta$ vectors | last 8 episodes | sd | seeds collapsed |
+|---|---|---|---|---|
+| **global** | 1 | **79.84 m** | 0.07 | **0 / 6** |
+| curvature bins | 3 | 78.99 m | 0.19 | 0 / 6 |
+| named sectors | 4 | 78.92 m | 0.07 | 0 / 6 |
+
+Two results, and the second is not the one the experiment was built to get.
+
+### The collapse is a property of the track, not of the parameterisation
+
+On the oval a global $\theta$ collapsed on **6 of 6** seeds. On the circuit it
+collapses on **0 of 6**, and reaches 79.84 m with a standard deviation of 7 cm.
+
+So the six-seed result above shows that per-segment weights fix **the oval's**
+failure. It is not evidence that they are a better parameterisation, and it
+should not be read as any. The honest statement of what was demonstrated is
+narrower than it first appeared.
+
+The likely mechanism, which the two tracks together suggest: the oval is mostly
+straight, so the tuner is rewarded for raising `q_v` over most of the lap and
+then meets a 180-degree corner carrying weights tuned for a straight. The
+circuit is 82% non-straight, so that feedback arrives constantly and $\theta$
+never gets the room to run away. **The variable is how much of the lap rewards
+the wrong thing**, not how many weight vectors are held.
+
+### Scheduling is not free
+
+With no collapse to prevent, performance *decreases* monotonically in the number
+of parameters, and the gaps are large relative to the seed spread:
+
+| | difference | separation |
+|---|---|---|
+| named sectors − curvature bins | −0.07 m | 0.8 SE — **not separated** |
+| global − curvature bins | +0.85 m | 10.4 SE — separated |
+| global − named sectors | +0.92 m | 22.5 SE — separated |
+
+**Named sectors buy nothing over curvature bins.** That is the question the
+circuit was built to answer and the answer is no: four labels cost twice the
+parameters of three and return a difference of 7 cm against a seed spread that
+swamps it.
+
+And the unscheduled controller beats both, by ten and twenty-two standard
+errors. Extra weight vectors are extra freedom for the tuner to wander, and on a
+track where nothing is going wrong that freedom has nothing to buy.
+
+Taken with the oval, the defensible claim is narrower and more useful than
+"situation-dependent weights help":
+
+> **Situation-dependent weights pay when part of the lap rewards the wrong
+> thing, and cost a little when it does not.**
+
+### The caveat, which is not small
+
+All three arms sit within 1 m of each other, at 4.0 m/s — the vehicle's speed
+cap — for the whole run. This is a **ceiling-limited task**: the car is at its
+limit and the grip constraint the controller does not model is active in the
+corners (4.0 m/s at a 2.59 m radius demands 6.18 m/s² against a 6.0 limit).
+
+So "scheduling does not help *here*" is measured, and "scheduling does not help"
+is not. A task where scheduling has something to win — a track with genuinely
+conflicting demands between sectors, or a speed range the cap does not truncate
+— would be needed before the null result generalises. That experiment has not
+been run.
+
 ## Real-time: solved, and measured
 
 This section used to say the solve took ~150 ms against a 50 ms budget and was

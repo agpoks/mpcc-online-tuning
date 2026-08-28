@@ -35,24 +35,33 @@ Situation-Dependent Tuning of a Model Predictive Contouring Controller}
 
 \begin{abstract}
 Online tuning of an MPC's cost weights is usually posed as finding \emph{one}
-good weight vector. We argue it is the wrong object: the weights are a
-\emph{behaviour} parameterisation, and the right target is a map from situation
-to weights. We give three results. First, a single weight vector is not merely
-suboptimal but unstable: over six seeds an online tuner reaches a
-\SI{78}{\meter} controller on every seed and destroys it on every seed within
-five episodes, whereas one weight vector per curvature bin reaches the same peak
-and keeps it (\SI{77.8}{\meter}, sd $0.2$, $0/6$ collapsed against
-\SI{8.9}{\meter}, sd $0.9$, $6/6$). The mechanism is isolation, not expressive
-power --- a bad update in a corner no longer moves the straight's weights.
-Second, adding a soft obstacle keep-out makes overtake-versus-follow expressible
-at all, and it is then governed by a \emph{ratio} of two weights: across two
-decades in each, every setting with $q_v/q_c \le 1$ follows and every setting
-above it passes. Safety is governed by a different axis, the magnitude of $q_v$
-alone, so the region a learned policy must be confined to is not a box. Third,
-we show that the curvature binning that produces the first result cannot express
-the sector names it is usually described with, because curvature at a point
-cannot separate a \SI{90}{\degree} corner from a \SI{180}{\degree} one.
-\todo{final numbers for the four-sector comparison}
+good weight vector. Treating the weights instead as a \emph{behaviour}
+parameterisation suggests a map from situation to weights, and we set out to
+measure what that buys. The answer is conditional, and we report the condition.
+
+On an oval, a single weight vector is not merely suboptimal but unstable: over
+six seeds an online tuner reaches a \SI{78}{\meter} controller on every seed and
+destroys it on every seed within five episodes, whereas one weight vector per
+curvature bin reaches the same peak and keeps it (\SI{77.8}{\meter}, sd $0.2$,
+$0/6$ collapsed, against \SI{8.9}{\meter}, sd $0.9$, $6/6$). The mechanism is
+isolation, not expressive power. \textbf{On a corner-dominated circuit the same
+comparison reverses}: the single vector does not collapse at all ($0/6$) and
+\emph{beats} both scheduled variants, by $10.4$ and $22.5$ standard errors,
+while three curvature bins and four named sectors are indistinguishable from
+each other ($0.8$ SE). The defensible claim is therefore narrower than the
+oval alone suggests --- situation-dependent weights pay when part of the lap
+rewards the wrong thing, and cost a little when it does not --- and we identify
+the fraction of the lap that is straight as the variable that decides which.
+
+Two further results are unconditional. Adding a soft obstacle keep-out makes
+overtake-versus-follow expressible at all, and it is then governed by a
+\emph{ratio} of two weights: across two decades in each, every setting with
+$q_v/q_c \le 1$ follows and every setting above it passes. Safety is governed by
+a different axis, the magnitude of $q_v$ alone, so the region a learned policy
+must be confined to is not a box. And the curvature binning used throughout this
+literature cannot express the sector names it is usually described with, because
+curvature at a point cannot separate a \SI{90}{\degree} corner from a
+\SI{180}{\degree} one.
 \end{abstract}
 
 \section{Introduction}
@@ -208,21 +217,71 @@ built to contain all four sector types with a minimum radius of
 \SI{2.59}{\meter}, chosen to match the oval so that a scheduling result is not
 confounded by an initialisation failure.
 
-\section{One weight vector is unstable}\label{sec:seeds}
-\todo{six-seed table: global 8.9 (sd 0.9) 6/6 collapsed vs per-bin 77.8 (sd 0.2)
-0/6; best-episode row showing both reach the same peak.}
+\section{When one weight vector is unstable}\label{sec:seeds}
+\todo{six-seed oval table: global 8.9 (sd 0.9) 6/6 collapsed vs per-bin 77.8
+(sd 0.2) 0/6; best-episode row showing both reach the same peak (77.6--79.1
+against 78.0--78.3), which is the evidence that the mechanism is isolation and
+not expressive power.}
+
+\subsection{And when it is not}\label{sec:circuit}
+The same comparison on a \SI{47.2}{\meter} circuit --- straights, a chicane of
+two \SI{90}{\degree} corners, two \SI{180}{\degree} hairpins, a pair of
+sweepers, minimum radius \SI{2.59}{\meter} --- reverses the result.
+
+\begin{table}[t]
+  \centering
+  \caption{Six seeds on the circuit. The unscheduled controller wins, and the
+  two scheduled variants are indistinguishable from each other.}
+  \label{tab:circuit}
+  \begin{tabular}{lrrrr}
+    \toprule
+    & $\theta$ & mean & sd & collapsed \\
+    \midrule
+    global          & 1 & \textbf{\SI{79.84}{\meter}} & 0.07 & 0/6 \\
+    curvature bins  & 3 & \SI{78.99}{\meter}          & 0.19 & 0/6 \\
+    named sectors   & 4 & \SI{78.92}{\meter}          & 0.07 & 0/6 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Named sectors $-$ curvature bins is $\SI{-0.07}{\meter}$, $0.8$ SE: \textbf{not
+separated}. Global $-$ curvature bins is $+\SI{0.85}{\meter}$ at $10.4$ SE and
+global $-$ named sectors $+\SI{0.92}{\meter}$ at $22.5$ SE: both separated, and
+in favour of \emph{fewer} parameters.
+
+Two things follow. The collapse of Section~\ref{sec:seeds} is a property of the
+\emph{track}: the oval is mostly straight, so the tuner is rewarded for raising
+$q_v$ over most of the lap and then meets a \SI{180}{\degree} corner carrying
+straight-tuned weights, whereas the circuit is $82\%$ non-straight and that
+feedback arrives constantly. And with no collapse to prevent, extra weight
+vectors are extra freedom for the tuner to wander with nothing to buy.
+
+\textbf{The caveat is not small.} All three arms sit within \SI{1}{\meter} of
+each other at the vehicle's \SI{4}{\meter\per\second} speed cap, with the
+unmodelled grip limit active in the corners. This is a ceiling-limited task, so
+``scheduling does not help here'' is measured and ``scheduling does not help''
+is not. A task where scheduling has something to win --- conflicting demands
+between sectors, or a speed range the cap does not truncate --- has not been
+run.
 
 \section{Behaviour is a ratio; safety is a magnitude}\label{sec:axes}
 \todo{the 3x5 grid table; the two axes; zero collisions and minimum clearance.}
 
 \section{Do named sectors pay for themselves?}
-\todo{global vs curvature3 vs sector4 on the circuit, six seeds. Report the
-difference in standard errors. A null result is a result: four labels is twice
-the parameters of three.}
+No. Table~\ref{tab:circuit}: four labels cost twice the parameters of three and
+return a difference of \SI{7}{\centi\meter} at $0.8$ standard errors. We report
+this because the sector taxonomy of Section~\ref{sec:sectors} is a genuine
+correction to how curvature binning is described --- a \SI{90}{\degree} and a
+\SI{180}{\degree} corner really are indistinguishable to it --- and because that
+correction turns out not to change any outcome we can measure. Both facts are
+worth having; only the first is usually reported.
 
 \section{Limitations}
 The behaviour policy of Section~\ref{sec:policy} is specified and not measured.
-The overtake grid is one opponent geometry. The plant is a kinematic bicycle
+Every result here is on two tracks, and Section~\ref{sec:circuit} is precisely a
+demonstration that two is not many --- the conclusion reversed between them, and
+we have no basis for predicting a third. The overtake grid is one opponent
+geometry. The plant is a kinematic bicycle
 with a grip limit the controller does not model; results against a fitted-tyre
 plant are not yet obtainable because the tuner does not survive it from the
 default initialisation, which is a reward-design problem and not a scheduling

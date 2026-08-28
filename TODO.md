@@ -39,8 +39,9 @@ against 50 ms at 20 Hz. **It is CasADi `qrqp`, not acados** — see item 3.
 
 Sequenced by what unblocks what, not by interest.
 
-1. **Per-sector tuning on `Track.circuit()`, ≥5 seeds** (item 1b). Unblocked
-   now; ~1 h of compute; the direct sequel to the six-seed result.
+1. ~~Per-sector tuning on `Track.circuit()`~~ — **done, and it reversed the
+   item 1 result.** See item 1b. The next experiment is instead a task where
+   scheduling *can* win, because the circuit turned out to be ceiling-limited.
 2. **The `q_v` ceiling** (item 2b). Cheap, and nothing can bound a policy's
    output until it exists.
 3. **acados** (item 3). Feasible but not a copy-paste — two structural problems
@@ -163,11 +164,21 @@ property of the corner, so it cannot flicker part-way through one.
 - [x] `Track.circuit()` — a 47.2 m lap containing all four, min radius 2.59 m
       (above the oval's 2.46, so a *scheduling* result is not confounded by the
       initialisation failure that kills `mixed`).
-- [ ] **Per-sector tuning on the circuit, over ≥5 seeds.** The direct sequel to
-      item 1 and the next thing to run. Note the oval cannot test it — it has no
-      90-degree corners at all.
-- [ ] Check a four-way schedule against the three-bin curvature one. If it does
-      not beat it, say so: more sectors is more parameters.
+- [x] **Per-sector tuning on the circuit, six seeds.** Done,
+      `experiments/per_sector_weights.py`, `benchmarks/results/per_sector.json`.
+- [x] Check a four-way schedule against the three-bin curvature one.
+      **It does not beat it** — −0.07 m at 0.8 SE, not separated. Four labels
+      cost twice the parameters of three and return nothing measurable.
+
+      | | θ | mean | sd | collapsed |
+      |---|---|---|---|---|
+      | global | 1 | **79.84 m** | 0.07 | 0/6 |
+      | curvature3 | 3 | 78.99 m | 0.19 | 0/6 |
+      | sector4 | 4 | 78.92 m | 0.07 | 0/6 |
+
+      global − curvature3 = +0.85 m (10.4 SE), global − sector4 = +0.92 m
+      (22.5 SE). **The unscheduled controller wins on this track**, and
+      performance decreases monotonically in parameter count.
 
 ### Five silent failures building the circuit — all produced a plausible track
 
@@ -197,6 +208,34 @@ third is a general lesson.
 Hand-picking a layout failed twice. The final one came from searching all 720
 orderings against closure, positive straights, same-sign separation and
 self-intersection *simultaneously*.
+
+### The result that reframes item 1
+
+**The collapse is a property of the track, not of the parameterisation.** Global
+θ collapses 6/6 on the oval and **0/6 on the circuit**, where it reaches 79.84 m
+with sd 0.07. So item 1 shows per-segment weights fix *the oval's* failure — not
+that they are a better parameterisation, and it must not be read as that.
+
+Mechanism the two tracks suggest: the oval is mostly straight, so the tuner is
+rewarded for raising `q_v` over most of the lap and then meets a 180-degree
+corner carrying straight-tuned weights. The circuit is 82% non-straight and that
+feedback arrives constantly. **The variable is how much of the lap rewards the
+wrong thing**, not how many θ are held.
+
+The defensible claim, narrower and more useful than "scheduling helps":
+
+> Situation-dependent weights pay when part of the lap rewards the wrong thing,
+> and cost a little when it does not.
+
+- [ ] **The caveat is not small and is not yet addressed.** All three arms sit
+      within 1 m of each other at the 4.0 m/s speed cap, with the unmodelled
+      grip limit active in the corners. This is a **ceiling-limited task**, so
+      "scheduling does not help here" is measured and "scheduling does not help"
+      is not. Build a task where scheduling has something to win — conflicting
+      demands between sectors, or a speed range the cap does not truncate — and
+      re-run. Until then the null result does not generalise.
+- [ ] Two tracks is not many, and the conclusion **reversed** between them.
+      Treat any third track as capable of reversing it again.
 
 ## 2. Weights as a behaviour policy — the direction
 
