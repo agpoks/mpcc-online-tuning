@@ -22,6 +22,27 @@ the nearest one.
 **Without this the paper cannot claim online tuning works on a realistic
 vehicle.**
 
+## 1b. Per-segment weights — the best result so far, and it is cheap
+
+`experiments/per_segment_weights.py`. One θ per curvature segment, the segment
+read from the path ahead. On the oval:
+
+| mode | first off-track | last 8 episodes |
+|---|---|---|
+| global θ | ep 5 | 7.6 m, 8/8 off |
+| **per-segment θ** | **never** | **78.0 m, 0/8 off** |
+
+Against everything else tried on this problem: baseline 7.6 m (8/8 off),
+event-triggered discard 38.5 m (6/8), behind a safety filter 68.1 m (0/8),
+**per-segment 78.0 m (0/8)**. It beats the safety filter and needs nothing
+bolted on.
+
+- [ ] Reproduce over several seeds — this is one seed.
+- [ ] Combine with the safety filter and with item 1, and check they compose.
+- [ ] Try a continuous schedule θ(κ) rather than three bins.
+- [ ] The learned weights are not intuitive (progress weighted *higher* in the
+      tightest segment). Do not build a story on one seed.
+
 ## 2. Trust region on θ — partly answered by event-triggering
 
 `experiments/event_triggered_tuning.py` tests an alternative: instead of
