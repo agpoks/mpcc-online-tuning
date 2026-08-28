@@ -13,6 +13,8 @@
 \usepackage{booktabs}
 \usepackage{siunitx}
 \usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage{tikz}
 \usepackage[hidelinks]{hyperref}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc,fit,backgrounds}
@@ -109,6 +111,165 @@ learnable weights,
   \label{eq:cost}
 \end{equation}
 
+\section{Method}\label{sec:method}
+
+Every number in this paper comes from the setup described here. We state it in
+full because the central claim is a \emph{negative} one --- that a term is
+negligible --- and a negative result is only as strong as the conditions under
+which the measurement was made.
+
+\subsection{Controller}
+The MPCC solves \eqref{eq:cost} over a horizon of $N = 12$ shooting nodes with
+a \SI{0.15}{\second} interval, on the kinematic bicycle
+$\dot x = v\cos\psi$, $\dot y = v\sin\psi$,
+$\dot\psi = (v/L)\tan\delta$, $\dot v = a - c_d v$, integrated with RK4.
+The progress variable carries $\dot s = v_s$ as a fourth control. Parameters:
+$L = \SI{0.33}{\meter}$, $c_d = 0.15$, $|\delta| \le \SI{0.40}{\radian}$,
+$|a| \le \SI{4}{\meter\per\second\squared}$,
+$v \in [0, \SI{4}{\meter\per\second}]$. Track limits enter as a bound on the
+contouring error, $|e_c| \le w - r_{\text{car}}$ with $w = \SI{0.75}{\meter}$
+and $r_{\text{car}} = \SI{0.12}{\meter}$; the centreline is a periodic B-spline
+in $s$, so the solver differentiates the path rather than projecting onto it.
+
+Two solvers are used and the distinction matters throughout: IPOPT run to
+convergence, and an SQP real-time iteration --- one linearisation, one full QP,
+warm-started from the previous tick, with a Gauss--Newton Hessian and CasADi's
+\texttt{qrqp}. \textbf{The RTI is hand-rolled, not \texttt{acados}}; it
+implements the same scheme as \textsc{sqp\_rti} but the confirmation against
+\texttt{acados} itself is outstanding, and Section~\ref{sec:rti}'s result should
+be read with that caveat.
+
+\subsection{Learnable parameters and the gradient}
+$\theta \in \mathbb{R}^6$ is the \emph{logarithm} of the six weights in
+\eqref{eq:cost}, which keeps them positive under an unconstrained step and makes
+a step multiplicative --- the right behaviour for a scale parameter spanning
+orders of magnitude. $\theta$ is a runtime parameter of the OCP, not a
+structural one, so changing it does not rebuild the solver.
+
+With $\mathcal{L} = f + \lambda^\top g + \mu^\top h$ the Lagrangian, the
+envelope theorem gives, at a solution $(w^\star, \lambda^\star, \mu^\star)$,
+\begin{equation}
+  \frac{\mathrm{d}J^\star}{\mathrm{d}\theta}
+  = \frac{\partial\mathcal{L}}{\partial\theta}\bigg|_{w^\star,\lambda^\star,\mu^\star},
+  \label{eq:envelope}
+\end{equation}
+the primal and dual variables held fixed. The cost is one evaluation of an
+expression built once at construction, on quantities the solve already returned
+--- $0.079\%$ of the solve. \textbf{We verify \eqref{eq:envelope} rather than
+assume it}: against central finite differences on the optimal value, over $54$
+components at states the controller actually visits during a run (not at points
+placed on the centreline), the cosine is $0.99999$ and the relative error below
+$10^{-3}$.
+
+Because the MPC minimises a cost while the learner maximises a return, both the
+value and its gradient carry a negation, $V = -J^\star$. Applying one and not
+the other drives every weight the wrong way while resembling an over-large step
+size; a directional unit test guards it.
+
+\subsection{Outer loop}
+The MPC supplies the policy, the state value and the action value from a single
+problem: $\pi_\theta(s)$ is the first control of the solution, $V_\theta(s) =
+-J^\star$, and $Q_\theta(s,a)$ is the same NLP with $u_0$ pinned to $a$ --- not
+a second problem, just equality bounds on two decision variables. When
+$a = \pi_\theta(s)$ the two coincide and the second solve is skipped, so it runs
+only on ticks where exploration perturbed the action.
+
+\begin{algorithm}[t]
+\caption{TD($\lambda$) on the cost weights, one update per control tick}
+\label{alg:tdlambda}
+\begin{algorithmic}[1]
+\State $e \gets 0$
+\For{each control tick}
+  \State solve MPCC at $s_t$ \Comment{gives $\pi_\theta(s_t)$, $V_\theta(s_t)$}
+  \State $a_t \gets \pi_\theta(s_t) + \varepsilon$ \Comment{$\varepsilon$: actuator noise}
+  \State $Q, \nabla_\theta Q \gets$ solve with $u_0 = a_t$, then \eqref{eq:envelope}
+  \State apply $a_t$; observe $r_t$, $s_{t+1}$
+  \State $\delta \gets \mathrm{clip}\!\left(r_t + \gamma V_\theta(s_{t+1}) - Q, \pm\delta_{\max}\right)$
+  \State $\hat g \gets \mathrm{clip}\!\left(-\nabla_\theta Q / \mathrm{RMS}, \pm c\right)$
+  \State $e \gets \gamma\lambda e + \hat g$
+  \State $\theta \gets \mathrm{clip}\!\left(\theta + \alpha\,\delta\,e,\ \pm 6\right)$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Algorithm~\ref{alg:tdlambda} lists the loop. Three details are load-bearing and
+were each a failure before they were a line of code.
+
+\emph{The gradient is normalised by a running RMS.} $J^\star$ is a sum of
+weighted squared errors with no natural scale, so neither has
+$\nabla_\theta J^\star$, and a fixed $\alpha$ means nothing across problems.
+Normalising makes $\alpha$ a step in relative terms.
+
+\emph{The TD error is clipped, not only the gradient.} Leaving the track pays
+$-5$ against roughly $+0.07$ for an ordinary tick, so the terminal transition
+produces a $\delta$ two orders of magnitude larger than any other, arriving
+multiplied by a trace that has been accumulating for ten steps. Unclipped, one
+crash moves every weight further than the preceding episode did.
+
+\emph{Traces, because the consequence of a wrong weight appears several ticks
+after the tick it was wrong on.} One number per parameter, six parameters.
+
+\subsection{Plant, task and reward}
+The plant is a kinematic bicycle at \SI{20}{\hertz} with one deliberate
+addition the controller does not model: a grip limit capping the yaw rate at
+$a_{\text{lat,max}}\,\mu/v$, with $a_{\text{lat,max}} =
+\SI{6}{\meter\per\second\squared}$. \textbf{The mismatch is the point} --- a
+tyre limit the controller has never heard of is exactly what should show up as
+cost weights that are wrong for the real vehicle, and a shared model between
+plant and controller would make the question unaskable.
+
+The reward is the \emph{real} objective and deliberately not the MPCC's internal
+cost: metres of centreline progress per tick, minus $5$ for leaving the track,
+which ends the episode. If the two were the same quantity the MPC would already
+be optimal for it by construction and there would be nothing to learn.
+
+Episodes are $400$ steps (\SI{20}{\second}) on a \SI{26.7}{\meter} oval with
+\SI{2.5}{\meter} corners. Weights are initialised deliberately badly ---
+$q_l = 200$, $q_v = 0.05$ --- so the controller crawls and has somewhere to
+improve from.
+
+\begin{table}[t]
+  \centering
+  \caption{Hyperparameters. Where an experiment differs from these it is stated
+  in the text.}
+  \label{tab:hyper}
+  \begin{tabular}{llr}
+    \toprule
+    & symbol & value \\
+    \midrule
+    discount                & $\gamma$          & 0.98 \\
+    trace decay             & $\lambda$         & 0.90 \\
+    step size               & $\alpha$          & $2\times10^{-3}$ \\
+    TD-error clip           & $\delta_{\max}$   & 1.0 \\
+    normalised-gradient clip& $c$               & 1.0 \\
+    weight bounds           & $|\theta|$        & 6 \\
+    exploration (full-scale fraction) & $\varepsilon$ & 0.05 \\
+    horizon / interval      & $N$, $\Delta t$   & 12, \SI{0.15}{\second} \\
+    control rate            &                   & \SI{20}{\hertz} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Protocol, and what is randomised}
+The only stochastic element in the loop is the actuator exploration noise, so a
+``seed'' is a draw of that stream; the plant, track and initialisation are
+deterministic. This makes seed-to-seed variation a clean measure of the
+learner's reliability rather than of the task's.
+
+\textbf{Where a result is single-seed we say so.} The safety-filter comparison
+of Section~\ref{sec:safety} is one seed and should be read as an existence
+result --- it shows the failure and its removal, not the size of the effect.
+The situation-dependent weighting we report separately is over six seeds with
+its spread, and we regard that as the standard the filter result has yet to
+meet.
+
+\subsection{Reproducibility}
+The implementation is Python with CasADi and IPOPT; no simulator is required.
+Every table names the script that produces it, and each writes a JSON record
+under \texttt{benchmarks/results/}. Solver timings are reported as mean
+\emph{and} worst case, because a controller whose mean fits its budget and whose
+tail does not is a controller that misses deadlines.
+
 \section{Warm starts are memory}\label{sec:theory}
 
 Write one solver tick as
@@ -155,10 +316,39 @@ truncation in RTRL.
 \end{figure*}
 
 \subsection{Isolating the solver}
-Perturbing $\theta$ and running the closed loop conflates the solver's memory
-with the fact that a different $\theta$ drives the car somewhere else. We
-therefore \emph{replay} a recorded state sequence, so the only path from
-$\theta$ to the iterate at tick $T$ is the chain of warm starts.
+The quantity of interest is how much of $\partial u_0/\partial\theta$ arrives
+\emph{through the warm start}. Measuring it in closed loop is not possible:
+perturbing $\theta$ changes the input, which drives the car to a different
+state, and the resulting change in $u_0$ then mixes the solver's memory with
+the plant's. The two effects are confounded by construction.
+
+We therefore \textbf{replay a recorded state sequence}. A nominal run is logged;
+each variant is then driven through the \emph{same} $s_0,\dots,s_T$ with the
+plant out of the loop, so the only path from $\theta$ to the iterate at tick $T$
+is the chain of warm starts. The comparison is:
+\begin{enumerate}
+  \item \textbf{memoryless}: at each tick, solve to convergence from a
+        \emph{cold} start. No state crosses the tick boundary; this is what the
+        envelope theorem describes.
+  \item \textbf{warm-started and converged}: carry the previous solution as the
+        initial guess, then converge. State crosses the boundary but is
+        annihilated by convergence --- a control that separates ``warm start''
+        from ``not converged''.
+  \item \textbf{SQP-RTI}: carry the iterate and take exactly one linearisation
+        and one full QP. This is the deployed case.
+\end{enumerate}
+Sensitivities are obtained by central finite differences on $u_0$ with respect
+to each component of $\theta$, through the whole replayed chain, so the measured
+$J$ includes whatever the warm start contributes. We report $\lVert J\rVert$ and
+the cosine to case~1, because for a gradient method with a tuned step size the
+direction is what has to survive and the magnitude is absorbed by $\alpha$.
+
+Separately we measure the decay directly: perturb the warm start alone, hold
+$\theta$ fixed, and track $\lVert\Delta w\rVert$ forward. This gives $\rho$
+empirically rather than from $\rho(D)$, and it is the evidence that the warm
+start really is memory (Fig.~\ref{fig:rti}, right) --- which matters, because the
+paper's claim is that this memory does not reach the gradient, not that it is
+absent.
 
 \subsection{Result}
 Table~\ref{tab:rti}. With a genuine real-time iteration --- one full QP per
@@ -233,7 +423,8 @@ A predictive safety filter removes the failure without touching the learner.
 \begin{table}[t]
   \centering
   \caption{Online tuning with and without a predictive safety filter, same seed,
-  26 episodes.}
+  26 episodes. \textbf{Single seed}: an existence result, not an effect size ---
+  see Section~\ref{sec:method}.}
   \label{tab:safety}
   \begin{tabular}{lrr}
     \toprule

@@ -1,0 +1,233 @@
+% Paper 2. Situation-dependent cost weights and behaviour parameterisation.
+%
+% Status: DRAFT, and deliberately incomplete in a specific way. Sections with
+% measured numbers name the script that produced them. Section VI (the
+% behaviour policy) is a METHOD WITHOUT RESULTS -- it is specified here because
+% the specification is what the next experiment tests, and it is marked as
+% unmeasured everywhere it appears. Nothing in it may be claimed.
+%
+% Paper 1 is main.tex ("Differentiating a Real-Time MPC Is Safe"), which
+% establishes the gradient this paper uses. Cite, do not restate.
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}
+\IEEEoverridecommandlockouts
+\overrideIEEEmargins
+
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[hidelinks]{hyperref}
+\newcommand{\todo}[1]{\textbf{[TODO: #1]}}
+\newcommand{\unmeasured}{\textbf{[NOT MEASURED]}\ }
+
+\title{\LARGE\bf Cost Weights Are a Behaviour Parameterisation:\\
+Situation-Dependent Tuning of a Model Predictive Contouring Controller}
+
+\author{Anonymous submission%
+\thanks{Double-anonymous review; author and funding information removed.}}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+\begin{abstract}
+Online tuning of an MPC's cost weights is usually posed as finding \emph{one}
+good weight vector. We argue it is the wrong object: the weights are a
+\emph{behaviour} parameterisation, and the right target is a map from situation
+to weights. We give three results. First, a single weight vector is not merely
+suboptimal but unstable: over six seeds an online tuner reaches a
+\SI{78}{\meter} controller on every seed and destroys it on every seed within
+five episodes, whereas one weight vector per curvature bin reaches the same peak
+and keeps it (\SI{77.8}{\meter}, sd $0.2$, $0/6$ collapsed against
+\SI{8.9}{\meter}, sd $0.9$, $6/6$). The mechanism is isolation, not expressive
+power --- a bad update in a corner no longer moves the straight's weights.
+Second, adding a soft obstacle keep-out makes overtake-versus-follow expressible
+at all, and it is then governed by a \emph{ratio} of two weights: across two
+decades in each, every setting with $q_v/q_c \le 1$ follows and every setting
+above it passes. Safety is governed by a different axis, the magnitude of $q_v$
+alone, so the region a learned policy must be confined to is not a box. Third,
+we show that the curvature binning that produces the first result cannot express
+the sector names it is usually described with, because curvature at a point
+cannot separate a \SI{90}{\degree} corner from a \SI{180}{\degree} one.
+\todo{final numbers for the four-sector comparison}
+\end{abstract}
+
+\section{Introduction}
+\todo{Weights are few, interpretable, and decide lap time; but one vector for a
+whole lap is a modelling choice, not a fact.}
+
+\section{Related work}
+\todo{Gros \& Zanon; mpcrl / MPC4RL; COAT-MPC; AD-MPCC; gain scheduling in
+classical control; racing-line and behaviour planners.}
+
+\section{Background}
+The controller, the log-parameterisation of the weights, and the
+envelope-theorem gradient are as in our companion work~\cite{paper1}; we restate
+only what is needed. The MPCC cost is
+\begin{equation}
+  J = \sum_k q_c e_c^2 + q_l e_l^2 - q_v \dot s\,\Delta t
+      + r_\delta \delta^2 + r_a a^2 + r_{\dot s}(\dot s - v)^2,
+  \label{eq:cost}
+\end{equation}
+with $\theta = \log(q_c, q_l, q_v, r_\delta, r_a, r_{\dot s})$ the learnable
+parameters, and $\mathrm{d}J^\star/\mathrm{d}\theta$ obtained from the partial
+derivative of the Lagrangian at the solution. $N = 12$, \SI{20}{\hertz},
+TD($\lambda$) with $\gamma = 0.98$, $\lambda = 0.9$, $\alpha = 2\times10^{-3}$.
+
+\section{Method}\label{sec:method}
+
+\subsection{Situation-dependent weighting}
+Let $\sigma : s \mapsto \{1,\dots,B\}$ label the track ahead. We hold one
+$\theta_b$ per label and one tuner per label, and this second part is not
+incidental: the eligibility trace belongs to the weights it accumulated for, so
+a shared trace would credit a hairpin's gradient to the straight's weights. The
+trace is reset at a label boundary and does not cross it.
+
+The label is read from the path at a fixed preview distance ahead of the car
+rather than at the car, so no detector and no estimator is involved --- the
+schedule is \emph{observed}, and the comparison against a single $\theta$ is
+therefore a comparison of parameterisations and not of perception.
+
+\subsection{What the labels can and cannot be}\label{sec:sectors}
+The obvious labelling is curvature, binned by quantiles of the track's own
+$|\kappa|$ so the split transfers between geometries. \textbf{This cannot
+express sector names.} For an arc of radius $R$, $\kappa = 1/R$ \emph{however
+far the arc sweeps}, so a \SI{90}{\degree} corner and a \SI{180}{\degree}
+hairpin of equal radius are identical to anything reading curvature at a point.
+Measured on a circuit built with both at $R = \SI{2.6}{\meter}$: peak $|\kappa|$
+agrees to within $2\%$ and the two fall in the same bin.
+
+What separates them is the \emph{integral} of curvature through the corner. We
+therefore detect a corner as an extended object --- a maximal run of $|\kappa|$
+above a fraction of the track's peak --- and classify it by its total heading
+change $\Delta\psi = \int \kappa\,\mathrm{d}s$ into straight, long curve
+($|\Delta\psi| < \SI{60}{\degree}$), \SI{90}{\degree}
+($\SI{60}{\degree} \le |\Delta\psi| < \SI{135}{\degree}$) and
+\SI{180}{\degree}. The label belongs to the corner, not to the point, so it
+cannot change part-way through a manoeuvre.
+
+We report the curvature-binned and sector-labelled schedules separately and do
+not conflate them: \textbf{the six-seed result of Section~\ref{sec:seeds} is a
+three-bin curvature schedule}, and calling it a sector schedule would overclaim.
+
+\subsection{Obstacles, so that behaviour is expressible}
+Without an obstacle in the OCP, ``overtake'' and ``follow'' are not two
+behaviours the weights select between --- they are the same problem. We add
+$M$ circular keep-outs as runtime parameters, softened with explicit slacks:
+\begin{equation}
+  \lVert p_k - o_j \rVert^2 - r_{\text{eff},j}^2 + s_{jk} \ge 0,
+  \quad s_{jk}\ge 0,
+  \label{eq:keepout}
+\end{equation}
+penalised $Z s^2 + z s$ in the cost, with $r_{\text{eff}} = r + m$ and inactive
+slots passed as $r = -m$ so the constraint is exactly inert. Soft rather than
+hard is deliberate: it makes ``stay behind'' a feasible finite-cost option, and
+an infeasible solve is not a behaviour but a missing input.
+
+The constraint is applied at nodes $1..N$ and not at node $0$, which is pinned
+to the measurement --- a constraint there is a statement about the past, and it
+would be unsatisfiable exactly when the car is already touching an opponent.
+
+\textbf{The slacks add decision variables and constraint rows, so we re-verify
+the gradient rather than assume it survives}: with a keep-out active, the
+envelope-theorem sensitivity agrees with central finite differences to cosine
+$> 0.999$ and relative error $< 5\times10^{-2}$, the same thresholds as the
+obstacle-free check.
+
+\subsection{The behaviour policy}\label{sec:policy}
+\unmeasured Everything in this subsection is specified but not yet run, and
+nothing in it is claimed. It is stated in full because the specification is what
+the next experiment tests.
+
+The target is a map $\phi : \text{situation} \to \theta$. Section~\ref{sec:axes}
+constrains its shape in two ways that a design should respect rather than
+rediscover: the behaviour boundary is a \emph{ratio} $q_v/q_c$, which because
+$\theta$ is already a logarithm is a \emph{difference of two components of
+$\theta$} and therefore a linear function of the output; and safety is set by
+the magnitude of $q_v$, a different axis, so the output must be bounded by a
+ceiling on $q_v$ rather than by a box.
+
+\emph{Features.} Keyed on quantities with physical units, so that the map
+transfers between tracks and speeds: time-to-collision with the car ahead; the
+gap measured against braking distance $v^2/2a_{\max}$ rather than in metres;
+the lateral acceleration a pass would require against $a_{\text{lat,max}}\mu$,
+i.e.\ whether the pass is physically available at all; curvature preview at
+several distances; and margin to the boundary.
+
+\emph{The precondition that decides whether memory is needed.} If $\phi$ is
+given the opponent's velocity, there is no hidden state and no temporal pattern,
+and a recurrent head is decoration. A closing rate is a derivative of a range
+and cannot be read from one frame, so \textbf{the temporal argument requires
+deliberately withholding opponent velocity}, and we treat that as a design
+choice to be defended rather than inherited.
+
+\emph{Candidate heads.} Three, compared on identical features:
+\begin{enumerate}
+  \item a fixed schedule --- a lookup from sector and gap band;
+  \item a per-tick MLP, memoryless;
+  \item a liquid time-constant (LTC) cell~\cite{hasani2021ltc}, one step of
+        \begin{equation}
+          h^+ = \frac{h + \Delta t\, f(x,h)\,A}{1 + \Delta t\,(1/\tau + f(x,h))},
+          \quad f = \sigma(W\xi),
+          \label{eq:ltc}
+        \end{equation}
+        whose effective time constant $\tau_{\text{eff}} = \tau/(1 + \tau f)$ is
+        set at run time by the input.
+\end{enumerate}
+
+The reason to consider \eqref{eq:ltc} specifically, rather than any recurrent
+cell, is that $\tau_{\text{eff}}$ \emph{is} a hold duration: long when the gate
+is shut, short when the input drives it. A behaviour decision should be taken
+once and held --- re-deciding at \SI{20}{\hertz} invites chattering between
+overtake and follow --- and a learned, situation-dependent hold is the
+principled form of that, rather than a hand-set dwell time.
+
+\emph{The gate, fixed in advance.} The recurrent head is claimed only if it
+beats \emph{both} the fixed schedule and the per-tick MLP. We state a prediction
+against ourselves: because the behaviour boundary is linear in $\theta$, the
+fixed schedule should be strong, and the network can only win on the temporal
+axis. Published results for this cell family on a closely related overtaking
+task are \emph{not} favourable --- an LTC ranked sixth of seven cells and made
+the fewest passes, below a memoryless MLP, though no cell in that comparison was
+separated from another given the seed spread. We therefore regard a negative
+outcome as the likely one and will report it as such.
+
+\subsection{Protocol}
+The only stochastic element is actuator exploration noise, so a seed is a draw
+of that stream and the plant, track and initialisation are deterministic; seed
+variation measures the learner's reliability rather than the task's. Sweeps over
+fixed weights are deterministic and single-run, and there each cell is exact
+while the \emph{geometry} is $n=1$ --- we say which is which.
+
+Episodes are 400 steps at \SI{20}{\hertz}. Tracks: a \SI{26.7}{\meter} oval
+(straights and two \SI{180}{\degree} corners), and a \SI{47.2}{\meter} circuit
+built to contain all four sector types with a minimum radius of
+\SI{2.59}{\meter}, chosen to match the oval so that a scheduling result is not
+confounded by an initialisation failure.
+
+\section{One weight vector is unstable}\label{sec:seeds}
+\todo{six-seed table: global 8.9 (sd 0.9) 6/6 collapsed vs per-bin 77.8 (sd 0.2)
+0/6; best-episode row showing both reach the same peak.}
+
+\section{Behaviour is a ratio; safety is a magnitude}\label{sec:axes}
+\todo{the 3x5 grid table; the two axes; zero collisions and minimum clearance.}
+
+\section{Do named sectors pay for themselves?}
+\todo{global vs curvature3 vs sector4 on the circuit, six seeds. Report the
+difference in standard errors. A null result is a result: four labels is twice
+the parameters of three.}
+
+\section{Limitations}
+The behaviour policy of Section~\ref{sec:policy} is specified and not measured.
+The overtake grid is one opponent geometry. The plant is a kinematic bicycle
+with a grip limit the controller does not model; results against a fitted-tyre
+plant are not yet obtainable because the tuner does not survive it from the
+default initialisation, which is a reward-design problem and not a scheduling
+one. Nothing has run on a vehicle.
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}
