@@ -82,6 +82,74 @@ Candidate fixes, none tried here:
   `safety.py`; on a comparable task it took an unfiltered learner from crashing
   in 61% of training episodes to 0%, with no cost in final performance.
 
+## Situation-dependent weights, over six seeds
+
+The best result on this problem, and the one that needed confirming: one
+$\theta$ per curvature segment, the segment read from the path *ahead*
+(`experiments/per_segment_weights.py`). It was measured on **one seed**, and the
+failure it claims to fix — the tuner walking $\theta$ out of the good region —
+is stochastic, so one draw could get it wrong in either direction.
+
+`experiments/per_segment_seeds.py`, six independent seeds, 26 episodes each,
+oval, everything else identical:
+
+| | last 8 episodes | spread | seeds ending collapsed |
+|---|---|---|---|
+| global $\theta$ | 8.9 m | sd 0.9, range 7.6–9.8 | **6 / 6** |
+| **per-segment $\theta$** | **77.8 m** | sd 0.2, range 77.5–78.0 | **0 / 6** |
+
+**It reproduces.** The distributions do not overlap — the *worst* per-segment
+seed is eight times the *best* global one — and the per-segment spread (0.2 m)
+is tighter than the global one despite being nine times the magnitude. Seed 0
+returns 7.6 m and 78.0 m, the published pair, to the decimal.
+
+### What it does is not "find better weights"
+
+The row that matters is the best episode, not the last:
+
+| | best episode | first off-track |
+|---|---|---|
+| global $\theta$ | 77.6 – 79.1 m | episode 3, 3, 4, 5, 5, 5 |
+| per-segment $\theta$ | 78.0 – 78.3 m | **never, on any seed** |
+
+The global tuner finds a ~78 m controller on **every** seed, and then destroys
+it on **every** seed, within five episodes. Per-segment weights reach the same
+peak and *keep* it. So the mechanism is not that per-segment $\theta$ is a
+richer parameterisation that reaches a better policy — it reaches the same
+policy — it is that **a bad update made in a corner no longer moves the
+straight's weights**, so there is no longer a single vector for the collapse to
+propagate through.
+
+### The counter-intuitive weights, explained
+
+The single-seed run reported `q_v = 71.2` in the tightest segment against
+`29.5` on the straight — progress weighted *higher* in the hairpin, which is
+backwards — and the honest note at the time was that reading a mechanism into
+one seed would be over-interpretation. Six seeds say it was.
+
+The direction survives weakly (hairpin above straight on 5 of 6 seeds, mean 35.5
+against 24.5) but the dramatic figure does not: **71.2 is a seed-0 outlier**, and
+the other five sit between 24.7 and 30.8.
+
+More to the point, the comparison is meaningless. Across all six seeds and all
+three segments, `q_v` lands between **19.7 and 71.2** — and
+`q_v` saturates above ≈2 (`experiments/weights_as_behaviour.py`: mean speed
+0.40 → 3.92 m/s over `q_v` 0.02 → 2, and flat thereafter). Every one of
+those numbers is in the dead zone, so they are all the *same behaviour*, and
+ordering them is reading structure into a flat region.
+
+**The weight that actually carries the schedule is `q_c`**, and it is not
+counter-intuitive at all:
+
+| | straight | long curve | hairpin |
+|---|---|---|---|
+| mean `q_c` | **0.42** | 1.95 | 1.22 |
+
+`q_c` on the straight is the lowest of the three on **6 of 6 seeds**, by a
+factor of three to six. Hold the line through the corners; let it run wide on
+the straight. That is the schedule, it is stable across seeds, and it was
+invisible while `q_v` was being read.
+
 ## Real-time: solved, and measured
 
 This section used to say the solve took ~150 ms against a 50 ms budget and was

@@ -23,6 +23,11 @@ On the oval, 26 episodes, same seed as every other experiment here:
     global              ep 5         7.6 m,  8/8 off
     per-segment         never       78.0 m,  0/8 off
 
+**Confirmed over six seeds** in ``experiments/per_segment_seeds.py`` -- the
+number below was one seed, and the failure it fixes is a stochastic one, so it
+had to be. Global 8.9 m (sd 0.9), collapsing on 6 of 6 seeds; per-segment
+77.8 m (sd 0.2), collapsing on 0 of 6. The distributions do not overlap.
+
 **The collapse disappears.** This is the best result on this problem so far,
 against everything else tried:
 
@@ -37,10 +42,20 @@ collapsing (79.1 m at episode 4, immediately before driving into a wall). The
 tuner stops overshooting the good region because a bad update in a corner no
 longer moves the straight's weights.
 
-The learned weights are *not* the intuitive ones. The straight ends at
-q_v = 29.5 with q_c = 0.38, and the tightest segment at q_v = 71.2 -- a higher
-progress weight in the corner, not a lower one. Reading a mechanism into that
-would be over-interpretation of one seed.
+The learned weights are *not* the intuitive ones -- the straight ends at
+q_v = 29.5 and the tightest segment at q_v = 71.2, a higher progress weight in
+the corner, not a lower one. That note used to end "reading a mechanism into
+that would be over-interpretation of one seed", and six seeds say it was: 71.2
+is a seed-0 outlier (the other five sit between 24.7 and 30.8), and every q_v
+here, on every seed and every segment, is between 19.7 and 71.2 -- i.e. entirely
+inside the dead zone above q_v ~ 2 that ``weights_as_behaviour.py`` measured.
+They are all the same behaviour, so the ordering is noise in a flat region.
+
+The weight that actually carries the schedule is **q_c**: 0.42 on the straight
+against 1.95 and 1.22 in the two curved segments, with the straight lowest on
+**6 of 6 seeds**. Hold the line through the corners, let it run wide on the
+straight. That is intuitive, it is stable, and it was invisible while q_v was
+being read.
 
 ## Where it does not work, and this is not a scheduling failure
 
@@ -81,8 +96,13 @@ def run(track, mode, n_ep=26, seed=0, steps=400, preview=1.0):
     # One tuner per segment: the eligibility trace belongs to the weights it
     # accumulated for, and sharing it across segments would credit a hairpin's
     # gradient to the straight's weights.
+    # Stride the per-segment RNG seeds by 1000 rather than 1 so that a seed
+    # sweep gets independent runs: with ``seed + i`` the per-segment run at
+    # seed 1 would reuse two of the three exploration streams from seed 0, and
+    # "five seeds" would not be five samples. seed=0 is unchanged, so the
+    # published single-seed result still reproduces exactly.
     tus = [QLambdaTuner(m, th.shape[1], gamma=0.98, lam=0.9, alpha=2e-3,
-                        explore=0.05, delta_clip=1.0, seed=seed + i)
+                        explore=0.05, delta_clip=1.0, seed=seed * 1000 + i)
            for i in range(n_seg)]
     rows = []
     for ep in range(n_ep):
