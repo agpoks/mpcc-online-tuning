@@ -121,12 +121,12 @@ gradient step multiplicative, which is what a scale parameter wants.
 
 ## 5. What is still missing for a vehicle
 
-* **Solve time.** ~150 ms per NLP with IPOPT; 20 Hz needs < 50 ms for the whole
-  tick. The answer is acados with a real-time iteration scheme — one SQP
-  iteration per tick, warm-started from the last — which is what
-  `MPCC_planner_acados` already does. The envelope gradient is available there
-  too: it needs the objective's partial derivative and the multipliers, both of
-  which acados returns.
+* ~~**Solve time.**~~ Done, and measured: `mpcc_tuning/rti.py` solves one full
+  QP per tick, warm-started, in **1.9 ms mean / 3.4 ms worst** at $N=12$ against
+  a 50 ms budget — see [Results](results.md#real-time-solved-and-measured).
+  IPOPT to convergence misses on the worst case even where its mean fits. What
+  is *still* not real-time is the tuner: a learning step needs a second solve
+  when the action was perturbed for exploration.
 * **Safety during tuning.** The weights are being changed on a moving vehicle.
   This is exactly the case for a predictive safety filter around the whole
   thing — including around the tuner, not just the controller — and

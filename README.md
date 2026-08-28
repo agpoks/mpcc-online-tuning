@@ -205,10 +205,15 @@ reproducible from a seed.
 - [x] Envelope-theorem gradient, validated against finite differences
 - [x] TD(λ) Q-learning outer loop with eligibility traces
 - [x] Plant/controller model mismatch as a first-class knob
-- [ ] **Solve time is ~150 ms per NLP with IPOPT** — fine for a spike, far too
-      slow for 20 Hz on a car. The fix is acados with an RTI scheme (one SQP
-      iteration per tick), which is what `MPCC_planner_acados` already uses; the
-      envelope gradient is available there too.
+- [x] **Real-time solve.** `mpcc_tuning/rti.py` is a genuine SQP-RTI — one full
+      QP per tick, warm-started. **1.9 ms mean, 3.4 ms worst at N=12**, against
+      50 ms at 20 Hz, and it fits 100 Hz. IPOPT to convergence has a *worst
+      case* of 53 ms and misses. The gradient survives the change: the envelope
+      sensitivity at the RTI solution matches the converged one exactly in
+      direction. Measured by `benchmarks/solve_time.py`.
+- [ ] **The tuner is not real-time.** The controller now is; each *learning*
+      step still needs a second solve when the action was perturbed for
+      exploration, and a safety filter adds 0.6-57 ms on top.
 - [ ] **A stopping criterion.** See "What it does, measured" -- the loop is
       stable while it improves and then over-optimises. This is the next thing
       to fix, not a footnote.

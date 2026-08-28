@@ -82,18 +82,44 @@ Candidate fixes, none tried here:
   `safety.py`; on a comparable task it took an unfiltered learner from crashing
   in 61% of training episodes to 0%, with no cost in final performance.
 
-## What is not real-time yet
+## Real-time: solved, and measured
 
-| | |
-|---|---|
-| solve time, IPOPT, N=12 | ~150 ms |
-| budget at 20 Hz | < 50 ms for the whole tick |
+This section used to say the solve took ~150 ms against a 50 ms budget and was
+"far too slow for a car". That was true of IPOPT solved to convergence. It is
+not true of the SQP-RTI in `mpcc_tuning/rti.py` — one full QP per tick,
+warm-started, which is what real-time iteration actually means.
 
-Fine for a spike, far too slow for a car. The answer is acados with a real-time
-iteration scheme — one SQP iteration per tick, warm-started from the last —
-which is what `MPCC_planner_acados` already does. The envelope gradient is
-available there too: it needs the objective's partial derivative and the
-multipliers, and acados returns both.
+`python benchmarks/solve_time.py`, 60 replayed states:
+
+| solver | mean | **worst** | 20 Hz | 50 Hz | 100 Hz |
+|---|---|---|---|---|---|
+| IPOPT converged, N=12 | 27.3 ms | **53.4 ms** | miss | miss | miss |
+| IPOPT converged, N=20 | 51.1 ms | **87.5 ms** | miss | miss | miss |
+| **SQP-RTI, N=12** | **1.9 ms** | **3.4 ms** | **ok** | **ok** | **ok** |
+| SQP-RTI, N=20 | 3.6 ms | 10.3 ms | ok | ok | miss |
+
+**Read the worst case, not the mean.** IPOPT at N=12 averages 27 ms, inside the
+20 Hz budget, and its worst case is 53 ms — outside it. A controller whose mean
+fits and whose tail does not is a controller that misses deadlines, and the
+distinction is invisible if only the mean is reported.
+
+At N=12 the RTI has **14× headroom at 20 Hz** and fits 100 Hz. This is CasADi's
+`qrqp` from Python; acados would be faster again, and
+`MPCC_planner_acados` already runs `SQP_RTI`.
+
+The gradient survives the change. The envelope-theorem sensitivity computed at
+the RTI solution agrees with the converged one **exactly in direction** (cosine
+1.0000) and is 16% smaller in magnitude — see
+[Influence through a solver](influence_through_a_solver.md). So the tuning does
+not have to be redone for the fast solver.
+
+### What is still not real-time
+
+The **tuner**, not the controller. Each learning step needs `Q(s,a)` at the
+executed action, which is a second solve when the action was perturbed for
+exploration. And the safety filters cost 0.6–57 ms on top (see
+[Safety filters](filters.md)), so the total tick budget has to be counted with
+whichever filter is in the loop, not with the controller alone.
 
 Note also that the second solve is usually free. `Q(s, π(s)) = V(s)` by
 definition, so the action-value solve is skipped entirely unless the applied
