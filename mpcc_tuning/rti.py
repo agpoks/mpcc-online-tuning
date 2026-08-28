@@ -76,7 +76,10 @@ class RTISolver:
     def solve(self, state5, theta):
         """One QP step from the carried iterate. Returns the same dict as MPCC."""
         m = self.m
-        p = np.concatenate([np.asarray(state5, float), np.asarray(theta, float)])
+        # Built by the MPCC, not here: with max_obstacles > 0 the parameter
+        # vector carries the keep-out block as well, and a second place that
+        # knows the layout is a second place to get it wrong.
+        p = m._p(state5, theta)
         if self.w is None:
             self.w = m._initial_guess(state5)
         r = self._fn(w=self.w, p=p)

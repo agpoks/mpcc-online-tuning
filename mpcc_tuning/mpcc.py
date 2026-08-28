@@ -31,6 +31,40 @@ Note what ``-q_v v_s dt`` is: the MPC's *internal* incentive to make progress.
 It is not the reward. The reward the RL layer sees is the real objective
 (distance covered without leaving the track), and the point of the exercise is
 that the weights which best serve that objective are not knowable in advance.
+
+## Obstacles
+
+``max_obstacles`` circular keep-outs, passed as runtime parameters, softened
+with explicit slacks. This exists because *overtaking cannot be expressed by a
+weight* until the controller can see an opponent at all: with no obstacle in
+the OCP, "go around" and "stay behind" are the same problem and no policy over
+theta can distinguish them.
+
+The formulation is copied from
+``MPCC_planner_acados/scripts/generate_acados_solver.py`` (its ``max_obstacles``
+block) and adapted from an acados soft path constraint to this CasADi NLP:
+
+* there, ``h = dist2 - r_eff**2 >= 0`` softened by ``idxsh``/``Zl``/``zl``;
+* here, the same ``h``, with the slack as an explicit decision variable
+  ``h + s >= 0``, ``s >= 0``, penalised ``Z s**2 + z s`` -- which is what
+  acados' ``Zl``/``zl`` are, written out.
+
+Two details are carried over deliberately. **Inactive obstacles are passed with
+``r_raw = -obs_margin``** so that ``r_eff = r_raw + obs_margin`` is exactly
+zero and the keep-out vanishes without a non-smooth ``max()`` appearing in the
+NLP. And the slack is in units of **squared** distance, because the constraint
+is, which is worth knowing when reading ``Z`` -- it is a penalty per m^2 of
+overlap area, not per metre of intrusion. Keeping both quirks identical to the
+template is what makes the eventual acados port a swap rather than a rewrite.
+
+The keep-out is *not* applied at stage 0: that state is pinned to the measured
+``x0``, so the constraint there is a statement about the past. It would be
+unsatisfiable exactly when the car is already touching an opponent, which is
+the one moment the solver most needs to still return something.
+
+``max_obstacles=0`` (the default) changes nothing: no parameters, no slacks, no
+extra constraint rows, and an unchanged decision vector, so every existing
+result and ``mpcc_tuning/rti.py`` are untouched.
 """
 
 from __future__ import annotations
@@ -71,24 +105,42 @@ class MPCC:
     """Model predictive contouring control with learnable cost weights."""
 
     def __init__(self, track, model: KinematicBicycle | None = None, horizon: int = 20,
-                 dt: float = 0.1, car_half_width: float = 0.12, max_iter: int = 60):
+                 dt: float = 0.1, car_half_width: float = 0.12, max_iter: int = 60,
+                 max_obstacles: int = 0, obs_margin: float = 0.15,
+                 obs_slack: tuple = (200.0, 5.0)):
         self.track = track
         self.model = model or KinematicBicycle(dt=dt)
         self.N, self.dt = int(horizon), float(dt)
         self.margin = track.half_width - car_half_width
         self.n_theta = len(WEIGHT_NAMES)
+        # A fixed budget of keep-outs, as in the acados template: the OCP is
+        # built once, so the number of obstacles is structural and only their
+        # positions and radii are runtime parameters.
+        self.max_obstacles = int(max_obstacles)
+        self.obs_margin = float(obs_margin)
+        # (quadratic, linear) slack penalty -- acados' Zl and zl. The template
+        # uses 200 / 5 for the obstacle rows; kept, so the two agree.
+        self.obs_Z, self.obs_z = (float(v) for v in obs_slack)
+        self._obstacles = np.zeros((0, 3))
         self._build(max_iter)
         self._w0 = None   # warm start
 
     # -- construction ------------------------------------------------------
     def _build(self, max_iter: int) -> None:
         N = self.N
+        M = self.max_obstacles
         X = ca.MX.sym("X", 5, N + 1)     # [x, y, psi, v, s]
         U = ca.MX.sym("U", 3, N)         # [delta, a, v_s]
         x0 = ca.MX.sym("x0", 5)
         theta = ca.MX.sym("theta", self.n_theta)
-        p = ca.vertcat(x0, theta)
+        # Obstacles as runtime parameters, [ox, oy, r_raw] each, and one slack
+        # per obstacle per shooting node from k=1 (stage 0 is pinned to x0).
+        obs = ca.MX.sym("obs", 3 * M)
+        S = ca.MX.sym("S", M, N)
+        p = ca.vertcat(x0, theta, obs) if M else ca.vertcat(x0, theta)
         w = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
+        if M:
+            w = ca.vertcat(w, ca.reshape(S, -1, 1))
 
         q_c, q_l, q_v, r_d, r_a, r_dv = (ca.exp(theta[i]) for i in range(self.n_theta))
 
@@ -110,16 +162,39 @@ class MPCC:
             g.append(e_c)
             lbg.append(-self.margin)
             ubg.append(self.margin)
+            # Circular keep-outs on the *next* state, so k=1..N are covered and
+            # the pinned stage 0 is not. Copied from
+            # MPCC_planner_acados/scripts/generate_acados_solver.py:
+            #   r_eff = r_raw + obs_margin;  dist2 - r_eff**2 >= 0
+            # with inactive obstacles passed as r_raw = -obs_margin so r_eff is
+            # exactly zero -- no max() and so no kink in the NLP.
+            for j in range(M):
+                ox, oy, r_raw = obs[3 * j], obs[3 * j + 1], obs[3 * j + 2]
+                r_eff = r_raw + self.obs_margin
+                dist2 = (X[0, k + 1] - ox) ** 2 + (X[1, k + 1] - oy) ** 2
+                s_kj = S[j, k]
+                g.append(dist2 - r_eff ** 2 + s_kj)
+                lbg.append(0.0)
+                ubg.append(ca.inf)
+                # acados' Zl (quadratic) and zl (linear) on the same row,
+                # written out because a plain NLP has no idxsh.
+                J += self.obs_Z * s_kj ** 2 + self.obs_z * s_kj
         e_cN, e_lN = self.track.errors(X[0, N], X[1, N], X[4, N])
         J += q_c * e_cN ** 2 + q_l * e_lN ** 2
 
         self._lbg, self._ubg = np.array(lbg), np.array(ubg)
         self._nx = 5 * (N + 1)
         self._nw = self._nx + 3 * N
+        # Slacks live at the end of w, after the states and controls, so _nx and
+        # the u0 slice keep their meaning and rti.py needs no change.
+        self._ns = M * N
+        self._nw += self._ns
         lbw = np.concatenate([np.tile([-ca.inf, -ca.inf, -ca.inf, 0.0, -ca.inf], N + 1),
-                              np.tile([-STEER_MAX, -ACCEL_MAX, 0.0], N)])
+                              np.tile([-STEER_MAX, -ACCEL_MAX, 0.0], N),
+                              np.zeros(self._ns)])
         ubw = np.concatenate([np.tile([ca.inf, ca.inf, ca.inf, SPEED_MAX, ca.inf], N + 1),
-                              np.tile([STEER_MAX, ACCEL_MAX, SPEED_MAX], N)])
+                              np.tile([STEER_MAX, ACCEL_MAX, SPEED_MAX], N),
+                              np.full(self._ns, ca.inf)])
         self._lbw, self._ubw = np.array(lbw, float), np.array(ubw, float)
 
         gg = ca.vertcat(*g)
@@ -147,6 +222,43 @@ class MPCC:
         self.dQ_dtheta = ca.Function("dQ", [w, lam_g, p],
                                      [ca.gradient(lagrangian, theta)])
 
+    # -- obstacles ---------------------------------------------------------
+    def set_obstacles(self, obstacles) -> None:
+        """Set the keep-outs for subsequent solves: an iterable of ``(x, y, r)``.
+
+        Held on the controller rather than threaded through every call, because
+        they are a property of *the world at this tick* and not of the value
+        being asked for -- and because the learner calls ``value``,
+        ``action_value`` and ``grad_theta`` with the same world and should not
+        have to carry it. That is also how the acados version passes them: as
+        stage parameters set once per tick.
+        """
+        obs = np.asarray(list(obstacles), float).reshape(-1, 3)
+        if len(obs) > self.max_obstacles:
+            raise ValueError(
+                f"{len(obs)} obstacles but the OCP was built for "
+                f"{self.max_obstacles}; pass max_obstacles= at construction")
+        self._obstacles = obs
+
+    def _obs_param(self) -> np.ndarray:
+        """The obstacle parameter block, unused slots switched off.
+
+        An unused slot is ``r_raw = -obs_margin``, so ``r_eff`` is exactly 0 and
+        ``dist2 >= 0`` holds everywhere -- the constraint is present but inert.
+        Same trick as the acados template, and for the same reason: it avoids a
+        ``max(0, .)`` in the NLP.
+        """
+        q = np.tile([0.0, 0.0, -self.obs_margin], (self.max_obstacles, 1))
+        if len(self._obstacles):
+            q[:len(self._obstacles)] = self._obstacles
+        return q.ravel()
+
+    def _p(self, state5: np.ndarray, theta: np.ndarray) -> np.ndarray:
+        parts = [np.asarray(state5, float), np.asarray(theta, float)]
+        if self.max_obstacles:
+            parts.append(self._obs_param())
+        return np.concatenate(parts)
+
     # -- solving -----------------------------------------------------------
     def _solve(self, state5: np.ndarray, theta: np.ndarray, fix_u0=None):
         lbw, ubw = self._lbw.copy(), self._ubw.copy()
@@ -154,7 +266,7 @@ class MPCC:
             i = self._nx
             lbw[i:i + 2] = ubw[i:i + 2] = np.asarray(fix_u0, float)[:2]
         w0 = self._w0 if self._w0 is not None else self._initial_guess(state5)
-        sol = self.solver(x0=w0, p=np.concatenate([state5, theta]),
+        sol = self.solver(x0=w0, p=self._p(state5, theta),
                           lbx=lbw, ubx=ubw, lbg=self._lbg, ubg=self._ubg)
         ok = self.solver.stats().get("success", False)
         w = np.array(sol["x"]).ravel()
@@ -165,7 +277,8 @@ class MPCC:
         X = np.tile(np.asarray(state5, float)[:, None], (1, self.N + 1))
         X[4] += np.arange(self.N + 1) * state5[3] * self.dt
         U = np.tile(np.array([0.0, 0.0, max(state5[3], 0.5)])[:, None], (1, self.N))
-        return np.concatenate([X.ravel(order="F"), U.ravel(order="F")])
+        return np.concatenate([X.ravel(order="F"), U.ravel(order="F"),
+                               np.zeros(self._ns)])
 
     def value(self, state5, theta):
         """``V(s)``: solve, and return the optimal value and the action to apply."""
@@ -191,7 +304,7 @@ class MPCC:
     def grad_theta(self, out, state5, theta) -> np.ndarray:
         """``dQ/dtheta`` at a solved problem, via the envelope theorem."""
         return np.array(self.dQ_dtheta(out["w"], out["lam_g"],
-                                       np.concatenate([state5, theta]))).ravel()
+                                       self._p(state5, theta))).ravel()
 
     def reset(self) -> None:
         self._w0 = None

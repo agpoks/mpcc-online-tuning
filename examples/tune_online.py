@@ -50,12 +50,27 @@ from mpcc_tuning.track import Track
 
 # %%
 class Plant:
-    """The car and the track: the thing the controller is wrong about."""
+    """The car and the track: the thing the controller is wrong about.
 
-    def __init__(self, track, grip: float = 1.0, dt: float = 0.05, max_steps: int = 600):
+    ``opponents`` is an optional iterable of
+    :class:`mpcc_tuning.opponents.Opponent`, each moving at its own speed. They
+    are off by default, so every experiment predating them is unchanged.
+
+    A collision ends the episode the same way leaving the track does, and pays
+    the same -5: from the reward's point of view both are "the run is over and
+    it is your fault", and inventing a second penalty scale would be a reward
+    design decision made by accident. Which one happened is recorded in
+    ``self.failure`` (``None``, ``"off_track"`` or ``"collision"``) rather than
+    added to the return, so the four-tuple every caller unpacks still fits.
+    """
+
+    def __init__(self, track, grip: float = 1.0, dt: float = 0.05, max_steps: int = 600,
+                 opponents=()):
         self.track, self.dt, self.max_steps = track, dt, max_steps
         self.model = KinematicBicycle(dt=dt, grip=grip)
         self.margin = track.half_width - 0.12
+        self.opponents = list(opponents)
+        self.failure = None
 
     def reset(self, s0: float = 0.0):
         p = self.track.center[int(s0 / self.ds_of(s0)) % len(self.track.center)] \
@@ -65,8 +80,15 @@ class Plant:
         self.x = np.array([p[0], p[1], psi, 1.0])
         self.s = 0.0
         self.t = 0
+        self.failure = None
         self.trace = [self.x.copy()]
+        for o in self.opponents:
+            o.reset()
         return self.state5()
+
+    def keepouts(self) -> list:
+        """The opponents as ``(x, y, r)`` circles, for ``MPCC.set_obstacles``."""
+        return [o.keepout() for o in self.opponents]
 
     def ds_of(self, _s):  # pragma: no cover - kept for the placeholder above
         return self.track.ds
@@ -84,8 +106,20 @@ class Plant:
         self.s += float(np.asarray(u, float)[2]) * self.dt
         self.t += 1
         self.trace.append(self.x.copy())
+        for o in self.opponents:
+            o.step(self.dt)
         lateral = self.track.lateral(self.x[0], self.x[1])
         off = abs(lateral) > self.margin
+        if off:
+            self.failure = "off_track"
+        else:
+            # The opponent's radius already carries both cars' half-widths, so
+            # overlap of the circle with the ego *point* is the contact test.
+            for o in self.opponents:
+                ox, oy, r = o.keepout()
+                if np.hypot(self.x[0] - ox, self.x[1] - oy) < r:
+                    off, self.failure = True, "collision"
+                    break
         # The real objective, and deliberately not the MPCC's cost: metres of
         # track covered, with leaving it treated as the failure it is.
         reward = progress - (5.0 if off else 0.0)
