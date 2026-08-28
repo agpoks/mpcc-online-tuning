@@ -76,8 +76,16 @@ class ViabilityFilter(SafetyFilter):
         if curvature is None:
             # The tightest corner on the track: the kernel is then conservative
             # everywhere else, which is the only defensible single-curvature choice.
-            curvature = float(np.max(np.abs(getattr(track, "curvature",
-                                                    np.array([1 / 2.5])))))
+            #
+            # This used to read the track's curvature as an *attribute*. It has
+            # since become ``Track.curvature(s)``, a method, and ``getattr``
+            # duly returned the bound method -- which is not a missing
+            # attribute, so the default never fired, and every construction of
+            # this filter raised. The stored numbers in
+            # benchmarks/results/filters_grip1.json predate that refactor.
+            # Sample it instead, which is what the method is for.
+            ss = np.linspace(0.0, track.length, 400, endpoint=False)
+            curvature = float(np.max(np.abs([track.curvature(v) for v in ss])))
         self.curvature = float(curvature)
         self.half = track.half_width - self.margin
         self.d_grid = np.linspace(-self.half, self.half, n_d)
