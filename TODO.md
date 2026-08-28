@@ -22,7 +22,32 @@ the nearest one.
 **Without this the paper cannot claim online tuning works on a realistic
 vehicle.**
 
-## 2. Trust region on θ
+## 2. Trust region on θ — partly answered by event-triggering
+
+`experiments/event_triggered_tuning.py` tests an alternative: instead of
+bounding *where* θ may go, bound *when* it moves. An integrate-and-fire
+accumulator on measurable badness (lateral error, tyre-limit saturation) gates
+the update.
+
+| mode | collapses at | last 8 episodes |
+|---|---|---|
+| every tick | ep 5 | 7.6 m, 8/8 off |
+| defer (accumulate, apply on event) | ep 3 | 7.4 m, 8/8 off |
+| **discard (drop the move unless in trouble)** | **ep 18** | **38.5 m, 6/8 off** |
+
+Deferring is *worse* than not gating at all: the total movement of θ is
+unchanged, only the granularity, and coarser steps are less stable. Discarding
+delays the collapse by 13 episodes and gives 5× the distance — but does not
+prevent it.
+
+- [ ] Trigger on the **safety filter's intervention** instead of on lateral
+      error. Behind the filter, `q_c` falls 2.52 → 0.136 with performance
+      drifting down, because the filter absorbs the consequence and it never
+      reaches the return. The intervention *is* the missing error signal.
+- [ ] Then a proper trust region, and compare. Discarding is biased (it learns
+      only from trouble); a trust region is not.
+
+## 2b. Trust region on θ
 
 Most of the damage happens in episode 0: `q_v` moves by a factor of **222**
 before a single episode boundary. The α=2e-4 and α=2e-3 runs give the same
