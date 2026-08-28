@@ -22,8 +22,94 @@ Oval, 26 episodes, same seed, last 8 episodes:
 | behind a predictive safety filter | 68.1 m | 0/8 |
 | **per-segment θ (curvature)** | **78.0 m** | **0/8** |
 
+Tracks: `oval` (straights + two 180s), `mixed` (harmonic, no 90s),
+**`circuit`** (all four named sectors, 47.2 m, min radius 2.59 m).
+
+Per-segment θ is now **confirmed over six seeds**
+(`experiments/per_segment_seeds.py`): global 8.9 m (sd 0.9), collapsing on
+**6/6** seeds; per-segment 77.8 m (sd 0.2), collapsing on **0/6**. The
+distributions do not overlap.
+
 Real-time is done: `mpcc_tuning/rti.py`, 1.9 ms mean / 3.4 ms worst at N=12
-against 50 ms at 20 Hz.
+against 50 ms at 20 Hz. **It is CasADi `qrqp`, not acados** — see item 3.
+
+---
+
+## Order of work
+
+Sequenced by what unblocks what, not by interest.
+
+1. **Per-sector tuning on `Track.circuit()`, ≥5 seeds** (item 1b). Unblocked
+   now; ~1 h of compute; the direct sequel to the six-seed result.
+2. **The `q_v` ceiling** (item 2b). Cheap, and nothing can bound a policy's
+   output until it exists.
+3. **acados** (item 3). Feasible but not a copy-paste — two structural problems
+   documented there. Also settles the open caveat on paper 1.
+4. **Personas** (item 2e). Mostly a characterisation sweep once 2b is done.
+5. **A network, if anything** (item 2d). Last, gated, and the prior is negative.
+
+## 0. Papers — decided: two
+
+`paper/main.tex` is **paper 1**, *"Differentiating a Real-Time MPC Is Safe"*:
+warm starts as memory, the influence recursion, the `max_iter=1` trap. It is a
+different story from the weights work and stays that way.
+
+**Paper 2 — situation-dependent cost weights and behaviour parameterisation.**
+`paper/weights.tex` — drafted, structure and Method complete, results sections
+are `\todo{}` awaiting the runs. It cites paper 1 for the gradient rather than
+restating it. What is measured and ready to go in it:
+
+- [x] per-segment θ over six seeds — 77.8 m (sd 0.2), 0/6 collapsed, against a
+      global θ's 8.9 m (sd 0.9), 6/6 collapsed. Distributions do not overlap.
+- [x] the mechanism: global reaches 77.6–79.1 m on *every* seed and destroys it
+      on *every* seed; per-segment reaches the same peak and keeps it.
+- [x] the keep-out, with the envelope gradient re-verified under slacks
+      (cosine > 0.999 to finite differences with an obstacle active).
+- [x] overtake vs follow as two orthogonal axes: behaviour is `q_v/q_c`
+      (15/15 cells), safety is `q_v` magnitude.
+- [x] the named-sector taxonomy and why pointwise curvature cannot express it.
+
+Not ready, and **must not be claimed until measured**: per-sector tuning results,
+the personas as anything learned, the `q_v` ceiling, anything with a network in
+it.
+
+**The LTC / behaviour-policy method is written but marked `\unmeasured`**
+(paper 2, Sec. VI). It is specified in full — features, the cell, the
+`tau_eff = tau/(1 + tau f)` hold-duration argument, the output bounding, and the
+gate — because the specification *is* what the next experiment tests. Nothing in
+it may be claimed until it is run, and the section states a prediction against
+itself: the fixed schedule should be strong because the behaviour boundary is
+linear in θ.
+
+**Method sections are now the thing to keep honest.** Paper 1 had none at all
+until this session; it now has controller parameters, the TD(λ) algorithm as a
+listing, a hyperparameter table, the replay protocol as an enumerated
+three-way comparison, and an explicit statement of what is randomised. Paper 2's
+Method was written the same way from the start.
+
+- [ ] Paper 1's safety-filter result is **single seed** and is now labelled as
+      such in the caption. Re-run it over six seeds to the standard the
+      per-segment result now sets, or leave it labelled.
+- [ ] Neither paper has been compiled — there is no LaTeX toolchain on this
+      machine, and `algorithm`/`algpseudocode` are newly added to paper 1.
+      Overleaf will be the first compile.
+- [ ] `\todo{}` markers remain in both papers' Introduction and Related work.
+
+**Framing point paper 2 has to make itself, before a reviewer does:** the
+six-seed result is a **three-bin curvature schedule, not a sector schedule.**
+`Track.segment` bins pointwise |κ| by quantile, and pointwise curvature provably
+cannot separate a 90-degree corner from a 180-degree one (item 1b). Calling it
+"per-sector" would overclaim.
+
+### Overleaf
+
+`https://git.overleaf.com/6a91eb483816017e248781d9` is a **full mirror of this
+repo**, not just `paper/`. One commit, "Update on Overleaf.", identical to
+`aa3f2ba`. Push is a clean fast-forward.
+
+- [ ] Nothing has been pushed yet. The session's work is uncommitted locally.
+- [ ] Rotate the Overleaf token — it was pasted in plaintext into a chat
+      transcript and is embedded in a scratch clone's `.git/config`.
 
 ---
 
@@ -32,13 +118,85 @@ against 50 ms at 20 Hz.
 `experiments/per_segment_weights.py`. One θ per curvature segment, segment read
 from the path *ahead*, so no detector is needed.
 
-- [ ] **Reproduce over ≥5 seeds.** The 78.0 m result is one seed.
+- [x] **Reproduce over ≥5 seeds.** Done, six seeds,
+      `experiments/per_segment_seeds.py`. Global 8.9 m (sd 0.9), 6/6 seeds
+      collapsed, first off-track at episode 3–5 every time; per-segment 77.8 m
+      (sd 0.2), 0/6 collapsed, never off-track. Seed 0 returns the published
+      7.6 / 78.0 pair exactly.
+      **The mechanism is not a richer parameterisation.** Global reaches a
+      77.6–79.1 m controller on *every* seed and destroys it on *every* seed;
+      per-segment reaches the same 78.0–78.3 m peak and keeps it. What changes
+      is that a bad update in a corner no longer moves the straight's weights.
 - [ ] Continuous schedule θ(κ) instead of three bins — a linear map from a
       curvature-preview feature vector, with the envelope gradient chain-ruled
-      through it.
+      through it. **Item 2's overtake grid says the map should be linear in θ**:
+      the behaviour boundary there is a *ratio* of weights, i.e. a difference of
+      log-weight components.
 - [ ] Check it composes with the safety filter and with item 4.
-- [ ] The learned weights are counter-intuitive (progress weighted *higher* in
-      the tightest segment). Explain or stop repeating it.
+- [x] The learned weights are counter-intuitive (progress weighted *higher* in
+      the tightest segment). **Explained, and it was an artefact.** `q_v` lands
+      between 19.7 and 71.2 across all seeds and segments — entirely inside the
+      dead zone above ≈2 — so those are all the same behaviour and the ordering
+      is noise in a flat region. The 71.2 figure is a seed-0 outlier; the other
+      five are 24.7–30.8. The weight that carries the schedule is **`q_c`**:
+      0.42 straight against 1.95 / 1.22 in the curves, straight lowest on 6/6
+      seeds. Hold the line in the corners, run wide on the straight — which is
+      the intuitive schedule, and was invisible while `q_v` was being read.
+
+## 1b. Named sectors — **taxonomy done, tuning not started**
+
+`Track.corners()`, `Track.sector()`, `Track.circuit()`, `tests/test_sectors.py`.
+
+**Pointwise curvature cannot express the sector names, and no retuning of
+`segment`'s quantiles will fix it.** `kappa = 1/R` for an arc of radius `R`
+*however far it sweeps*, so a 90-degree corner and a 180-degree hairpin of the
+same radius are identical to anything reading curvature at a point. Measured on
+a circuit carrying both at R = 2.6 m: same peak |κ| to within 2%, same
+`segment()` bin, different `sector()`.
+
+What separates them is the **integral** of curvature through the corner — the
+total heading change — so a corner has to be detected as an *extended object*
+first and classified second. That is what `corners()` does, and the label is a
+property of the corner, so it cannot flicker part-way through one.
+
+- [x] Four classes: straight, long curve, 90-degree, 180-degree.
+- [x] `Track.circuit()` — a 47.2 m lap containing all four, min radius 2.59 m
+      (above the oval's 2.46, so a *scheduling* result is not confounded by the
+      initialisation failure that kills `mixed`).
+- [ ] **Per-sector tuning on the circuit, over ≥5 seeds.** The direct sequel to
+      item 1 and the next thing to run. Note the oval cannot test it — it has no
+      90-degree corners at all.
+- [ ] Check a four-way schedule against the three-bin curvature one. If it does
+      not beat it, say so: more sectors is more parameters.
+
+### Five silent failures building the circuit — all produced a plausible track
+
+Recorded because each one looked fine and none announced itself, and because the
+third is a general lesson.
+
+1. **Turns summing to 480 degrees, not 360.** A closed lap's heading returns to
+   where it started. The constructor bridged the gap with a chord and the chord
+   read as two corners that were never designed.
+2. **Corner threshold at 25% of peak |κ|.** One tight hairpin sets the peak and
+   every gentler corner falls below the threshold; the detected ones have their
+   entry ramps clipped, so a designed −90 measured as −59. 0.10 works.
+3. **Unsigned radius in the closure formula.** The arc displacement is written
+   in terms of `R = 1/kappa`, which carries the turn's sign; the unsigned `r`
+   mirrors every right-hand corner. **The solver reported a residual of 2e-15
+   while the real geometry missed by 2.17 m** — a solve reporting success on the
+   wrong model, which is the same class of error as the `max_iter=1` trap in
+   paper 1.
+4. **A balanced turn set sums to zero** (+180,−180,+90,−90,+60,−60) and closes
+   as a self-intersecting figure-eight. A valid closed curve and a useless
+   racetrack; the two hairpins have to turn the same way.
+5. **Same-sign corners separated by < 1.2 m of straight merge into one**,
+   because `Track.curvature`'s 0.6 m stencil never lets κ fall back to zero. A
+   180 and a 60 were reported as a single +239.5-degree corner. Opposite-sign
+   neighbours separate for free.
+
+Hand-picking a layout failed twice. The final one came from searching all 720
+orderings against closure, positive straights, same-sign separation and
+self-intersection *simultaneously*.
 
 ## 2. Weights as a behaviour policy — the direction
 
@@ -49,18 +207,28 @@ gap, closing rate, and distance to the boundaries. It should be able to express
 **overtake vs stay behind**, and **use every corner vs follow the global
 racing line**.
 
-### 2a. Precondition: the MPCC cannot see opponents
+### 2a. Precondition: the MPCC cannot see opponents — **done**
 
-**There is no obstacle constraint in `mpcc_tuning/mpcc.py` at all.** Overtaking
-cannot be expressed today. Nothing else in item 2 can start before this.
+- [x] Circular keep-out per opponent, soft, with explicit slacks. Formulation
+      copied from `MPCC_planner_acados/scripts/generate_acados_solver.py`,
+      including both of its quirks: `r_eff = r_raw + obs_margin` with inactive
+      slots passed as `r_raw = -obs_margin` (so `r_eff` is *exactly* zero and no
+      `max()` enters the NLP), and the slack in units of **squared** distance.
+      acados' `idxsh`/`Zl`/`zl` become explicit slack variables at the end of
+      `w`, so `_nx` and the `u0` slice keep their meaning. `max_obstacles=0` is
+      the default and is bit-for-bit the old problem. See
+      `docs/source/obstacles.md`.
+- [x] Opponents in the plant, moving at their own speed —
+      `mpcc_tuning/opponents.py`, `Plant(opponents=...)`. Collision is terminal
+      at the same −5 as leaving the track, with the cause in `plant.failure`.
+- [x] **The envelope gradient survives the slacks**, checked rather than
+      argued: cosine > 0.999 to finite differences with a keep-out active,
+      relative error < 5e-2 — the same thresholds as the obstacle-free check.
+      `tests/test_obstacles.py`, 11 tests.
+- [x] Fixed on the way: `rti.py` packed the parameter vector itself and would
+      have silently mispacked it once obstacles existed.
 
-- [ ] Add a circular keep-out per opponent, as a soft path constraint with
-      slacks. Template: `MPCC_planner_acados/scripts/generate_acados_solver.py`
-      builds exactly this (`max_obstacles`, `dist2 - r_eff**2 >= 0`) — **copy
-      the formulation in, do not import it.**
-- [ ] Opponents in the plant too, moving at their own speed.
-
-### 2b. Establish the safe weight box — before any learning
+### 2b. Establish the safe weight region — before any learning
 
 `experiments/weights_as_behaviour.py` measured: `q_v` is a genuine dial (mean
 speed 0.40 → 3.92 m/s, monotone, **saturating above ≈2**), and `q_c` is **not**
@@ -69,10 +237,32 @@ speed 0.40 → 3.92 m/s, monotone, **saturating above ≈2**), and `q_c` is **no
 So the usual safety argument for learning weights rather than steering — "the
 MPCC enforces the constraints, so any θ is feasible" — is **false as stated**.
 
-- [ ] Sweep every weight to failure and record the box where θ is a behaviour
-      knob rather than a conditioning knob.
-- [ ] Bound the policy's output to that box. Note the tuner currently drives
-      `q_v` to 30+, deep inside the dead zone above 2.
+**`experiments/overtake_or_follow.py` now says the region is not a box.** A 3×5
+grid over (`q_v`, `q_c`) against an opponent 3 m ahead at 1.0 m/s, 15 runs:
+
+* **behaviour is the ratio.** Every cell with `q_v/q_c ≤ 1` follows; every cell
+  with `q_v/q_c > 1` passes. 15 of 15, over two decades in each weight. The
+  follow is a settled behaviour, not indecision — 0.73 m back, 7 mm of lateral
+  wander, held for the whole run.
+* **safety is `q_v` alone,** and it is a *different* axis. The ratio does not
+  predict survival: ratio 5.0 completes the lap, ratio 3.33 leaves the track.
+  Sorted by `q_v`: every pass at `q_v = 10` goes off, one of two at `q_v = 2`,
+  none at `q_v = 0.5`.
+* **the keep-out never failed** — zero collisions, minimum clearance +0.123 m.
+  All five failures are `off_track`: running wide *while* passing.
+
+- [ ] Bound the policy's output. **Not a box in θ, and not a bound on the
+      ratio** — a ceiling on `q_v` with the ratio left free. Establish the
+      ceiling properly; the grid only brackets it between 2 and 10.
+- [ ] Re-run the grid over opponent geometries (gap, closing speed, offset). One
+      geometry, deterministic runs — each cell is exact, but the *geometry* is
+      n=1.
+- [ ] **The `q_v` dead zone is not benign.** On an empty track everything above
+      ≈2 was the same behaviour. With an opponent, above ≈2 the extra progress
+      weight stops buying speed and starts costing track — at `q_v = 10` every
+      attempted pass ends off-track, at every `q_c` tried. The tuner drives
+      `q_v` to 30+, i.e. straight into that region, and item 1's per-segment
+      run leaves *every* segment there (19.7–71.2).
 
 ### 2c. Physics-informed features, not raw positions
 
@@ -97,24 +287,120 @@ updates (where deferring actively hurt):
   cannot tell "catching them" from "being caught", so there is finally
   something a recurrent or spiking net can represent that a threshold cannot.
 
+**An LTC head was considered and the evidence is against it** — written up in
+`docs/source/behaviour_policy.md`. `rtrrl-playground`'s `overtake` task is this
+problem in a different action space, and it has already been run: `ltc` came
+**6th of 7**, made the **fewest passes of any cell** (1.29) and scored below the
+memoryless MLP (267.5 vs 374.2). Nothing on that page is separated (sd 137–296),
+so LTC is not *shown* worse — but it is not shown better, which for a component
+one is adding is the same answer. `liquid_gru`'s own docstring: *"this cell does
+not win."*
+
 - [ ] Event-triggered behaviour selection: re-decide θ on events, hold between.
 - [ ] Compare against (i) a fixed schedule, (ii) a per-tick MLP. **Only claim
-      the network if it beats both** — otherwise it is decoration.
+      the network if it beats both** — otherwise it is decoration. Prediction
+      now attached: **the fixed schedule should be strong**, because the
+      overtake grid's behaviour boundary is `q_v/q_c ≷ 1`, i.e. *linear* in θ.
+      The network can only win on the temporal axis.
+- [ ] **Decide explicitly whether the policy sees the opponent's velocity.**
+      Today the MPCC gets the true state and opponents are exact `(x,y,r)`. Hand
+      the policy the velocity too and there is no hidden state, no temporal
+      pattern, and no role for recurrence at all — the gate above would
+      correctly kill any net. The temporal argument *requires* withholding it,
+      which is a design choice to defend, not to inherit by accident.
+- [ ] If built: recurrence confined to the **closing rate** (a derivative of a
+      range, genuinely unavailable from one frame), feeding the measured linear
+      map, output clamped by 2b's `q_v` ceiling. Not a network choosing the
+      behaviour. Copy `ltc.py` in (117 self-contained NumPy lines with analytic
+      derivatives), do not import.
+- [ ] Watch for the failure the caution predicts: LTC is the cautious end of
+      that table, and here *following* is a stable low-progress attractor
+      (12.0 m against a pass's 36.8 m). A head that never passes still scores
+      respectably, because progress alone pays.
+
+### 2e. The four behaviour personas — two axes, and one of them collapses
+
+Wanted: *overtaking*, *following*, *safe driver*, *aggressive driver*. The
+overtake grid already gives the axes, and they are orthogonal:
+
+* **`q_v/q_c`** selects overtake vs follow (15/15 cells, boundary at 1);
+* **`q_v` magnitude** selects aggressive vs safe, and decides survival.
+
+So the 2x2 is the right shape, but **one cell is not reachable**: while
+following, aggression is invisible — 12.0, 12.0, 12.1 m covered at `q_v` = 0.5,
+2 and 10, because the car is pace-limited by the opponent ahead and the
+aggression weight has nothing to act on. There are **three** behaviours, not
+four:
+
+| | follow | overtake |
+|---|---|---|
+| safe (`q_v` 0.5) | 12.0 m | 22.3 m, pass at step 99 |
+| aggressive (`q_v` 2.0) | 12.0 m *(same)* | 36.6 m, pass at step 33 |
+| (`q_v` 10) | 12.1 m *(same)* | **all crash** |
+
+- [ ] Re-measure over several opponent geometries (gap, closing speed, offset).
+      The runs are deterministic, so each cell is exact — but the *geometry* is
+      n=1, and the personas should not be defined off one.
+- [ ] Fix the three reachable personas as named weight sets once the `q_v`
+      ceiling from 2b is known, and check each does what its name says.
+- [ ] Cross them with the sectors from 1b: a persona is a *global* choice, a
+      sector schedule is a *local* one, and the natural policy is the product.
+      Whether the product needs more than one θ per (persona, sector) pair is an
+      open question and probably the answer is no.
 
 ## 3. acados backend for real time
 
 `mpcc_tuning/rti.py` already meets 20 Hz with CasADi's `qrqp` (1.9 ms mean,
 3.4 ms worst at N=12). acados would be faster and is what the car will run.
 
+**Feasible: acados is built and usable** at `~/acados` — `libacados.so`,
+`blasfeo`, `hpipm`, `qpOASES_e`, and `bin/t_renderer` for codegen.
+`acados_template` imports. Nothing needs building first.
+
+**But it is not a copy-paste, and two problems are structural.** Both were found
+by reading `MPCC_planner_acados/scripts/generate_acados_solver.py` properly and
+both change the formulation rather than the plumbing:
+
+* **The path.** This repo's OCP contains the centreline as a CasADi B-spline of
+  the progress variable `s`, evaluated *inside* the NLP — that is what lets the
+  solver choose its own reference point, which is the whole of MPCC. The
+  template instead passes `ref_x`, `ref_y`, `t_angle` as **stage parameters**,
+  sampled outside the solver. That breaks `s`'s differentiable coupling to the
+  path within a solve, and that coupling is the mechanism the envelope gradient
+  runs through. Porting naively would silently change what `dJ*/dtheta` means.
+* **The progress reward is not a least-squares residual.** `-q_v v_s dt` is
+  *linear*. The template encodes it as `-sqrt(w_progress) * p_prog` inside a
+  `NONLINEAR_LS` cost, and with `yref = 0` and `W = I` that squares to
+  `+w_progress * p_prog**2` — a quadratic **penalty** on progress, not a linear
+  reward. (It only behaves as intended if `yref` is set to a large negative
+  value at runtime, which the generator does not do.) The template's own comment
+  claims otherwise. **Do not copy this one; fix it.**
+
 - [ ] Vendor an acados OCP builder into `mpcc_tuning/acados_ocp.py`. Template:
       `MPCC_planner_acados/scripts/generate_acados_solver.py` — **copy and
       adapt, do not import**. Keep weights as **runtime stage parameters**
       (it already does) so the envelope gradient still applies.
+- [ ] Use `cost_type = "EXTERNAL"` rather than `NONLINEAR_LS`, so the exact
+      objective — linear progress term included — survives, and with it the
+      exact envelope gradient. Consequence to plan for: `EXTERNAL` rules out
+      `GAUSS_NEWTON`, so it needs an exact or custom Hessian, and the template's
+      solver options assume Gauss-Newton.
+- [ ] Decide what to do about the spline: either code-generate the interpolant
+      into the acados model, or accept the stage-parameter reference and
+      **measure** how much `dJ*/dtheta` moves. The second is cheaper and is a
+      result either way.
+- [ ] Port the obstacle keep-out *back*: `mpcc_tuning/mpcc.py` now has it as
+      explicit slacks, which in acados is `idxsh`/`Zl`/`zl` and is where the
+      formulation came from. That direction is a straight swap.
 - [ ] Note the two-place `ctrl_mode` gotcha: the config override lands in the
       packed vehicle array and the `ModelSpec` copy is what the kernels
       dispatch on; `validate_against` checks they agree.
 - [ ] Confirm the direction-agreement result (cosine 1.0000) holds for a real
       acados `SQP_RTI` step — the current measurement used a hand-rolled SQP.
+      **This is the open caveat on paper 1's headline claim**, and it is the
+      first question a reviewer asks. Paper 1 is careful to say the scheme is
+      "as in acados's SQP_RTI" rather than that acados was used, which is
+      honest, but the check is still owed.
 - [ ] Nonsmooth penalties must become soft constraints: `max(0, |v_y| - v_soft)²`
       is not an NLS residual. Template for the slack form:
       `MPCC_planner_acados` (`idxsh`, `Zl`, `zl`).
@@ -141,8 +427,15 @@ Most of the damage happens in episode 0: `q_v` moves ×222 before a single
 episode boundary. α = 2e-4 and 2e-3 give the same shape ten times apart, which
 is a divergence signature rather than a tuning artefact.
 
-- [ ] A trust region on θ, and compare against item 1 (which may already fix it)
-      and against discarding updates (38.5 m, partial).
+- [ ] A trust region on θ, and compare against item 1 and against discarding
+      updates (38.5 m, partial). **Item 1 appears to fix this failure already:**
+      over six seeds the global run goes off-track first at episode 3–5 on 6/6
+      seeds and the per-segment run never does, on 6/6. The drift-during-good-
+      driving that a trust region targets does not occur under per-segment
+      weights on any seed. Two caveats before calling it redundant — per-segment
+      θ *isolates* damage rather than *bounding* it, so it does nothing where
+      there is only one segment; and the mixed-track and `scuderia` failures are
+      initialisation failures, which neither mechanism addresses.
 - [ ] Trigger on the **safety filter's intervention** rather than lateral
       error: behind the filter `q_c` falls to 0.136 with performance drifting
       down, because the filter absorbs the consequence and it never reaches the
@@ -156,6 +449,63 @@ guarantee is conditional on that.
 - [ ] Run the filters on odometry rather than ground truth.
 - [ ] Add the estimator covariance to the margin, or state the guarantee as
       conditional.
+
+## 6b. ROS export, for the real RC car
+
+The point of all of this is a car. Nothing here has ever run outside Python, and
+the export is not a packaging job -- three of the assumptions the results rest
+on are false on hardware, and each is a separate piece of work.
+
+**Templates to copy from, per the standing rule --- copy in, do not depend:**
+`MPCC_controller_cpp` (6 `package.xml`, the closest thing to a working
+controller node), `race_stack` (30 packages; the full stack layout),
+`ekf_state_estimator_node` (state estimation node + config),
+`datmo` (detection and tracking of moving objects -- this is what feeds the
+keep-out), `f1tenth_gym_ros` (the sim-side bridge and its Docker setup).
+
+### What actually has to be exported
+
+- [ ] **The solver, as generated C.** This is item 3, not a separate task:
+      acados' code export *is* the ROS artefact, and `mpcc_tuning/rti.py`'s
+      CasADi `qrqp` path is not something to ship. Do item 3 first.
+- [ ] **theta as a runtime parameter, not a rebuild.** Already true in
+      `mpcc_tuning/mpcc.py` and in the acados template; keep it true, because
+      the whole point is that the weights change while the car drives.
+- [ ] **Decide where the tuner runs.** On-car in the control loop, or off-car
+      updating theta between laps. The envelope gradient is cheap enough for
+      on-car, but the *exploration* solve is a second NLP on the ticks where it
+      fires (see `docs/source/results.md`), and that has to fit the budget in
+      the worst case, not the mean.
+- [ ] **Topics and message types**, once the above is settled: odometry in,
+      `AckermannDriveStamped` out, keep-outs in from `datmo`, theta in/out plus
+      the TD error and intervention rate as diagnostics -- the tuner is
+      unobservable without them and this repo's whole history says the
+      diagnostics are what catch the bugs.
+
+### The three assumptions that break on hardware
+
+1. **Every filter reads the true state** -- item 6, immediately below. On the
+   car it reads an estimate, and every guarantee is conditional on that. This
+   is the one most likely to produce a crash rather than a disappointment.
+2. **The track is an analytic centreline.** `Track` is a periodic B-spline
+   fitted to samples; the real car has a map. `scuderia_gym_jax`'s occupancy
+   maps have the same problem and it is why they are still not connected
+   (see `docs/source/plant.md`). A centreline extractor is a prerequisite,
+   and `race_stack` has one.
+3. **Opponents are exact circles at known positions.** `MPCC.set_obstacles`
+   takes ground truth. From `datmo` it gets a tracked estimate with latency and
+   dropouts, and the keep-out's `obs_margin` is currently 0.15 m of pure model
+   error with no allowance for perception error at all.
+
+- [ ] **Timing on the target, measured the way `benchmarks/solve_time.py`
+      measures it: worst case, not mean.** 1.9 ms mean / 3.4 ms worst is on a
+      workstation. The car's compute is not this machine, and the existing
+      result explicitly makes the point that a controller whose mean fits and
+      whose tail does not is a controller that misses deadlines.
+- [ ] **The safety filter has to be in the loop before the tuner is**, and it
+      inherits its guarantee from its model -- a kinematic bicycle that does not
+      know about slip angles. On the real car that is the same wrongness
+      `docs/source/plant.md` documents against the fitted-tyre plant.
 
 ## Known odd, undiagnosed
 
