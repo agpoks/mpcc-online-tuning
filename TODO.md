@@ -43,6 +43,34 @@ bolted on.
 - [ ] The learned weights are not intuitive (progress weighted *higher* in the
       tightest segment). Do not build a story on one seed.
 
+## 1c. Weights as a *behaviour* policy — the direction, and its precondition
+
+θ is not only a tuning vector, it is a behaviour parameterisation: `q_v` sets
+aggression, `q_c` sets how strictly the racing line is followed. A policy
+mapping *situation* → θ subsumes per-segment scheduling, with curvature as one
+feature among opponent gap, closing rate and distance to the boundaries.
+
+**Measured first** (`experiments/weights_as_behaviour.py`): `q_v` is a genuine
+dial — mean speed 0.40 → 3.92 m/s, monotone, saturating above ≈2. `q_c` is
+**not**: ×10 barely changes the line, ×100 drives off the track.
+
+So the safety argument for learning weights rather than steering — "the MPCC
+still enforces the constraints, so any θ is feasible" — is **false as stated**.
+The output must be bounded to a measured region where weights are behaviour
+knobs rather than conditioning knobs.
+
+- [ ] **Precondition: the MPCC has no obstacle constraint at all.** Overtaking
+      cannot be expressed today. Add it before anything about opponents.
+- [ ] Establish the safe weight box by sweeping each weight to failure.
+- [ ] Physics-informed features, not raw positions: time-to-collision, gap
+      against braking distance, lateral acceleration required for the gap,
+      curvature preview.
+- [ ] Only then a network. And note this is where event-triggering finally has
+      a real argument: a behaviour decision is made *once*, not 20×/s, and
+      re-deciding every tick invites chattering between "overtake" and
+      "follow". There is also, at last, a temporal pattern worth detecting —
+      a closing gap — which a threshold cannot represent.
+
 ## 2. Trust region on θ — partly answered by event-triggering
 
 `experiments/event_triggered_tuning.py` tests an alternative: instead of
