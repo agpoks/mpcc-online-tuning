@@ -133,6 +133,12 @@ centreline at 1.0 m/s against an ego car capable of about 3.9, 200 steps. Only
 exploration noise — so each cell is exact, and the caveat is the *geometry*
 (one opponent, one speed, one starting gap), not the sampling.
 
+```{image} _static/plots/overtake_grid.png
+:alt: outcome over the q_v by q_c sweep, with the ratio boundary drawn
+:width: 85%
+:align: center
+```
+
 | `q_v` | `q_c` | `q_v/q_c` | covered | closest approach − r | max\|lat\| | outcome |
 |---|---|---|---|---|---|---|
 | 0.5 | 10.0 | 0.05 | 12.0 m | 0.732 | 0.007 | followed |

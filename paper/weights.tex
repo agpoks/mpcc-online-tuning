@@ -118,6 +118,19 @@ change $\Delta\psi = \int \kappa\,\mathrm{d}s$ into straight, long curve
 \SI{180}{\degree}. The label belongs to the corner, not to the point, so it
 cannot change part-way through a manoeuvre.
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/tracks.png}
+  \caption{The three tracks, coloured by named sector, drawn to a common scale.
+  The oval has straights and two \SI{180}{\degree} corners; \texttt{mixed} adds
+  \SI{90}{\degree} corners but no long curve; only \texttt{circuit} has all
+  four. The circuit's \SI{90}{\degree} and \SI{180}{\degree} corners are built
+  at the \emph{same radius} --- both labelled \SI{2.6}{\meter} --- which is
+  exactly why curvature at a point cannot separate them.
+  Reproduced by \texttt{scripts/make\_figures.py}.}
+  \label{fig:tracks}
+\end{figure*}
+
 We report the curvature-binned and sector-labelled schedules separately and do
 not conflate them: \textbf{the six-seed result of Section~\ref{sec:seeds} is a
 three-bin curvature schedule}, and calling it a sector schedule would overclaim.
@@ -223,6 +236,20 @@ confounded by an initialisation failure.
 against 78.0--78.3), which is the evidence that the mechanism is isolation and
 not expressive power.}
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/reversal.png}
+  \caption{The result reverses between tracks. \textbf{Left:} on the oval a
+  single $\theta$ collapses on every seed while three curvature bins do not.
+  \textbf{Right:} on the circuit nothing collapses, and the single $\theta$ is
+  the \emph{best} of the three --- the inset resolves an ordering that spans
+  less than \SI{1}{\meter} and would otherwise be invisible at the shared axis
+  the comparison requires. Mean of six seeds; band is the seed range.
+  Reproduced by \texttt{experiments/per\_segment\_seeds.py} and
+  \texttt{experiments/per\_sector\_weights.py}.}
+  \label{fig:reversal}
+\end{figure*}
+
 \subsection{And when it is not}\label{sec:circuit}
 The same comparison on a \SI{47.2}{\meter} circuit --- straights, a chicane of
 two \SI{90}{\degree} corners, two \SI{180}{\degree} hairpins, a pair of
@@ -266,6 +293,20 @@ run.
 
 \section{Behaviour is a ratio; safety is a magnitude}\label{sec:axes}
 \todo{the 3x5 grid table; the two axes; zero collisions and minimum clearance.}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/overtake_grid.png}
+  \caption{Outcome over the weight sweep, against an opponent \SI{3}{\meter}
+  ahead at \SI{1}{\meter\per\second}. Every cell below the line follows and
+  every cell above it passes, so the behaviour boundary is the ratio
+  $q_v/q_c$. Whether the pass \emph{survives} is set by $q_v$ alone: the whole
+  $q_v = 10$ column leaves the track. The outcome is categorical, so the cells
+  are a labelled state grid and not a heat map --- a sequential ramp would
+  imply an ordering between ``followed'' and ``crashed'' that does not exist.
+  Reproduced by \texttt{experiments/overtake\_or\_follow.py}.}
+  \label{fig:overtake}
+\end{figure}
 
 \section{Do named sectors pay for themselves?}
 No. Table~\ref{tab:circuit}: four labels cost twice the parameters of three and

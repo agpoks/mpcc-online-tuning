@@ -152,6 +152,16 @@ invisible while `q_v` was being read.
 
 ## The same comparison on a different track reverses it
 
+```{image} _static/plots/tracks.png
+:alt: the three tracks, coloured by named sector
+:width: 100%
+```
+
+The oval has straights and two 180-degree corners; `mixed` adds 90s but no long
+curve; only `circuit` has all four. Note the circuit's 90-degree and 180-degree
+corners are labelled with the **same radius**, which is the whole reason
+pointwise curvature cannot tell them apart.
+
 `experiments/per_sector_weights.py`, `Track.circuit()` — a 47.2 m lap with
 straights, a chicane of two 90-degree corners, two 180-degree hairpins and a
 pair of sweepers, minimum radius 2.59 m. Six seeds, 26 episodes, everything else
@@ -164,6 +174,11 @@ identical to the oval runs above.
 | named sectors | 4 | 78.92 m | 0.07 | 0 / 6 |
 
 Two results, and the second is not the one the experiment was built to get.
+
+```{image} _static/plots/reversal.png
+:alt: learning curves on the oval and the circuit, showing the reversal
+:width: 100%
+```
 
 ### The collapse is a property of the track, not of the parameterisation
 
