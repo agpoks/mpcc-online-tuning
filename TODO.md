@@ -504,6 +504,54 @@ makes standing still a local optimum worth ≈0 against a crash worth −5.
       `MPCC_controller_ipopt` as a *controller* model, so the controller is not
       permanently a kinematic bicycle. Copy it in.
 
+## 4b. Multiple cars on the fitted-tyre plant — yes, and one blocker has cleared
+
+`scuderia_gym_jax` has the multi-agent side already: `envs/multi_agent_env.py`
+(`num_agents` cars sharing one `State`, one `step` integrating all of them),
+`envs/collision_models.py` (SAT on the cars' actual **rectangles**, with a
+GJK parity test), and `examples/overtake.py` (ego plus traffic, `--cars`,
+`--spacing`, and dumb traffic by the same deliberate choice made here). It is
+the one permitted optional dependency under the standing rule, because it is a
+*plant*. Our bridge currently builds it with `num_agents=1` and
+`collision_on=False`.
+
+**`docs/source/plant.md` listed two blockers and one is now gone.** It said
+overtaking there "would need the obstacle constraint the MPCC does not
+currently have" — item 2a built it. The centreline blocker is also partly
+cleared by `tools/centerline_from_map.py` (item 5b).
+
+### What it would add that the current setup cannot
+
+- [ ] **Collision geometry that is not a circle.** Our keep-out is
+      `dist2 - r_eff**2 >= 0`, and a car is a rectangle. The two disagree most
+      exactly when passing — side by side, where a circular keep-out is
+      conservative along the flanks and optimistic at the corners. Every
+      "closest approach +0.056 m" number here is measured against a circle, and
+      that margin is the one a rectangle would eat.
+- [ ] **Opponents with real dynamics.** `mpcc_tuning/opponents.py` drives the
+      centreline at a constant speed and cannot be pushed off line, cannot
+      brake, cannot lose grip. On the multi-agent plant the opponents are the
+      same ST/STD vehicle model as the ego, so a pass changes *their* state too.
+- [ ] **A contact that means something.** There, a car that is hit freezes, so
+      a failed pass is unmistakable rather than a silent interpenetration.
+
+### The blocker that has not cleared, and it is decisive
+
+- [ ] **Item 4 first.** The tuner does not survive that plant at all with a
+      single car: 120 episodes, 100% off-track, best −2.20 m, and the default
+      weights leave the track in 12–22 steps. Adding opponents to a plant where
+      the controller cannot complete a lap would measure nothing —
+      "overtaking fails" would be indistinguishable from "driving fails". It is
+      a reward-design problem (progress minus a terminal −5 makes standing
+      still a local optimum) and it is the prerequisite.
+
+So: **worth doing, and not yet.** The order is item 4, then this, and doing
+them in the other order produces a number that cannot be interpreted.
+
+- [ ] When it happens, the honest comparison is our circular keep-out against
+      the SAT rectangle on the *same* manoeuvre, because that difference is a
+      result in itself and is cheap to measure once both exist.
+
 ## 5. Bound where θ goes
 
 Most of the damage happens in episode 0: `q_v` moves ×222 before a single
