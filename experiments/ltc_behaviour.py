@@ -53,7 +53,7 @@ from mpcc_tuning.ltc import (LTCCell, MLPCell, N_FEATURES, THETA_HI,  # noqa: E4
                              fixed_schedule)
 from mpcc_tuning.model import KinematicBicycle  # noqa: E402
 from mpcc_tuning.mpcc import MPCC, MPCCWeights  # noqa: E402
-from mpcc_tuning.opponents import Opponent  # noqa: E402
+from mpcc_tuning.opponents import ObstacleTracker, Opponent  # noqa: E402
 from mpcc_tuning.track import Track  # noqa: E402
 
 ARMS = ("global", "fixed", "mlp", "ltc")
@@ -68,7 +68,14 @@ def run(arm, seed=0, n_ep=20, steps=300, n_hidden=12):
     from examples.tune_online import Plant
 
     track = Track.oval()
-    theta0 = MPCCWeights(q_c=1.0, q_v=2.0).to_log()
+    theta0 = MPCCWeights(q_c=1.0, q_v=2.0, q_l=200.0, r_d=1.0).to_log()
+    # Only q_c and q_v move. An earlier attempt at this used
+    # MPCCWeights(q_c=1.0, q_v=2.0), which silently also reset q_l 200 -> 10
+    # and r_d 1.0 -> 0.1, and fixed_schedule inherits everything it does not
+    # override: ten times less steering-rate penalty put BOTH baselines into
+    # the wall (fixed went 36.3 m -> 3.5 m at 100% crashes), which made the
+    # LTC look 21.6 m better when nothing about it had improved.
+    #
     # A *working* controller, not the spike's deliberately-bad one. The policy's
     # job is to ADAPT a controller that already drives -- to the sector ahead,
     # to how aggressive we want to be, to whether there is someone to pass --
@@ -103,15 +110,20 @@ def run(arm, seed=0, n_ep=20, steps=300, n_hidden=12):
 
     rows = []
     for ep in range(n_ep):
-        opp = Opponent(track, s0=3.0, speed=1.0 + 0.2 * ((seed + ep) % 3),
-                       radius=0.24)
+        # Cycle the opponent class so the policy meets all four, and has to
+        # tell them apart from observation rather than from the episode index.
+        kind = (seed + ep) % 4
+        v_opp = (0.0, 1.0, 2.6, 3.4)[kind]      # static / slower / equal / faster
+        opp = Opponent(track, s0=3.0, speed=v_opp, radius=0.24)
+        tracker = ObstacleTracker(dt=0.05)
         P = Plant(track, dt=0.05, max_steps=steps, opponents=[opp])
         s5 = P.reset()
         m.reset()
         m.set_obstacles(P.keepouts())
         if pol is not None:
             tuner.reset()
-        feat = features(track, s5, [opp])
+        tracker.update(opp.pose()[:2])
+        feat = features(track, s5, [opp], opp_speed_est=tracker.speed)
 
         if arm in ("mlp", "ltc"):
             theta, u = tuner.act(feat, s5)
@@ -128,7 +140,8 @@ def run(arm, seed=0, n_ep=20, steps=300, n_hidden=12):
             s5n, r, off, tr = P.step(u)
             cov += r
             m.set_obstacles(P.keepouts())
-            fn = features(track, s5n, [opp])
+            tracker.update(opp.pose()[:2])
+            fn = features(track, s5n, [opp], opp_speed_est=tracker.speed)
             g = signed_gap(track, track.project(s5n[0], s5n[1]), opp.s)
             if g < 0 and abs(g) < track.length / 4 and not seen:
                 passes, seen = passes + 1, True

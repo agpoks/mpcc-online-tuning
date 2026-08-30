@@ -253,8 +253,33 @@ class WeightPolicy:
         return dG, dcell
 
 
+#: Opponent classes, by *relative* speed. The distinction is behavioural, not
+#: cosmetic: against a static object you must go around or park; against a slow
+#: car a pass is worth taking; against an equal car it is expensive and rarely
+#: available; against a faster car you are being caught, not catching, and
+#: attempting a pass is simply wrong.
+#:
+#: **This is the distinction that needs the recurrence.** Catching and being
+#: caught are the same instantaneous gap with opposite signs of closing rate,
+#: and they call for opposite behaviour -- so no function of one frame can tell
+#: them apart, however many features it is given.
+OPPONENT_CLASSES = ("static", "slower", "equal", "faster")
+
+
+def classify_opponent(v_ego: float, v_opp: float, eps: float = 0.25,
+                      band: float = 0.15) -> int:
+    """0 static, 1 slower, 2 equal, 3 faster -- from an *estimated* speed."""
+    if v_opp < eps:
+        return 0
+    r = v_opp / max(v_ego, 1e-3)
+    if r < 1.0 - band:
+        return 1
+    return 2 if r <= 1.0 + band else 3
+
+
 def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
-             a_lat_max: float = 6.0, preview=(0.5, 1.5, 3.0)):
+             a_lat_max: float = 6.0, preview=(0.5, 1.5, 3.0),
+             opp_speed_est=None):
     """Physics-informed features, in units that mean something.
 
     A policy keyed on coordinates will not transfer between tracks or speeds, so
@@ -262,8 +287,25 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
     by construction. TODO item 2c.
 
     Ordered: curvature preview (3), speed fraction, lateral margin fraction,
-    then the opponent block -- gap in braking distances, time-to-collision, and
-    whether the pass is physically available.
+    gap in braking distances, time-to-collision, pass availability, absolute
+    gap, **sector one-hot (4)**, **track width in car widths**, and
+    **opponent-class one-hot (4)**.
+
+    The last three are what let the policy condition on the things a driver
+    actually conditions on. The sector is the *named* one -- straight, long
+    curve, 90-degree, hairpin -- classified by the corner's total heading
+    change, because curvature at a point cannot separate a 90 from a 180
+    (Section "What the labels can and cannot be"). The width matters because
+    whether a pass fits is a question about the corridor, not only about the
+    two cars. And the opponent class is graded by *relative* speed, because
+    "someone is 2 m ahead" means opposite things depending on whether they are
+    parked or pulling away.
+
+    ``opp_speed_est`` is the tracker's estimate, not the opponent's true speed.
+    Passing the truth here would remove the hidden state the recurrence exists
+    for, so it is threaded in from
+    :class:`~mpcc_tuning.opponents.ObstacleTracker` and is late and noisy on
+    purpose.
     """
     x, y, psi, v, s = (float(q) for q in s5)
     f = [np.tanh(3.0 * track.curvature(track.wrap(s + d))) for d in preview]
@@ -302,6 +344,24 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
             a_need = 2.0 * 0.30 / max(t_gap ** 2, 1e-6)
             avail = float(np.clip(1.0 - a_need / a_lat_max, -1.0, 1.0))
     f += [gap_brake, ttc, avail, gap_m]
+
+    # Named sector ahead, one-hot. Read from the path at the preview distance,
+    # so it is observed rather than inferred.
+    sec = np.zeros(4)
+    sec[track.sector(float(track.wrap(s + preview[1])))] = 1.0
+    f += list(sec)
+
+    # Corridor width in car widths: "can two cars fit" is a property of the
+    # track, and it is the quantity that decides whether a pass exists at all.
+    f.append(float(np.clip(track.half_width / 0.12, 0.0, 12.0) / 12.0))
+
+    # Opponent class, one-hot, from the *estimate*.
+    cls = np.zeros(4)
+    if len(opponents):
+        ve = v if v > 1e-3 else 1e-3
+        vo = float(opp_speed_est) if opp_speed_est is not None else 0.0
+        cls[classify_opponent(ve, vo)] = 1.0
+    f += list(cls)
     return np.array(f, float)
 
 
@@ -309,7 +369,7 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
 #: a braking distance: see the note in :func:`features`.
 ENGAGE_SCALE = 0.5
 
-N_FEATURES = 9
+N_FEATURES = 18      # 9 + sector(4) + width(1) + opponent class(4)
 THETA_LO = np.log(np.array([0.05, 0.05, 0.02, 1e-3, 1e-3, 1e-3]))
 #: Ceiling on q_v at 2.0 -- measured: it saturates above ~2 on an empty track
 #: and every attempted pass above it leaves the track with an opponent present.

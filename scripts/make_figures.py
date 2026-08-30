@@ -588,11 +588,18 @@ def fig_adaptation():
                                  PolicyTuner, WeightPolicy, features)
     from mpcc_tuning.model import KinematicBicycle
     from mpcc_tuning.mpcc import MPCC, MPCCWeights
-    from mpcc_tuning.opponents import Opponent
+    from mpcc_tuning.opponents import ObstacleTracker, Opponent
     from examples.tune_online import Plant
 
     track = Track.oval()
-    theta0 = MPCCWeights(q_c=1.0, q_v=2.0).to_log()
+    theta0 = MPCCWeights(q_c=1.0, q_v=2.0, q_l=200.0, r_d=1.0).to_log()
+    # Only q_c and q_v move. An earlier attempt at this used
+    # MPCCWeights(q_c=1.0, q_v=2.0), which silently also reset q_l 200 -> 10
+    # and r_d 1.0 -> 0.1, and fixed_schedule inherits everything it does not
+    # override: ten times less steering-rate penalty put BOTH baselines into
+    # the wall (fixed went 36.3 m -> 3.5 m at 100% crashes), which made the
+    # LTC look 21.6 m better when nothing about it had improved.
+    #
     # A *working* controller, not the spike's deliberately-bad one. The policy's
     # job is to ADAPT a controller that already drives -- to the sector ahead,
     # to how aggressive we want to be, to whether there is someone to pass --
@@ -615,9 +622,11 @@ def fig_adaptation():
     ep_ratio, ep_cov, last = [], [], None
     for ep in range(12):
         opp = Opponent(track, s0=3.0, speed=1.2, radius=0.24)
+        tracker = ObstacleTracker(dt=0.05)
         P = Plant(track, dt=0.05, max_steps=300, opponents=[opp])
         s5 = P.reset(); m.reset(); m.set_obstacles(P.keepouts()); tuner.reset()
-        feat = features(track, s5, [opp])
+        tracker.update(opp.pose()[:2])
+        feat = features(track, s5, [opp], opp_speed_est=tracker.speed)
         theta, u = tuner.act(feat, s5)
         rec, cov = [], 0.0
         for _ in range(300):
@@ -626,7 +635,10 @@ def fig_adaptation():
             rec.append((s5n[0], s5n[1], float(np.exp(theta[2]) / np.exp(theta[0])),
                         float(np.exp(theta[2])), float(np.exp(theta[0])),
                         opp.pose()[0], opp.pose()[1]))
-            out = tuner.learn(r, s5n, features(track, s5n, [opp]), off)
+            tracker.update(opp.pose()[:2])
+            out = tuner.learn(r, s5n,
+                              features(track, s5n, [opp],
+                                       opp_speed_est=tracker.speed), off)
             if out[0] is None:
                 break
             theta, u = out
