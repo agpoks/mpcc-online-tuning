@@ -68,7 +68,20 @@ def run(arm, seed=0, n_ep=20, steps=300, n_hidden=12):
     from examples.tune_online import Plant
 
     track = Track.oval()
-    theta0 = MPCCWeights(q_c=10.0, q_l=200.0, q_v=0.5, r_d=1.0).to_log()
+    theta0 = MPCCWeights(q_c=1.0, q_v=2.0).to_log()
+    # A *working* controller, not the spike's deliberately-bad one. The policy's
+    # job is to ADAPT a controller that already drives -- to the sector ahead,
+    # to how aggressive we want to be, to whether there is someone to pass --
+    # not to recover one that crawls.
+    #
+    # (q_v, q_c) = (2.0, 1.0) is the measured clean-pass cell from
+    # experiments/overtake_or_follow.py: 36.6 m, one pass, no crash. Starting
+    # instead at q_l=200, q_v=0.5 puts the ratio at 0.050, twenty times BELOW
+    # the behaviour boundary, so the policy had to drag it across just to
+    # overtake at all -- which is why the gradient pushed one way and never
+    # stopped. It also makes the prior principled: pulling back towards a
+    # controller known to work is a trust region around a reference policy,
+    # where pulling back towards a crawling one is just a brake.
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
 
