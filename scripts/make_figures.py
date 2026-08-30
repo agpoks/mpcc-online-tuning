@@ -773,7 +773,130 @@ def fig_filmstrip():
     print("  wrote filmstrip.png")
 
 
-FIGS = {"filmstrip": fig_filmstrip, "adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
+def fig_architecture():
+    """The method in one picture: what is learned, and where the gradient comes from.
+
+    Three things this has to make visible, because they are what the prose keeps
+    having to restate. The MPCC is inside the loop, so every theta the policy
+    emits is still solved subject to the same constraints. The gradient the
+    learner needs comes out of the solve for free by the envelope theorem, not
+    from differentiating through the solver. And the policy is recurrent, so its
+    own influence has to be carried forward -- which is the only part that is an
+    approximation.
+    """
+    from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+
+    fig, ax = plt.subplots(figsize=(10.4, 4.3))
+    ax.set_xlim(0, 10.4); ax.set_ylim(0, 4.3); ax.axis("off")
+
+    def box(x, y, w, h, title, sub, fc, ec):
+        ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.08",
+                                    fc=fc, ec=ec, lw=1.6, zorder=2))
+        ax.text(x + w / 2, y + h - 0.26, title, ha="center", va="top",
+                fontsize=9.5, color=INK, weight="bold", zorder=3)
+        ax.text(x + w / 2, y + h - 0.60, sub, ha="center", va="top",
+                fontsize=7.6, color="0.25", zorder=3, linespacing=1.35)
+
+    def arrow(x1, y1, x2, y2, label, col=INK, dashed=False, dy=0.16):
+        ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle="-|>",
+                                     mutation_scale=13, lw=1.5, color=col,
+                                     linestyle="--" if dashed else "-",
+                                     zorder=4,
+                                     connectionstyle="arc3,rad=0.0"))
+        ax.text((x1 + x2) / 2, (y1 + y2) / 2 + dy, label, ha="center",
+                fontsize=7.8, color=col, zorder=5)
+
+    box(0.15, 2.35, 2.25, 1.45, "situation", 
+        "curvature preview\nsector · corridor width\ngap · TTC · opponent class",
+        "#eef3fb", BLUE)
+    box(2.95, 2.35, 2.2, 1.45, "policy  $\\phi$",
+        "LTC cell, recurrent\n$\\theta = \\theta_0 + \\mathrm{span}\\cdot\\tanh(Gh)$\nbounded to a measured box",
+        "#f7eef7", "#7d3c98")
+    box(5.7, 2.35, 2.2, 1.45, "MPCC",
+        "one NLP, $\\theta$ as a\nruntime parameter\nconstraints unchanged",
+        "#eef7ef", GREEN)
+    box(8.4, 2.35, 1.85, 1.45, "plant",
+        "kinematic bicycle\n+ grip limit the\ncontroller never sees",
+        "#fdf2e9", AMBER)
+
+    arrow(2.40, 3.05, 2.95, 3.05, "features")
+    arrow(5.15, 3.05, 5.70, 3.05, "$\\theta$  (6 log weights)")
+    arrow(7.90, 3.05, 8.40, 3.05, "$u_0$")
+
+    # return path
+    ax.add_patch(FancyArrowPatch((9.3, 2.35), (9.3, 1.5), arrowstyle="-|>",
+                                 mutation_scale=13, lw=1.5, color=INK, zorder=4))
+    ax.plot([9.3, 1.28], [1.5, 1.5], "-", lw=1.5, color=INK, zorder=4)
+    ax.add_patch(FancyArrowPatch((1.28, 1.5), (1.28, 2.35), arrowstyle="-|>",
+                                 mutation_scale=13, lw=1.5, color=INK, zorder=4))
+    ax.text(8.0, 1.62, "reward: metres covered, $-5$ off-track", fontsize=7.8,
+            ha="center", color=INK)
+
+    box(2.6, 0.15, 5.2, 1.05, "TD($\\lambda$), one update per tick",
+        "$\\delta = r + \\gamma V(s') - Q(s,a)$      "
+        "$\\nabla_\\phi Q = \\nabla_\\theta Q \\cdot \\partial\\theta/\\partial\\phi$",
+        "#fdeeee", RED)
+
+    ax.annotate("", xy=(6.4, 1.20), xytext=(6.4, 2.35),
+                arrowprops=dict(arrowstyle="-|>", lw=1.5, color=GREEN, ls="--"))
+    ax.text(6.52, 1.80, "$\\nabla_\\theta Q$ free, by the\nenvelope theorem",
+            fontsize=7.6, color=GREEN, va="center")
+    ax.annotate("", xy=(3.6, 2.35), xytext=(3.6, 1.20),
+                arrowprops=dict(arrowstyle="-|>", lw=1.5, color="#7d3c98", ls="--"))
+    ax.text(3.72, 1.80, "$\\partial\\theta/\\partial\\phi$ carried\nforward (RFLO)",
+            fontsize=7.6, color="#7d3c98", va="center")
+
+    fig.suptitle("The controller stays an MPCC. What is learned is a map from the "
+                 "situation to its six cost weights,\nand the gradient that learns it "
+                 "falls out of a solve that was happening anyway.",
+                 fontsize=9.5, color=INK, y=1.02)
+    fig.savefig(OUT / "architecture.png", dpi=170, bbox_inches="tight")
+    print("  wrote architecture.png")
+
+
+def fig_icra():
+    """The two ICRA competition maps, with the centrelines extracted from them."""
+    import re
+    from PIL import Image
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "cl", str(ROOT / "tools" / "centerline_from_map.py"))
+    cl = importlib.util.module_from_spec(spec); spec.loader.exec_module(cl)
+
+    T = ROOT / "mpcc_tuning" / "tracks"
+    maps = [("ICRA 2025, car10", T / "icra-2025-car10version_edited.pgm",
+             T / "icra-2025-car10version.yaml", None),
+            ("ICRA 2026, Track 1", T / "icra2026_t1.pgm", T / "icra2026_t1.yaml", 0)]
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.6))
+    for ax, (name, pgm, yml, rank) in zip(axes, maps):
+        im, res, org = cl.load(str(pgm), str(yml))
+        H, W = im.shape
+        if rank is None:
+            xy, w, L, ok, gap = cl.centerline(str(pgm), str(yml))
+        else:
+            xy, w, L, ok, gap, _a = cl.centerline_around(str(pgm), str(yml),
+                                                         hole_rank=rank)
+        ax.imshow(im, cmap="gray")
+        ax.plot((xy[:, 0] - org[0]) / res, (org[1] + H * res - xy[:, 1]) / res,
+                "-", color=RED, lw=2.2, zorder=3)
+        ax.plot((xy[0, 0] - org[0]) / res, (org[1] + H * res - xy[0, 1]) / res,
+                "o", ms=9, color=GREEN, mec="white", mew=1.2, zorder=4)
+        ax.set_title(f"{name}\n{L:.1f} m · {100*ok:.0f}% inside the corridor · "
+                     f"closes to {gap:.2f} m", fontsize=9.5, color=INK)
+        ax.axis("off")
+        print(f"    {name}: {L:.1f} m, {100*ok:.0f}% in corridor", flush=True)
+    fig.suptitle("Centrelines extracted from the competition teams' own occupancy "
+                 "grids. Track 1's corridor BRANCHES,\nso it has no unique "
+                 "centreline -- a loop is named by the hole it encircles, and this "
+                 "is the outer one.",
+                 fontsize=9.5, color=INK, y=1.03)
+    fig.tight_layout()
+    fig.savefig(OUT / "icra_tracks.png", dpi=170, bbox_inches="tight")
+    print("  wrote icra_tracks.png")
+
+
+FIGS = {"architecture": fig_architecture, "icra": fig_icra,
+        "filmstrip": fig_filmstrip, "adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "spielberg": fig_spielberg,
         "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}

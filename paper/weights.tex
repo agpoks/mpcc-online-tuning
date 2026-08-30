@@ -183,6 +183,21 @@ same quantity the MPC would already be optimal for it by construction.
 
 \section{Method}\label{sec:method}
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/architecture.png}
+  \caption{The method. The controller stays an MPCC and its constraints are
+  untouched; what is learned is a map from the situation to its six cost
+  weights. Two gradient paths matter and are drawn dashed:
+  $\nabla_\theta Q$ comes out of the solve for free by the envelope theorem, and
+  $\partial\theta/\partial\phi$ must be carried forward because the policy is
+  recurrent --- that carry is the only approximation in the loop, and
+  Section~\ref{sec:adapt} measures it as negligible.}
+  \label{fig:arch}
+\end{figure*}
+
+Fig.~\ref{fig:arch} gives the whole loop; the subsections below give the parts.
+
 \subsection{Situation-dependent weighting}
 Let $\sigma : s \mapsto \{1,\dots,B\}$ label the track ahead. We hold one
 $\theta_b$ per label and one tuner per label, and this second part is not
@@ -644,6 +659,23 @@ is therefore \textbf{not} established here; only that it can express overtaking.
   \label{fig:behaviour}
 \end{figure}
 
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/icra_tracks.png}
+  \caption{Centrelines extracted from the competition teams' own ROS occupancy
+  grids, at 100\% inside the corridor. Track 1's corridor \emph{branches} --- an
+  outer ring plus an inner section --- so it has no unique centreline; a loop is
+  named by the hole it encircles, and this is the outer one. Track 1 is also
+  the only circuit here carrying all four named sector types.
+  \texttt{tools/centerline\_from\_map.py}.}
+  \label{fig:icra}
+\end{figure}
+
+Two of the tracks are taken directly from the ICRA competition maps
+(Fig.~\ref{fig:icra}) rather than designed here, which matters because
+Section~\ref{sec:circuit} is itself a demonstration that a conclusion can
+reverse between two tracks that were.
+
 \subsection{A stopped car is not a slow car}\label{sec:static}
 ``Stay behind'' is a behaviour only against something that is going somewhere.
 Behind a \emph{static} obstacle it is not caution, it is stopping. The posture
@@ -676,6 +708,18 @@ $q_c \le 0.5$: a static obstacle sits \emph{on} the reference line
 permanently, so the contouring weight must yield before the car will leave the
 line at all, and that threshold is lower than the one that suffices to pass a
 moving car.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/filmstrip.png}
+  \caption{The same three runs as stills, since a PDF cannot hold an animation.
+  Rows: following, overtaking, and the \emph{same} following weights against a
+  stopped obstacle. Dashed circle is the keep-out. The bottom row is the
+  livelock --- the car parks and the episode times out.}
+  \label{fig:film}
+\end{figure}
+
+Fig.~\ref{fig:film} shows the three cases as trajectories over time.
 
 \subsection{Three defects, and what found them}
 Each was silent, and each produced a table that looked like a result.

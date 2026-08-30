@@ -231,6 +231,18 @@ value and its gradient carry a negation, $V = -J^\star$. Applying one and not
 the other drives every weight the wrong way while resembling an over-large step
 size; a directional unit test guards it.
 
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/architecture.png}
+  \caption{The loop this paper measures. The gradient the learner needs,
+  $\nabla_\theta Q$, comes out of the solve for free by the envelope theorem ---
+  which is exact \emph{at a solution}. Section~\ref{sec:rti} asks what happens
+  when the solver does not reach one.}
+  \label{fig:arch}
+\end{figure}
+
+Fig.~\ref{fig:arch} shows where the gradient enters.
+
 \subsection{Outer loop}
 The MPC supplies the policy, the state value and the action value from a single
 problem: $\pi_\theta(s)$ is the first control of the solution, $V_\theta(s) =
