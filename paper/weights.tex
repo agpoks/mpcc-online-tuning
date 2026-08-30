@@ -70,12 +70,54 @@ curvature at a point cannot separate a \SI{90}{\degree} corner from a
 \end{abstract}
 
 \section{Introduction}
-\todo{Weights are few, interpretable, and decide lap time; but one vector for a
-whole lap is a modelling choice, not a fact.}
+An MPC's cost weights are few, interpretable, and largely decide how the
+vehicle behaves: how hard it is held to the racing line, how much progress is
+worth, how much steering effort costs. That makes them an attractive thing to
+tune, and a growing literature does exactly that --- online, from the
+controller's own optimal value, with a gradient the envelope theorem supplies
+for free.
+
+Almost all of it searches for \emph{one} weight vector. This paper starts from
+the observation that one vector for a whole lap is a modelling choice and not a
+fact: a straight and a hairpin want opposite things, and a lap containing both
+forces a single vector to average them. It then goes further, and asks whether
+the weights are better understood as a \emph{behaviour} parameterisation --- a
+representation in which ``overtake'' and ``follow'' are different points rather
+than different problems --- and what has to be true of the controller before
+that question can even be posed.
 
 \section{Related work}
-\todo{Gros \& Zanon; mpcrl / MPC4RL; COAT-MPC; AD-MPCC; gain scheduling in
-classical control; racing-line and behaviour planners.}
+\emph{Tuning an MPC's weights.} Gros and Zanon's MPC-as-function-approximator
+framework, and the tooling around it (\texttt{mpcrl}, MPC4RL), treat the cost
+weights as learnable parameters and obtain their gradient from the envelope
+theorem. Applied work in racing --- AD-MPCC, COAT-MPC and Bayesian lap-time
+tuning --- searches the same weights, usually offline and usually for a
+\emph{single} vector per track. Our starting point is that the single vector is
+a modelling choice rather than a fact, and Section~\ref{sec:seeds} measures what
+it costs.
+
+\emph{Scheduling, from classical control.} Gain scheduling has interpolated
+controller parameters over an operating point for decades, and a curvature-binned
+weight schedule is exactly that construction with curvature as the scheduling
+variable. What is different here is that the schedule is \emph{learned online
+from the same TD error}, and that the operating point includes an opponent.
+
+\emph{Behaviour planning.} Autonomous racing usually separates a behaviour layer
+(overtake, follow, defend) from a trajectory layer that executes it. We are
+asking whether the two can be the same object: whether the behaviour decision
+can be expressed \emph{as} the trajectory layer's cost weights, so that the
+constraints continue to hold by construction rather than by a second checker.
+Section~\ref{sec:axes} is the evidence that it can be, and
+Section~\ref{sec:gate} is the evidence that learning to do so is harder than it
+looks.
+
+\emph{Recurrent policies and online learning.} The recurrent head of
+Section~\ref{sec:policy} is trained by real-time recurrent learning in its
+RFLO form, the same family of local online estimators used for recurrent agents
+that cannot afford backpropagation through time. Liquid time-constant
+cells~\cite{hasani2021ltc} are of interest here for one specific property --- an
+input-dependent time constant, which is a learned hold duration --- and
+Section~\ref{sec:gate} tests whether that property earns its place.
 
 \section{Background}
 The controller, the log-parameterisation of the weights, and the
@@ -211,6 +253,26 @@ The constraint is applied at nodes $1..N$ and not at node $0$, which is pinned
 to the measurement --- a constraint there is a statement about the past, and it
 would be unsatisfiable exactly when the car is already touching an opponent.
 
+\subsubsection*{A car is not a circle}
+A circular keep-out is wrong in both directions at once, and wrong in the one
+that matters. A car is roughly $0.57 \times \SI{0.30}{\meter}$, so with the
+standard margin at $r = \SI{0.20}{\meter}$ the semi-axes are
+\SI{0.635}{\meter} along the opponent and \SI{0.267}{\meter} across it, against
+a circle using \SI{0.350}{\meter} both ways: \SI{0.28}{\meter} too tight
+\emph{alongside}, which is exactly where a pass happens, and \SI{0.29}{\meter}
+too loose nose-to-tail. We therefore also implement the keep-out as an ellipse
+aligned with the opponent's heading,
+\begin{equation}
+  (u/a)^2 + (v/b)^2 - 1 \;\ge\; 0,
+  \label{eq:ellipse}
+\end{equation}
+with $u, v$ the displacement in the opponent's frame and the ego's own body
+added to both semi-axes, so the constraint is between two rectangles rather
+than between a point and one. Scaled by $ab$ so the row keeps the units of the
+circular constraint and the slack weights remain comparable. Every
+closest-approach figure reported here was measured against the circle, which is
+the conservative choice for the numbers we quote.
+
 \textbf{The slacks add decision variables and constraint rows, so we re-verify
 the gradient rather than assume it survives}: with a keep-out active, the
 envelope-theorem sensitivity agrees with central finite differences to cosine
@@ -230,12 +292,33 @@ $\theta$} and therefore a linear function of the output; and safety is set by
 the magnitude of $q_v$, a different axis, so the output must be bounded by a
 ceiling on $q_v$ rather than by a box.
 
-\emph{Features.} Keyed on quantities with physical units, so that the map
-transfers between tracks and speeds: curvature preview at three distances;
+\emph{Features}, eighteen of them, keyed on quantities with physical units so
+that the map transfers between tracks and speeds: curvature preview at three
+distances;
 speed as a fraction of the cap; margin to the boundary; time-to-collision;
 the lateral acceleration a pass would require against the grip left over after
 cornering; and the gap to the car ahead, expressed \emph{both} against braking
 distance $v^2/2a_{\max}$ and in absolute car lengths.
+
+Three further groups carry the situation the weights are supposed to depend on.
+The \textbf{named sector ahead} as a one-hot --- straight, long curve,
+\SI{90}{\degree}, \SI{180}{\degree} --- read at a preview distance and
+classified by the corner's total heading change, so the policy can hold a
+different aggression for a hairpin than for a straight \emph{within one set of
+parameters}, which is the continuous schedule Section~\ref{sec:sectors}
+motivates. The \textbf{corridor width} in car widths, because whether a pass
+fits is a property of the track and not only of the two cars. And the
+\textbf{opponent class} as a one-hot: static, slower, equal, faster, graded by
+\emph{relative} speed, because ``someone is \SI{2}{\meter} ahead'' means
+opposite things depending on whether they are parked or pulling away.
+
+That last group is the sharpest argument for a recurrent head. \textbf{Catching
+and being caught are the same instantaneous gap with opposite signs of closing
+rate, and they call for opposite behaviour}, so no function of a single frame
+can separate them however many features it is given. The class is estimated
+from observed positions by an exponential filter that requires three
+observations before committing --- not read from the opponent's true speed,
+which would delete the hidden state the recurrence exists for.
 
 That the gap needs both is a correction we had to measure. A gap in braking
 distances is the right quantity for ``can I stop'', but it is the wrong one for
@@ -295,16 +378,47 @@ Episodes are 400 steps at \SI{20}{\hertz}. Three tracks: a \SI{26.7}{\meter}
 oval (straights and two \SI{180}{\degree} corners); a \SI{47.2}{\meter}
 synthetic circuit built to contain all four sector types, with a minimum radius
 of \SI{2.59}{\meter} chosen to match the oval so a scheduling result is not
-confounded by an initialisation failure; and the Red Bull Ring at F1TENTH's
-1:10 scaling (\SI{343}{\meter}, public \texttt{f1tenth\_racetracks} data), which
-nobody in this work designed. The third is not decoration: Section~\ref{sec:circuit}
+confounded by an initialisation failure; the Red Bull Ring at F1TENTH's
+1:10 scaling (\SI{343}{\meter}, public \texttt{f1tenth\_racetracks} data); and
+two circuits taken from the ICRA competition maps themselves --- the 2025 car10
+track (\SI{204}{\meter} at the scale used here) and ICRA 2026 Track 1
+(\SI{68.8}{\meter}, and the only track here carrying all four named sector
+types). The last two are extracted directly from the teams' own ROS occupancy
+grids; none of the three was designed by us. The third is not decoration: Section~\ref{sec:circuit}
 is a demonstration that a conclusion reverses between the first two.
 
 \section{When one weight vector is unstable}\label{sec:seeds}
-\todo{six-seed oval table: global 8.9 (sd 0.9) 6/6 collapsed vs per-bin 77.8
-(sd 0.2) 0/6; best-episode row showing both reach the same peak (77.6--79.1
-against 78.0--78.3), which is the evidence that the mechanism is isolation and
-not expressive power.}
+Six seeds, 26 episodes each, on the oval. The only stochastic element is the
+actuator exploration noise, so a seed is a draw of that stream and the spread
+measures the learner's reliability rather than the task's.
+
+\begin{table}[t]
+  \centering
+  \caption{One $\theta$ against one per curvature bin, six seeds, oval.
+  ``Collapsed'' is a seed ending with at least half its final episodes
+  off-track. \texttt{experiments/per\_segment\_seeds.py}.}
+  \label{tab:seeds}
+  \begin{tabular}{lrrr}
+    \toprule
+    & last 8 episodes & spread & collapsed \\
+    \midrule
+    one $\theta$          & \SI{8.9}{\meter}  & sd 0.9, 7.6--9.8   & \textbf{6 / 6} \\
+    three curvature bins  & \textbf{\SI{77.8}{\meter}} & sd 0.2, 77.5--78.0 & \textbf{0 / 6} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The distributions do not overlap: the \emph{worst} per-bin seed is eight times
+the \emph{best} global one, and the per-bin spread of \SI{0.2}{\meter} is
+tighter than the global one despite being nine times the magnitude.
+
+\textbf{The mechanism is isolation, not expressive power}, and the best-episode
+column is what shows it. A single $\theta$ reaches a \SI{77.6}{}--\SI{79.1}{\meter}
+controller on \emph{every} seed and destroys it on \emph{every} seed, first
+leaving the track at episode 3, 3, 4, 5, 5, 5. Per-bin weights reach the same
+\SI{78.0}{}--\SI{78.3}{\meter} peak and keep it. The schedule does not find a
+better policy; it removes the path by which a bad update in a corner reaches
+the straight's weights.
 
 \begin{figure*}[t]
   \centering
@@ -366,7 +480,59 @@ between sectors, or a speed range the cap does not truncate --- has not been
 run.
 
 \section{Behaviour is a ratio; safety is a magnitude}\label{sec:axes}
-\todo{the 3x5 grid table; the two axes; zero collisions and minimum clearance.}
+\begin{table}[t]
+  \centering
+  \caption{Outcome over the weight sweep, against an opponent \SI{3}{\meter}
+  ahead at \SI{1}{\meter\per\second}. Runs are deterministic, so each cell is
+  exact; the $n=1$ here is the \emph{geometry}, not the sampling.
+  \texttt{experiments/overtake\_or\_follow.py}.}
+  \label{tab:grid}
+  \begin{tabular}{rrrrl}
+    \toprule
+    $q_v$ & $q_c$ & $q_v/q_c$ & covered & outcome \\
+    \midrule
+    0.5 & 10.0 & 0.05 & \SI{12.0}{\meter} & followed \\
+    0.5 & 3.0  & 0.17 & \SI{12.0}{\meter} & followed \\
+    0.5 & 1.0  & 0.50 & \SI{12.0}{\meter} & followed \\
+    0.5 & 0.3  & 1.67 & \SI{22.3}{\meter} & passed \\
+    0.5 & 0.1  & 5.00 & \SI{26.8}{\meter} & passed \\
+    \midrule
+    2.0 & 10.0 & 0.20 & \SI{12.0}{\meter} & followed \\
+    2.0 & 3.0  & 0.67 & \SI{12.0}{\meter} & followed \\
+    2.0 & 1.0  & 2.00 & \textbf{\SI{36.6}{\meter}} & passed \\
+    2.0 & 0.3  & 6.67 & \textbf{\SI{36.8}{\meter}} & passed \\
+    2.0 & 0.1  & 20.0 & \SI{3.3}{\meter}  & passed, then \textbf{off-track} \\
+    \midrule
+    10.0 & 10.0 & 1.00 & \SI{12.1}{\meter} & followed \\
+    10.0 & 3.0  & 3.33 & \SI{2.3}{\meter} & passed, then \textbf{off-track} \\
+    10.0 & 1.0  & 10.0 & \SI{3.1}{\meter} & passed, then \textbf{off-track} \\
+    10.0 & 0.3  & 33.3 & \SI{3.7}{\meter} & passed, then \textbf{off-track} \\
+    10.0 & 0.1  & 100  & \SI{3.5}{\meter} & passed, then \textbf{off-track} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{The behaviour is the ratio.} Every cell with $q_v/q_c \le 1$ follows and
+every cell above it passes --- fifteen of fifteen, across two decades in each
+weight. Following is a settled behaviour rather than indecision: \SI{0.73}{\meter}
+back, \SI{7}{\milli\meter} of lateral wander, held for the whole run. Since
+$\theta$ is already the logarithm of the weights, this boundary is a
+\emph{difference of two components of $\theta$}, and therefore linear in the
+policy's output --- which is why we predict a linear schedule to be a strong
+baseline in Section~\ref{sec:gate}.
+
+\textbf{Safety is $q_v$ alone, and it is a different axis.} The ratio does not
+predict survival: $q_v/q_c = 5.0$ completes the lap and $3.33$ leaves the track.
+Sorted by $q_v$ it is immediate --- every pass at $q_v = 10$ goes off, one of
+two at $q_v = 2$, none at $q_v = 0.5$. So the region a learned policy must be
+confined to is \textbf{not a box in $\theta$ and not a bound on the ratio}: it
+is a ceiling on $q_v$ with the ratio left free.
+
+\textbf{The keep-out never failed.} No run ended in a collision and the minimum
+clearance across every step was $+\SI{0.123}{\meter}$ outside $r$. All five
+failures are track-limit failures --- running wide \emph{while} passing --- which
+is a distinction available only because the plant records which failure
+occurred.
 
 \begin{figure}[t]
   \centering

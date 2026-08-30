@@ -81,9 +81,40 @@ The contributions are:
 
 \section{Related work}
 
-\todo{Gros \& Zanon (MPC as function approximator); mpcrl / MPC4RL; COAT-MPC
-and Bayesian tuning; AD-MPCC; Diehl's RTI; Wabersich \& Zeilinger predictive
-safety filters; Ames et al.\ CBFs; Gurriet \& Ames ASIF.}
+\emph{MPC as a function approximator.} Gros and Zanon observe that one
+parametrised optimal-control problem supplies a policy, a state value and an
+action value at once, so a reinforcement-learning layer needs no critic network
+--- the MPC already is one. The tooling that followed (\texttt{mpcrl},
+MPC4RL) and the applications built on it (AD-MPCC for autonomous racing,
+COAT-MPC and related Bayesian approaches for lap-time tuning) all inherit the
+same gradient: the derivative of the optimal value with respect to the
+parameters, taken at a solution via the envelope theorem.
+
+\emph{What they share, and do not state.} Every method in that group
+differentiates \emph{through a solution}. The envelope theorem is exact at one;
+away from one it is not a theorem at all. A deployed controller does not reach
+one --- it takes a fixed, small number of SQP steps per tick and warm-starts
+from the previous solve. We have not found a paper in this family that states
+solver convergence as an assumption, and Section~\ref{sec:rti} shows it is one.
+
+\emph{Real-time iteration.} Diehl, Bock and Schl\"oder's RTI scheme is the
+reason the assumption is interesting rather than academic: it deliberately
+stops after one QP and applies the result, with a contraction argument in place
+of convergence. \texttt{acados} implements it, and its contraction rate is the
+same quantity that governs how far back the influence recursion of
+Section~\ref{sec:theory} must be carried.
+
+\emph{Learning-time safety.} A predictive safety filter (Wabersich and
+Zeilinger) certifies a proposed input by exhibiting a backup trajectory that
+ends in a set the system can remain in; control-barrier-function methods (Ames
+et al.) and ASIF (Gurriet and Ames) certify by evaluating a function instead.
+The distinction matters for us only in cost and conservatism --- our comparison
+in Section~\ref{sec:safety} finds the \emph{model} each is given dominates the
+choice of criterion.
+
+\emph{Where this paper sits.} It adds no method. It measures a term everyone
+else assumes away, reports that the term is negligible, and reports the
+experiment that appears to show the opposite.
 
 The point of departure is that every method in the first group differentiates
 \emph{through a solution}. None states the convergence of the deployed solver
@@ -135,13 +166,31 @@ contouring error, $|e_c| \le w - r_{\text{car}}$ with $w = \SI{0.75}{\meter}$
 and $r_{\text{car}} = \SI{0.12}{\meter}$; the centreline is a periodic B-spline
 in $s$, so the solver differentiates the path rather than projecting onto it.
 
-Two solvers are used and the distinction matters throughout: IPOPT run to
-convergence, and an SQP real-time iteration --- one linearisation, one full QP,
-warm-started from the previous tick, with a Gauss--Newton Hessian and CasADi's
-\texttt{qrqp}. \textbf{The RTI is hand-rolled, not \texttt{acados}}; it
-implements the same scheme as \textsc{sqp\_rti} but the confirmation against
-\texttt{acados} itself is outstanding, and Section~\ref{sec:rti}'s result should
-be read with that caveat.
+Two solvers are used for the measurements below and the distinction matters
+throughout: IPOPT run to convergence, and an SQP real-time iteration --- one
+linearisation, one full QP, warm-started from the previous tick, with a
+Gauss--Newton Hessian and CasADi's \texttt{qrqp}.
+
+\textbf{The RTI used for Section~\ref{sec:rti} is hand-rolled, not
+\texttt{acados}.} It implements the same scheme as \textsc{sqp\_rti}, and the
+confirmation against \texttt{acados} itself is the check this paper's central
+measurement owes. Since that measurement was taken we have built an
+\texttt{acados} backend for the same OCP --- it code-generates, solves, and runs
+at \SI{1.63}{\milli\second} mean against \SI{1.9}{\milli\second} for the
+hand-rolled scheme --- so the check is now possible. \textbf{We have not yet
+re-run it}, and state that plainly rather than let the caveat read as a
+limitation of the tooling.
+
+Two details of that port are worth recording because they change the
+formulation rather than the plumbing. The progress reward $-q_v \dot s \Delta t$
+is \emph{linear}, so it cannot be a least-squares residual: encoding it as one
+squares it into a quadratic \emph{penalty} on progress. We therefore use an
+external cost, which in turn forces an exact Hessian. And the reference path
+enters our problem as a spline in $s$ evaluated \emph{inside} the OCP, so that
+the solver chooses its own reference point; passing the reference as a stage
+parameter instead --- the usual arrangement --- decouples $s$ from the path
+within a solve, and that coupling is the mechanism the envelope gradient runs
+through.
 
 \subsection{Learnable parameters and the gradient}
 $\theta \in \mathbb{R}^6$ is the \emph{logarithm} of the six weights in
