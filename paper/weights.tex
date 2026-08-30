@@ -551,8 +551,8 @@ make the influence series diverge, which elsewhere requires an arbitrary cap.
     \midrule
     one $\theta$          & \SI{18.8}{\meter} & 4.6 & 0.33 & $22\%$ \\
     \textbf{fixed schedule} & \textbf{\SI{36.3}{\meter}} & \textbf{2.1} & 1.02 & $\mathbf{35\%}$ \\
-    per-tick MLP          & \SI{23.7}{\meter} & 9.5 & 1.35 & $72\%$ \\
-    LTC (recurrent)       & \SI{29.3}{\meter} & 11.1 & \textbf{1.50} & $72\%$ \\
+    per-tick MLP          & \SI{27.2}{\meter} & 6.8 & \textbf{1.43} & $80\%$ \\
+    LTC (recurrent)       & \SI{24.0}{\meter} & 13.7 & 1.35 & $78\%$ \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -566,11 +566,11 @@ make the influence series diverge, which elsewhere requires an arbitrary cap.
   \label{fig:gate}
 \end{figure}
 
-\textbf{Verdict: not claimed.} $\text{LTC} - \text{fixed} = -\SI{7.0}{\meter}$
-at $1.4$ SE and $\text{LTC} - \text{MLP} = +\SI{5.6}{\meter}$ at $0.9$ SE.
-Neither gap is separated, so the LTC is not shown \emph{worse} than the
-schedule --- it is not shown better, which for a component one is proposing to
-add is the same answer.
+\textbf{Verdict: not claimed.} $\text{LTC} - \text{fixed} = -\SI{12.3}{\meter}$
+at $2.0$ SE and $\text{LTC} - \text{MLP} = -\SI{3.3}{\meter}$ at $0.5$ SE. The
+first gap \emph{is} separated, so on this task the recurrent policy is not
+merely unproven against a fifteen-line lookup --- it is measurably worse than
+one.
 
 Three things are worth more than the verdict.
 
@@ -579,11 +579,10 @@ the $q_v/q_c$ boundary measured in Section~\ref{sec:axes}. A baseline with the
 measurement built into it is a far harder target than a heuristic, and that is
 much of why learning loses here.
 
-\emph{The LTC's defect is variance, not inferiority.} Its standard deviation is
-five times the schedule's; it holds both the two best individual runs and the
-worst. That is the failure reported for this cell family elsewhere --- not
-uniformly worse, but less reliable, which points at initialisation rather than
-at the update equation.
+\emph{The variance is the tell.} Its standard deviation is six times the
+schedule's. That is the failure reported for this cell family elsewhere --- not
+uniformly worse, but less reliable --- and Section~\ref{sec:adapt} shows what
+produces it here.
 
 \emph{Learning made the controller more reckless, which inverts the companion
 result.} On a closely related task every learned cell roughly halved a scripted
@@ -592,6 +591,57 @@ both learned arms $72\%$. The action space plausibly explains it: there the
 network emits steering and can learn to avoid, whereas here it emits cost
 weights and the way to overtake is to raise $q_v$, which is also the way to
 leave the track.
+
+\section{What the policy actually does online}\label{sec:adapt}
+
+A table of four arms says which won. It cannot show the thing the method is
+about --- that $\theta$ is a function of the situation, re-emitted every tick.
+Fig.~\ref{fig:adapt} draws what the policy emitted while it learned, and it is
+the most informative result in this paper because it is the one that found the
+bugs.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/adaptation.png}
+  \caption{The LTC policy over twelve episodes of online learning against one
+  opponent. \textbf{Left:} the driven path coloured by the ratio $q_v/q_c$ the
+  policy chose at each tick, diverging about the measured behaviour boundary of
+  $1.0$. \textbf{Right, top:} the two weights through one lap, with the
+  measured $q_v$ ceiling. \textbf{Right, bottom:} distance per episode. The
+  policy drives $q_v$ onto its ceiling and $q_c$ towards zero; the ratio
+  saturates near $22$, twenty times past the boundary, and the return collapses
+  with it. \texttt{scripts/make\_figures.py}.}
+  \label{fig:adapt}
+\end{figure}
+
+\subsection{Two bugs a table could not show}
+Drawing the emitted weights found, in sequence, two faults that twenty runs and
+four summary rows had not.
+
+\emph{A hard clip has no gradient.} We had bounded the policy output with
+$\theta = \mathrm{clip}(\theta_0 + Gh)$. Wherever a weight sits on its bound,
+$\partial\theta/\partial\phi = 0$, so the learner receives no gradient for that
+component and can never bring it back: \textbf{the bound added for safety
+switches off learning on the axis it bounds}. In the figure's first version
+$q_v$ sat flat on the ceiling for an entire lap while only $q_c$ moved. The
+bound is now a $\tanh$ squash into the same box, with the corresponding factor
+chained into $\partial\theta/\partial\phi$.
+
+\emph{Bounding an output is not a stopping criterion.} With the gradient
+restored, the policy runs to the bound anyway --- the ratio reaches $22$ and the
+episode return collapses. This is precisely the failure our companion work
+documents for a \emph{single} global $\theta$~\cite{paper1}: the tuner optimises
+a proxy past the point where the proxy is valid, with nothing to stop it. The
+behaviour policy inherits it whole. A box constrains \emph{where} $\theta$ may
+go, not \emph{whether it should keep going}, and the two are not the same
+requirement.
+
+That is the honest reading of Table~\ref{tab:gate}: the recurrent policy loses
+to a hand-written schedule not because recurrence cannot represent the
+behaviour, but because nothing in the loop tells it when to stop moving. A
+trust region on $\theta$ is therefore a \emph{prerequisite} for this line of
+work rather than an independent improvement to it, and we would not run another
+policy comparison without one.
 
 \section{Do named sectors pay for themselves?}
 No. Table~\ref{tab:circuit}: four labels cost twice the parameters of three and
@@ -603,8 +653,12 @@ correction turns out not to change any outcome we can measure. Both facts are
 worth having; only the first is usually reported.
 
 \section{Limitations}
-The behaviour result is on one opponent geometry, and the postures could not be
-separated by it. Every scheduling result is on two synthetic tracks, and
+The policy comparison of Section~\ref{sec:gate} was run before the trust region
+that Section~\ref{sec:adapt} argues it needs, so it measures a policy with no
+stopping criterion against a schedule that cannot drift --- and should be read
+as a statement about that pairing rather than about recurrence. The behaviour
+result is on one opponent geometry, and the postures could not be separated by
+it. Every scheduling result is on two synthetic tracks, and
 Section~\ref{sec:circuit} is precisely a demonstration that two is not many --- the conclusion reversed between them, and
 we have no basis for predicting a third. The overtake grid is one opponent
 geometry. The plant is a kinematic bicycle

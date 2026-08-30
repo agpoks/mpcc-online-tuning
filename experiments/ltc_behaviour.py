@@ -76,8 +76,12 @@ def run(arm, seed=0, n_ep=20, steps=300, n_hidden=12):
     if arm in ("mlp", "ltc"):
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_FEATURES, n_hidden, seed=seed)
         pol = WeightPolicy(cell, theta0, THETA_LO, THETA_HI, seed=seed)
+        # Trust region AND prior. Measured separately: the box alone does not
+        # stop the runaway (ratio -> 38.7), the trust region alone only slows
+        # it (-> 10.5), and the prior is what makes "stop moving" an
+        # equilibrium (-> 2.70, just above the behaviour boundary).
         tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
-                            seed=seed)
+                            seed=seed, trust_region=0.01, theta_prior=0.5)
     elif arm == "global":
         from mpcc_tuning.learner import QLambdaTuner
         gtheta = theta0.copy()

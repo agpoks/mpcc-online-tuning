@@ -159,7 +159,19 @@ expression built once at construction, on quantities the solve already returned
 assume it}: against central finite differences on the optimal value, over $54$
 components at states the controller actually visits during a run (not at points
 placed on the centreline), the cosine is $0.99999$ and the relative error below
-$10^{-3}$.
+$10^{-3}$ (Fig.~\ref{fig:gradcheck}).
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/gradient_check.png}
+  \caption{The envelope-theorem gradient against central finite differences on
+  the optimal value, at states visited during a run rather than at points
+  placed on the centreline. Cosine $0.99999$, relative error $<10^{-3}$, at
+  $0.079\%$ of the cost of the solve. This is the claim the whole approach
+  rests on, so it is checked rather than asserted.
+  \texttt{examples/gradient\_check.py}.}
+  \label{fig:gradcheck}
+\end{figure}
 
 Because the MPC minimises a cost while the learner maximises a return, both the
 value and its gradient carry a negation, $V = -J^\star$. Applying one and not

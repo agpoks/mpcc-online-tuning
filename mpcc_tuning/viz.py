@@ -165,6 +165,82 @@ def animate_run(mpcc, plant, theta, out, steps: int = 260, fps: int = 18,
 
 
 # ---------------------------------------------------------------------------
+def animate_behaviour(track, runs, out, fps: int = 18, max_frames: int = 200,
+                      title: str | None = None):
+    """Two or more behaviours racing the same opponent, side by side.
+
+    ``runs`` is a list of ``dict(label=..., xy=(M,2), opp=(M,2), r=float,
+    ratio=(M,), covered=float, off=bool)``.
+
+    The keep-out circle is drawn, not implied. It is the constraint that makes
+    "stay behind" a finite-cost option rather than an infeasible solve, and a
+    presentation that shows the car swerving without showing what it is
+    swerving around has hidden the mechanism.
+
+    The title strip carries ``q_v/q_c`` live, because the measured behaviour
+    boundary is at 1.0 -- above it the car passes, below it it follows -- so
+    the number crossing 1 *is* the decision being made.
+    """
+    plt = _plt()
+    from matplotlib.animation import FuncAnimation
+
+    n = len(runs)
+    fig, axes = plt.subplots(1, n, figsize=(5.6 * n, 4.4), squeeze=False)
+    axes = axes[0]
+    N = max(len(r["xy"]) for r in runs)
+    if max_frames and N > max_frames:
+        idx = np.linspace(0, N - 1, max_frames).round().astype(int)
+    else:
+        idx = np.arange(N)
+
+    art = []
+    for ax, r in zip(axes, runs):
+        _track_bg(ax, track)
+        trail, = ax.plot([], [], "-", lw=2.0, color=BLUE, zorder=3)
+        car, = ax.plot([], [], "o", ms=11, color=BLUE, mec="white", mew=1.2, zorder=6)
+        opp, = ax.plot([], [], "o", ms=11, color=RED, mec="white", mew=1.2, zorder=6)
+        ring = plt.Circle((0, 0), r["r"], fill=False, ls="--", lw=1.6,
+                          color=RED, alpha=0.8, zorder=5)
+        ax.add_patch(ring)
+        txt = ax.text(0.015, 0.97, "", transform=ax.transAxes, va="top",
+                      fontsize=9, family="monospace",
+                      bbox=dict(fc="white", ec="0.7", alpha=0.9,
+                                boxstyle="round,pad=0.3"))
+        ax.set_title(r["label"], fontsize=10.5, color=INK)
+        art.append((trail, car, opp, ring, txt))
+    axes[0].plot([], [], "o", ms=9, color=BLUE, label="ego")
+    axes[0].plot([], [], "o", ms=9, color=RED, label="opponent")
+    axes[0].plot([], [], "--", color=RED, label="keep-out")
+    axes[0].legend(loc="lower right", fontsize=8, framealpha=0.9)
+    fig.suptitle(title or "The same controller, two cost-weight settings",
+                 fontsize=11)
+
+    def update(k):
+        j = idx[k]
+        out_art = []
+        for r, (trail, car, opp, ring, txt) in zip(runs, art):
+            m = min(j, len(r["xy"]) - 1)
+            trail.set_data(r["xy"][:m + 1, 0], r["xy"][:m + 1, 1])
+            car.set_data([r["xy"][m, 0]], [r["xy"][m, 1]])
+            opp.set_data([r["opp"][m, 0]], [r["opp"][m, 1]])
+            ring.center = (r["opp"][m, 0], r["opp"][m, 1])
+            done = (m == len(r["xy"]) - 1)
+            tail = ("  OFF-TRACK" if (done and r["off"]) else
+                    ("  stopped" if done and r["covered"] < 10 else ""))
+            txt.set_text(f"q_v/q_c = {r['ratio'][m]:5.2f}\n"
+                         f"{'OVERTAKE' if r['ratio'][m] > 1 else 'follow  '}\n"
+                         f"covered {r['covered_t'][m]:5.1f} m{tail}")
+            out_art += [trail, car, opp, ring, txt]
+        return out_art
+
+    anim = FuncAnimation(fig, update, frames=len(idx), blit=False,
+                         interval=1000 // fps)
+    path = save_gif(anim, out, fps=fps)
+    plt.close(fig)
+    return path
+
+
+# ---------------------------------------------------------------------------
 def animate_tuning(episodes, out, track=None, fps: int = 4, title: str | None = None):
     """A tuning session: the trajectory and the six weights, episode by episode.
 

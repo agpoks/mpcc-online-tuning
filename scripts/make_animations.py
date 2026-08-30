@@ -23,7 +23,8 @@ from mpcc_tuning.learner import QLambdaTuner  # noqa: E402
 from mpcc_tuning.model import KinematicBicycle  # noqa: E402
 from mpcc_tuning.mpcc import MPCC, MPCCWeights  # noqa: E402
 from mpcc_tuning.track import Track  # noqa: E402
-from mpcc_tuning.viz import animate_run, animate_tuning  # noqa: E402
+from mpcc_tuning.viz import (animate_behaviour, animate_run,  # noqa: E402
+                             animate_tuning)
 
 OUT = ROOT / "docs" / "source" / "_static" / "anim"
 
@@ -65,6 +66,74 @@ def anim_scuderia():
                        title="the same controller and the same weights, on "
                              "scuderia_gym_jax's fitted tyres — it does not survive "
                              "the first corner")
+
+
+def _drive_behaviour(track, theta, opp_speed, steps, label):
+    """One run against one opponent, recording everything the animation needs."""
+    import numpy as np
+    from mpcc_tuning.mpcc import MPCC
+    from mpcc_tuning.model import KinematicBicycle
+    from mpcc_tuning.opponents import Opponent
+    from examples.tune_online import Plant
+
+    m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
+             max_iter=60, max_obstacles=1)
+    opp = Opponent(track, s0=3.0, speed=opp_speed, radius=0.24)
+    P = Plant(track, dt=0.05, max_steps=steps, opponents=[opp])
+    s5 = P.reset(); m.reset()
+    xy, op, cov_t, cov, off = [], [], [], 0.0, False
+    for _ in range(steps):
+        m.set_obstacles(P.keepouts())
+        u = m.value(s5, theta)["u0"]
+        s5, r, off, tr = P.step(u); cov += r
+        xy.append((s5[0], s5[1])); op.append(tuple(opp.pose()[:2])); cov_t.append(cov)
+        if off or tr:
+            break
+    import numpy as np
+    ratio = np.full(len(xy), float(np.exp(theta[2]) / np.exp(theta[0])))
+    return dict(label=label, xy=np.array(xy), opp=np.array(op), r=0.24,
+                ratio=ratio, covered=cov, covered_t=np.array(cov_t), off=bool(off))
+
+
+def anim_behaviour(steps=220):
+    """Follow versus overtake, same controller, same opponent, side by side."""
+    import numpy as np
+    from mpcc_tuning.ltc import behaviour_theta
+    from mpcc_tuning.mpcc import MPCCWeights
+
+    track = Track.oval()
+    t0 = MPCCWeights(q_l=200.0, r_d=1.0).to_log()
+    runs = [_drive_behaviour(track, behaviour_theta("follow", "neutral", t0),
+                             1.0, steps, "follow  ($q_v/q_c < 1$)"),
+            _drive_behaviour(track, behaviour_theta("overtake", "aggressive", t0),
+                             1.0, steps, "overtake  ($q_v/q_c > 1$)")]
+    for r in runs:
+        print(f"    {r['label']}: {r['covered']:.1f} m, off={r['off']}", flush=True)
+    return animate_behaviour(
+        track, runs, OUT / "mpcc_behaviour.gif",
+        title="Two cost weights decide whether the car passes or sits behind")
+
+
+def anim_static_vs_dynamic(steps=220):
+    """The same posture against a moving car and a stopped one.
+
+    Against a stopped obstacle "stay behind" is not caution, it is stopping --
+    which the animation shows as a car that simply parks and never recovers.
+    """
+    import numpy as np
+    from mpcc_tuning.ltc import behaviour_theta
+    from mpcc_tuning.mpcc import MPCCWeights
+
+    track = Track.oval()
+    t0 = MPCCWeights(q_l=200.0, r_d=1.0).to_log()
+    th = behaviour_theta("follow", "neutral", t0)
+    runs = [_drive_behaviour(track, th, 1.0, steps, "moving car: following works"),
+            _drive_behaviour(track, th, 0.0, steps, "stopped car: the same weights park")]
+    for r in runs:
+        print(f"    {r['label']}: {r['covered']:.1f} m", flush=True)
+    return animate_behaviour(
+        track, runs, OUT / "mpcc_static_vs_dynamic.gif",
+        title="A stopped car is not a slow car: following it means stopping")
 
 
 def anim_tuning(n_ep=26):
@@ -112,7 +181,9 @@ def anim_tuning(n_ep=26):
                                 "controller, then destroys it")
 
 
-ANIMS = {"horizon": anim_horizon, "scuderia": anim_scuderia, "tuning": anim_tuning}
+ANIMS = {
+    "behaviour": anim_behaviour,
+    "static_dynamic": anim_static_vs_dynamic,"horizon": anim_horizon, "scuderia": anim_scuderia, "tuning": anim_tuning}
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

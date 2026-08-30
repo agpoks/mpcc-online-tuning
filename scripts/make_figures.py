@@ -568,7 +568,118 @@ def fig_ltc_gate():
     print("  wrote ltc_gate.png")
 
 
-FIGS = {"geometry": fig_geometry, "gradient_check": fig_gradient_check,
+def fig_adaptation():
+    """How the weights move *during* a lap, and across episodes.
+
+    The tables say a policy over theta beats or loses to a schedule. They do
+    not show the thing the method is about: that theta is a function of where
+    the car is and what is in front of it, changing tick by tick. This runs the
+    LTC policy and draws what it emitted.
+
+    Left: the driven path on the track, coloured by the ratio q_v/q_c the
+    policy chose at each tick -- the measured behaviour boundary is at 1, so
+    the colour is literally "following" below and "overtaking" above, on a
+    diverging ramp about that midpoint. Right: the same run as time series, so
+    the hold between decisions is visible rather than inferred.
+    """
+    import sys as _s
+    _s.path.insert(0, str(ROOT))
+    from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
+                                 PolicyTuner, WeightPolicy, features)
+    from mpcc_tuning.model import KinematicBicycle
+    from mpcc_tuning.mpcc import MPCC, MPCCWeights
+    from mpcc_tuning.opponents import Opponent
+    from examples.tune_online import Plant
+
+    track = Track.oval()
+    theta0 = MPCCWeights(q_c=10.0, q_l=200.0, q_v=0.5, r_d=1.0).to_log()
+    m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
+             max_iter=60, max_obstacles=1)
+    cell = LTCCell(N_FEATURES, 12, seed=0)
+    pol = WeightPolicy(cell, theta0, THETA_LO, THETA_HI, seed=0)
+    tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0, seed=0)
+
+    ep_ratio, ep_cov, last = [], [], None
+    for ep in range(12):
+        opp = Opponent(track, s0=3.0, speed=1.2, radius=0.24)
+        P = Plant(track, dt=0.05, max_steps=300, opponents=[opp])
+        s5 = P.reset(); m.reset(); m.set_obstacles(P.keepouts()); tuner.reset()
+        feat = features(track, s5, [opp])
+        theta, u = tuner.act(feat, s5)
+        rec, cov = [], 0.0
+        for _ in range(300):
+            s5n, r, off, tr = P.step(u); cov += r
+            m.set_obstacles(P.keepouts())
+            rec.append((s5n[0], s5n[1], float(np.exp(theta[2]) / np.exp(theta[0])),
+                        float(np.exp(theta[2])), float(np.exp(theta[0])),
+                        opp.pose()[0], opp.pose()[1]))
+            out = tuner.learn(r, s5n, features(track, s5n, [opp]), off)
+            if out[0] is None:
+                break
+            theta, u = out
+            s5 = s5n
+            if off or tr:
+                break
+        rec = np.array(rec)
+        ep_ratio.append(float(np.median(rec[:, 2]))); ep_cov.append(cov)
+        last = rec
+        print(f"    ep {ep:2d}  covered {cov:6.1f} m  median ratio {ep_ratio[-1]:6.2f}",
+              flush=True)
+
+    fig = plt.figure(figsize=(11.5, 4.6))
+    ax = fig.add_subplot(1, 2, 1)
+    ax.plot(track.center[:, 0], track.center[:, 1], "-", color="0.85", lw=14,
+            solid_capstyle="round", zorder=1)
+    from matplotlib.collections import LineCollection
+    xy = last[:, :2].reshape(-1, 1, 2)
+    segs = np.concatenate([xy[:-1], xy[1:]], axis=1)
+    # Diverging about 1.0, because 1.0 is the measured behaviour boundary --
+    # below it the policy is following, above it overtaking. A sequential ramp
+    # would hide the one value that means something.
+    lc = LineCollection(segs, cmap="coolwarm",
+                        norm=matplotlib.colors.TwoSlopeNorm(1.0, 0.05, 6.0),
+                        linewidth=2.6, zorder=3)
+    lc.set_array(last[:-1, 2])
+    ax.add_collection(lc)
+    ax.plot(last[::28, 5], last[::28, 6], "o", ms=5, color=INK, alpha=0.5,
+            zorder=4, label="opponent")
+    ax.set_aspect("equal"); ax.axis("off")
+    ax.set_title("where the policy chose to overtake\n(episode 11)", fontsize=9.5,
+                 color=INK)
+    ax.legend(fontsize=8, frameon=False, loc="lower center")
+    cb = fig.colorbar(lc, ax=ax, fraction=0.04, pad=0.02)
+    cb.set_label("$q_v/q_c$   (1.0 = behaviour boundary)", fontsize=8.5)
+    cb.ax.tick_params(labelsize=8)
+
+    bx = fig.add_subplot(2, 2, 2)
+    t = np.arange(len(last)) * 0.05
+    bx.plot(t, last[:, 3], "-", color=BLUE, lw=1.8, label="$q_v$")
+    bx.plot(t, last[:, 4], "-", color=RED, lw=1.8, label="$q_c$")
+    bx.axhline(2.0, color="0.6", ls=":", lw=1.0)
+    bx.annotate(" measured $q_v$ ceiling", xy=(t[-1] * 0.55, 2.05), fontsize=7,
+                color="0.4")
+    bx.set_ylabel("weight"); bx.set_yscale("log")
+    bx.legend(fontsize=8, frameon=False, ncol=2)
+    bx.grid(alpha=0.2, lw=0.5)
+    bx.set_title("the two weights, tick by tick", fontsize=9.5, color=INK)
+    cx = fig.add_subplot(2, 2, 4)
+    cx.plot(np.arange(len(ep_cov)), ep_cov, "-o", color=GREEN, lw=1.8, ms=4)
+    cx.set_xlabel("episode"); cx.set_ylabel("covered [m]")
+    cx.grid(alpha=0.2, lw=0.5)
+    for a in (bx, cx):
+        for sp in ("top", "right"):
+            a.spines[sp].set_visible(False)
+    bx.set_xlabel("time in the lap [s]")
+    fig.suptitle("The weights are a function of the situation, not a vector to be found: "
+                 "the LTC policy\nemits a different $\\theta$ at every tick, and the "
+                 "ratio crosses the behaviour boundary where it passes.",
+                 fontsize=9.5, color=INK, y=1.05)
+    fig.tight_layout()
+    fig.savefig(OUT / "adaptation.png", dpi=170, bbox_inches="tight")
+    print("  wrote adaptation.png")
+
+
+FIGS = {"adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "spielberg": fig_spielberg,
         "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}

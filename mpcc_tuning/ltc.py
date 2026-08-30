@@ -98,8 +98,15 @@ class LTCCell:
     def reset(self):
         self.h = np.zeros(self.n)
 
-    def step(self, x):
-        """Advance one tick. Returns ``(h, immediate, leak)`` for RFLO."""
+    def step(self, x, need_D: bool = False):
+        """Advance one tick. Returns ``(h, immediate, leak)``, plus ``D`` if asked.
+
+        ``leak`` alone gives the RFLO/SnAp-1 approximation: each neuron carries
+        its own influence and the coupling *between* neurons is dropped. ``D``
+        is the full recurrent Jacobian, which turns the same recursion into
+        exact RTRL. Both are provided so the approximation can be *measured*
+        rather than assumed adequate -- see ``experiments/gradient_fidelity.py``.
+        """
         nx = self.n_xi
         xi = np.concatenate([np.asarray(x, float), self.h, [1.0]])
         W, A, tau = self.p[:, :nx], self.p[:, nx], self.p[:, nx + 1]
@@ -113,8 +120,13 @@ class LTCCell:
         imm[:, nx] = self.dt * f / den
         imm[:, nx + 1] = h_new * self.dt / (tau ** 2 * den)
         leak = 1.0 / den                 # < 1 for any gate value, since 1/tau > 0
+        D = None
+        if need_D:
+            # dh'/dh: the diagonal leak plus the gate's dependence on h.
+            W_h = W[:, self.n_in:self.n_in + self.n]
+            D = np.diag(leak) + dz[:, None] * W_h
         self.h = h_new
-        return h_new, imm, leak
+        return (h_new, imm, leak, D) if need_D else (h_new, imm, leak)
 
     def clip(self):
         lo, hi = self.SL["tau"]
@@ -153,12 +165,14 @@ class MLPCell:
     def reset(self):
         self.h = np.zeros(self.n)
 
-    def step(self, x):
+    def step(self, x, need_D: bool = False):
         xi = np.concatenate([np.asarray(x, float), [1.0]])
         z = self.p @ xi
         self.h = np.tanh(z)
         imm = ((1.0 - self.h ** 2)[:, None] * xi[None, :])
-        return self.h, imm, np.zeros(self.n)      # leak 0: no influence carried
+        leak = np.zeros(self.n)                   # no influence carried
+        return (self.h, imm, leak, np.zeros((self.n, self.n))) if need_D \
+            else (self.h, imm, leak)
 
     def clip(self):
         pass
@@ -180,14 +194,18 @@ class WeightPolicy:
     behaviour is set by the ratio q_v/q_c and safety by q_v alone.
     """
 
-    def __init__(self, cell, theta0, lo, hi, out_scale: float = 0.5, seed: int = 0):
+    def __init__(self, cell, theta0, lo, hi, out_scale: float = 0.5, seed: int = 0,
+                 influence: str = "rflo"):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
         rng = np.random.default_rng(seed + 7919)
         self.G = rng.normal(0.0, out_scale / np.sqrt(cell.n),
                             (len(self.theta0), cell.n))
-        self.P = np.zeros_like(cell.p)      # RFLO influence, dh/d(cell params)
+        if influence not in ("rflo", "exact"):
+            raise ValueError("influence must be 'rflo' or 'exact'")
+        self.influence = influence
+        self.P = np.zeros_like(cell.p)      # dh/d(cell params)
         self.reset()
 
     def reset(self):
@@ -195,10 +213,28 @@ class WeightPolicy:
         self.P[:] = 0.0
 
     def step(self, feat):
-        """One tick: advance the cell, emit theta, update the influence trace."""
-        h, imm, leak = self.cell.step(feat)
-        self.P = leak[:, None] * self.P + imm
-        theta = np.clip(self.theta0 + self.G @ h, self.lo, self.hi)
+        """One tick: advance the cell, emit theta, update the influence trace.
+
+        The output is **squashed** into the box, not clipped. A hard clip has
+        zero derivative, so once a weight sits on its bound the learner gets no
+        gradient for it and can never bring it back -- the bound added for
+        safety silently switches off learning on the axis it bounds. Measured:
+        with a clip, q_v pinned at the ceiling for an entire lap while only q_c
+        moved, and the episode returns were bimodal because the policy had lost
+        an axis. A tanh keeps the same box and stays differentiable inside it.
+        """
+        if self.influence == "exact":
+            h, imm, leak, D = self.cell.step(feat, need_D=True)
+            # Exact RTRL: P <- D P + imm, keeping the coupling between neurons
+            # that RFLO drops. Same recursion, full Jacobian.
+            self.P = D @ self.P + imm
+        else:
+            h, imm, leak = self.cell.step(feat)
+            self.P = leak[:, None] * self.P + imm
+        mid, half = 0.5 * (self.hi + self.lo), 0.5 * (self.hi - self.lo)
+        z = (self.theta0 - mid) / half + self.G @ h
+        self._sq = 1.0 - np.tanh(z) ** 2          # d(theta)/dz, for the chain
+        theta = mid + half * np.tanh(z)
         self._h = h
         return theta
 
@@ -210,6 +246,8 @@ class WeightPolicy:
         neuron's own influence and drops the coupling between neurons.
         """
         g = np.asarray(dQ_dtheta, float)
+        # Through the squash: d(theta)/dz = half * (1 - tanh^2 z).
+        g = g * 0.5 * (self.hi - self.lo) * self._sq
         dG = np.outer(g, self._h)
         dcell = (g @ self.G)[:, None] * self.P
         return dG, dcell
@@ -291,13 +329,25 @@ class PolicyTuner:
     """
 
     def __init__(self, mpcc, policy, gamma=0.98, lam=0.9, alpha=2e-3,
-                 clip=1.0, delta_clip=1.0, explore=0.05, seed=0):
+                 clip=1.0, delta_clip=1.0, explore=0.05, seed=0,
+                 trust_region: float | None = None, theta_prior: float = 0.0):
         from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
         self.mpcc, self.pol = mpcc, policy
         self.gamma, self.lam, self.alpha = gamma, lam, alpha
         self.clip, self.delta_clip, self.explore = clip, delta_clip, explore
         self._lim = np.array([STEER_MAX, ACCEL_MAX])
         self.rng = np.random.default_rng(seed)
+        # A bound on the STEP, not on the output. Bounding the output only says
+        # where theta may go; it does not say whether theta should keep going,
+        # and the two are different requirements. Measured: with the output
+        # bounded and nothing else, the policy walks to the bound and stays
+        # there while the return collapses -- the same failure the global tuner
+        # shows with an exact gradient.
+        self.trust_region = trust_region
+        # A weak pull back towards the initial weights, which is the cheapest
+        # thing that makes "stop moving" an equilibrium rather than a place the
+        # dynamics never reach.
+        self.theta_prior = float(theta_prior)
         self._rms_G = self._rms_c = None
         self.reset()
 
@@ -347,8 +397,17 @@ class PolicyTuner:
             dG, dc = pg
             self.eG = self.gamma * self.lam * self.eG + self._norm(-dG, "G")
             self.ec = self.gamma * self.lam * self.ec + self._norm(-dc, "c")
-            self.pol.G += self.alpha * delta * self.eG
-            self.pol.cell.p += self.alpha * delta * self.ec
+            dG = self.alpha * delta * self.eG
+            dc = self.alpha * delta * self.ec
+            if self.trust_region is not None:
+                n = float(np.sqrt((dG ** 2).sum() + (dc ** 2).sum()))
+                if n > self.trust_region:
+                    f = self.trust_region / max(n, 1e-12)
+                    dG, dc = dG * f, dc * f
+            self.pol.G += dG
+            self.pol.cell.p += dc
+            if self.theta_prior > 0:
+                self.pol.G *= (1.0 - self.alpha * self.theta_prior)
             self.pol.cell.clip()
             self.stats = {"delta": delta}
         self.prev = (self.pol.grads(gQ), q["value"])
