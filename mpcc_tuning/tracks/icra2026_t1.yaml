@@ -1,0 +1,7 @@
+image: ICRA_T1_SECOND_MAP_GOOD_01062026_1006_gimped.pgm
+mode: trinary
+resolution: 0.050
+origin: [-8.186, -3.240, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196

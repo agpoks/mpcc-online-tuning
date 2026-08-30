@@ -8,10 +8,10 @@
       "n": 5
     },
     "fixed": {
-      "covered": 23.653466082491732,
-      "sd": 2.5121479338940403e-15,
+      "covered": 32.929583163294765,
+      "sd": 0.0,
       "passes": 0.25,
-      "crashes": 0.25,
+      "crashes": 0.0,
       "n": 5
     },
     "mlp": {
@@ -32,174 +32,174 @@
   "runs": [
     {
       "arm": "fixed",
-      "seed": 0,
-      "covered": 23.653466082491732,
+      "seed": 2,
+      "covered": 32.929583163294765,
       "passes": 0.25,
-      "crashes": 0.25,
+      "crashes": 0.0,
       "rows": [
         {
           "ep": 0,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 1,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 2,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 3,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 3,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
           "ep": 4,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 5,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 6,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 7,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 7,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
           "ep": 8,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 9,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 10,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 11,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 11,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
           "ep": 12,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 13,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 14,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 15,
-          "covered": 45.606347524563134,
-          "off": false,
-          "failure": null,
-          "passes": 0
-        },
-        {
-          "ep": 16,
           "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 15,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 16,
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
+        },
+        {
           "ep": 17,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 18,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 19,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
+        },
+        {
+          "ep": 19,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
         }
       ],
-      "wall_s": 396.4
+      "wall_s": 944.6
     },
     {
       "arm": "fixed",
       "seed": 1,
-      "covered": 23.65346608249173,
+      "covered": 32.929583163294765,
       "passes": 0.25,
-      "crashes": 0.25,
+      "crashes": 0.0,
       "rows": [
         {
           "ep": 0,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 1,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 2,
@@ -217,17 +217,17 @@
         },
         {
           "ep": 4,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 5,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 6,
@@ -245,17 +245,17 @@
         },
         {
           "ep": 8,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 9,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 10,
@@ -273,17 +273,17 @@
         },
         {
           "ep": 12,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 13,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 14,
@@ -301,17 +301,17 @@
         },
         {
           "ep": 16,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 17,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 18,
@@ -328,157 +328,157 @@
           "passes": 0
         }
       ],
-      "wall_s": 400.0
+      "wall_s": 983.0
     },
     {
       "arm": "fixed",
-      "seed": 2,
-      "covered": 23.653466082491732,
+      "seed": 0,
+      "covered": 32.929583163294765,
       "passes": 0.25,
-      "crashes": 0.25,
+      "crashes": 0.0,
       "rows": [
         {
           "ep": 0,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 1,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 1,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
           "ep": 2,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 3,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 4,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 5,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 5,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
           "ep": 6,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 7,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 8,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 9,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 9,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
           "ep": 10,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 11,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 12,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 13,
-          "covered": 45.606347524563134,
+          "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 13,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
           "ep": 14,
-          "covered": 2.600361920260184,
+          "covered": 40.10558192401277,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
           "ep": 15,
-          "covered": 17.002366401701206,
-          "off": false,
-          "failure": null,
-          "passes": 0
-        },
-        {
-          "ep": 16,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 17,
           "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
-          "ep": 18,
+          "ep": 16,
           "covered": 2.600361920260184,
           "off": false,
           "failure": null,
           "passes": 0
         },
         {
+          "ep": 17,
+          "covered": 43.40604128434298,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 18,
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
+        },
+        {
           "ep": 19,
-          "covered": 17.002366401701206,
+          "covered": 45.606347524563134,
           "off": false,
           "failure": null,
           "passes": 0
         }
       ],
-      "wall_s": 400.4
+      "wall_s": 986.5
     },
     {
       "arm": "global",
@@ -628,7 +628,7 @@
           "passes": 1
         }
       ],
-      "wall_s": 725.5
+      "wall_s": 1366.0
     },
     {
       "arm": "mlp",
@@ -778,157 +778,7 @@
           "passes": 1
         }
       ],
-      "wall_s": 814.8
-    },
-    {
-      "arm": "global",
-      "seed": 1,
-      "covered": 42.03111088439302,
-      "passes": 1.25,
-      "crashes": 0.375,
-      "rows": [
-        {
-          "ep": 0,
-          "covered": 3.0011136008005668,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 1,
-          "covered": 55.80776736558383,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 2,
-          "covered": 33.20531744382264,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 3,
-          "covered": 3.1011275208105733,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 4,
-          "covered": 3.0011136008005668,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 5,
-          "covered": 55.70775344557382,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 6,
-          "covered": 32.5052200037526,
-          "off": true,
-          "failure": "collision",
-          "passes": 0
-        },
-        {
-          "ep": 7,
-          "covered": 2.9010996807905594,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 8,
-          "covered": 55.707753445573815,
-          "off": false,
-          "failure": null,
-          "passes": 2
-        },
-        {
-          "ep": 9,
-          "covered": 55.90778128559384,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 10,
-          "covered": 55.50772560555381,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 11,
-          "covered": 56.10780912561384,
-          "off": false,
-          "failure": null,
-          "passes": 2
-        },
-        {
-          "ep": 12,
-          "covered": 56.307836965633854,
-          "off": false,
-          "failure": null,
-          "passes": 2
-        },
-        {
-          "ep": 13,
-          "covered": 55.907781285593856,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 14,
-          "covered": 33.705387043872676,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
-        },
-        {
-          "ep": 15,
-          "covered": 3.301155360830588,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 16,
-          "covered": 55.90778128559383,
-          "off": false,
-          "failure": null,
-          "passes": 2
-        },
-        {
-          "ep": 17,
-          "covered": 55.30769776553382,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 18,
-          "covered": 55.40771168554379,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 19,
-          "covered": 20.4035356825418,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        }
-      ],
-      "wall_s": 867.7
+      "wall_s": 1465.0
     },
     {
       "arm": "global",
@@ -1078,7 +928,157 @@
           "passes": 1
         }
       ],
-      "wall_s": 873.0
+      "wall_s": 1486.1
+    },
+    {
+      "arm": "global",
+      "seed": 1,
+      "covered": 42.03111088439302,
+      "passes": 1.25,
+      "crashes": 0.375,
+      "rows": [
+        {
+          "ep": 0,
+          "covered": 3.0011136008005668,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 1,
+          "covered": 55.80776736558383,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 2,
+          "covered": 33.20531744382264,
+          "off": true,
+          "failure": "collision",
+          "passes": 1
+        },
+        {
+          "ep": 3,
+          "covered": 3.1011275208105733,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 4,
+          "covered": 3.0011136008005668,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 5,
+          "covered": 55.70775344557382,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 6,
+          "covered": 32.5052200037526,
+          "off": true,
+          "failure": "collision",
+          "passes": 0
+        },
+        {
+          "ep": 7,
+          "covered": 2.9010996807905594,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 8,
+          "covered": 55.707753445573815,
+          "off": false,
+          "failure": null,
+          "passes": 2
+        },
+        {
+          "ep": 9,
+          "covered": 55.90778128559384,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 10,
+          "covered": 55.50772560555381,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 11,
+          "covered": 56.10780912561384,
+          "off": false,
+          "failure": null,
+          "passes": 2
+        },
+        {
+          "ep": 12,
+          "covered": 56.307836965633854,
+          "off": false,
+          "failure": null,
+          "passes": 2
+        },
+        {
+          "ep": 13,
+          "covered": 55.907781285593856,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 14,
+          "covered": 33.705387043872676,
+          "off": true,
+          "failure": "collision",
+          "passes": 1
+        },
+        {
+          "ep": 15,
+          "covered": 3.301155360830588,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 16,
+          "covered": 55.90778128559383,
+          "off": false,
+          "failure": null,
+          "passes": 2
+        },
+        {
+          "ep": 17,
+          "covered": 55.30769776553382,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 18,
+          "covered": 55.40771168554379,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 19,
+          "covered": 20.4035356825418,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        }
+      ],
+      "wall_s": 1497.0
     },
     {
       "arm": "ltc",
@@ -1228,7 +1228,7 @@
           "passes": 1
         }
       ],
-      "wall_s": 882.2
+      "wall_s": 1541.2
     },
     {
       "arm": "mlp",
@@ -1378,7 +1378,7 @@
           "passes": 2
         }
       ],
-      "wall_s": 929.0
+      "wall_s": 1577.3
     },
     {
       "arm": "ltc",
@@ -1528,14 +1528,14 @@
           "passes": 1
         }
       ],
-      "wall_s": 1024.7
+      "wall_s": 1695.1
     },
     {
       "arm": "fixed",
       "seed": 3,
-      "covered": 23.65346608249173,
+      "covered": 32.929583163294765,
       "passes": 0.25,
-      "crashes": 0.25,
+      "crashes": 0.0,
       "rows": [
         {
           "ep": 0,
@@ -1553,17 +1553,17 @@
         },
         {
           "ep": 2,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 3,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 4,
@@ -1581,17 +1581,17 @@
         },
         {
           "ep": 6,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 7,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 8,
@@ -1609,17 +1609,17 @@
         },
         {
           "ep": 10,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 11,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 12,
@@ -1637,17 +1637,17 @@
         },
         {
           "ep": 14,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 15,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 16,
@@ -1665,20 +1665,20 @@
         },
         {
           "ep": 18,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 19,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         }
       ],
-      "wall_s": 400.8
+      "wall_s": 732.9
     },
     {
       "arm": "ltc",
@@ -1828,7 +1828,7 @@
           "passes": 1
         }
       ],
-      "wall_s": 763.9
+      "wall_s": 1196.6
     },
     {
       "arm": "mlp",
@@ -1978,14 +1978,14 @@
           "passes": 1
         }
       ],
-      "wall_s": 863.6
+      "wall_s": 1427.5
     },
     {
       "arm": "fixed",
       "seed": 4,
-      "covered": 23.653466082491732,
+      "covered": 32.929583163294765,
       "passes": 0.25,
-      "crashes": 0.25,
+      "crashes": 0.0,
       "rows": [
         {
           "ep": 0,
@@ -1996,17 +1996,17 @@
         },
         {
           "ep": 1,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 2,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 3,
@@ -2024,17 +2024,17 @@
         },
         {
           "ep": 5,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 6,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 7,
@@ -2052,17 +2052,17 @@
         },
         {
           "ep": 9,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 10,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 11,
@@ -2080,17 +2080,17 @@
         },
         {
           "ep": 13,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 14,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 15,
@@ -2108,17 +2108,17 @@
         },
         {
           "ep": 17,
-          "covered": 17.002366401701206,
+          "covered": 43.40604128434298,
           "off": false,
           "failure": null,
-          "passes": 0
+          "passes": 1
         },
         {
           "ep": 18,
-          "covered": 29.404788483442395,
-          "off": true,
-          "failure": "collision",
-          "passes": 1
+          "covered": 40.10558192401277,
+          "off": false,
+          "failure": null,
+          "passes": 0
         },
         {
           "ep": 19,
@@ -2128,7 +2128,7 @@
           "passes": 0
         }
       ],
-      "wall_s": 396.1
+      "wall_s": 869.8
     },
     {
       "arm": "global",
@@ -2278,157 +2278,7 @@
           "passes": 1
         }
       ],
-      "wall_s": 930.7
-    },
-    {
-      "arm": "mlp",
-      "seed": 3,
-      "covered": 32.667394623518675,
-      "passes": 1.0,
-      "crashes": 0.5,
-      "rows": [
-        {
-          "ep": 0,
-          "covered": 55.20768384552379,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 1,
-          "covered": 31.205039043622513,
-          "off": true,
-          "failure": "off_track",
-          "passes": 2
-        },
-        {
-          "ep": 2,
-          "covered": 56.40785088564387,
-          "off": false,
-          "failure": null,
-          "passes": 2
-        },
-        {
-          "ep": 3,
-          "covered": 55.70775344557384,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 4,
-          "covered": 29.504802403452402,
-          "off": true,
-          "failure": "collision",
-          "passes": 0
-        },
-        {
-          "ep": 5,
-          "covered": 3.2011414408205816,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 6,
-          "covered": 2.601057920760539,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 7,
-          "covered": 55.80776736558384,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 8,
-          "covered": 34.40548448394272,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 9,
-          "covered": 2.801085760780553,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 10,
-          "covered": 2.401030080740524,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 11,
-          "covered": 55.80776736558384,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 12,
-          "covered": 29.904858083492428,
-          "off": true,
-          "failure": "collision",
-          "passes": 0
-        },
-        {
-          "ep": 13,
-          "covered": 2.601057920760539,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 14,
-          "covered": 56.007795205603855,
-          "off": false,
-          "failure": null,
-          "passes": 2
-        },
-        {
-          "ep": 15,
-          "covered": 55.50772560555383,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 16,
-          "covered": 55.707753445573815,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        },
-        {
-          "ep": 17,
-          "covered": 3.2011414408205816,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 18,
-          "covered": 2.9010996807905594,
-          "off": true,
-          "failure": "off_track",
-          "passes": 1
-        },
-        {
-          "ep": 19,
-          "covered": 55.50772560555382,
-          "off": false,
-          "failure": null,
-          "passes": 1
-        }
-      ],
-      "wall_s": 760.0
+      "wall_s": 1617.4
     },
     {
       "arm": "ltc",
@@ -2578,7 +2428,157 @@
           "passes": 1
         }
       ],
-      "wall_s": 763.4
+      "wall_s": 1523.7
+    },
+    {
+      "arm": "mlp",
+      "seed": 3,
+      "covered": 32.667394623518675,
+      "passes": 1.0,
+      "crashes": 0.5,
+      "rows": [
+        {
+          "ep": 0,
+          "covered": 55.20768384552379,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 1,
+          "covered": 31.205039043622513,
+          "off": true,
+          "failure": "off_track",
+          "passes": 2
+        },
+        {
+          "ep": 2,
+          "covered": 56.40785088564387,
+          "off": false,
+          "failure": null,
+          "passes": 2
+        },
+        {
+          "ep": 3,
+          "covered": 55.70775344557384,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 4,
+          "covered": 29.504802403452402,
+          "off": true,
+          "failure": "collision",
+          "passes": 0
+        },
+        {
+          "ep": 5,
+          "covered": 3.2011414408205816,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 6,
+          "covered": 2.601057920760539,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 7,
+          "covered": 55.80776736558384,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 8,
+          "covered": 34.40548448394272,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 9,
+          "covered": 2.801085760780553,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 10,
+          "covered": 2.401030080740524,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 11,
+          "covered": 55.80776736558384,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 12,
+          "covered": 29.904858083492428,
+          "off": true,
+          "failure": "collision",
+          "passes": 0
+        },
+        {
+          "ep": 13,
+          "covered": 2.601057920760539,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 14,
+          "covered": 56.007795205603855,
+          "off": false,
+          "failure": null,
+          "passes": 2
+        },
+        {
+          "ep": 15,
+          "covered": 55.50772560555383,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 16,
+          "covered": 55.707753445573815,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        },
+        {
+          "ep": 17,
+          "covered": 3.2011414408205816,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 18,
+          "covered": 2.9010996807905594,
+          "off": true,
+          "failure": "off_track",
+          "passes": 1
+        },
+        {
+          "ep": 19,
+          "covered": 55.50772560555382,
+          "off": false,
+          "failure": null,
+          "passes": 1
+        }
+      ],
+      "wall_s": 1546.5
     },
     {
       "arm": "global",
@@ -2728,7 +2728,7 @@
           "passes": 0
         }
       ],
-      "wall_s": 780.9
+      "wall_s": 1621.1
     },
     {
       "arm": "ltc",
@@ -2878,7 +2878,7 @@
           "passes": 1
         }
       ],
-      "wall_s": 693.5
+      "wall_s": 1555.9
     },
     {
       "arm": "mlp",
@@ -3028,7 +3028,7 @@
           "passes": 1
         }
       ],
-      "wall_s": 811.1
+      "wall_s": 1709.4
     }
   ]
 }

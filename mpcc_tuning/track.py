@@ -258,8 +258,15 @@ class Track:
         raw = raw[::max(int(stride), 1)]
         xy = raw[:, :2] * float(scale)
         if half_width is None:
-            half_width = float(np.min(raw[:, 2:4])) * float(scale) if raw.shape[1] >= 4 \
-                else 0.75
+            # A low PERCENTILE, not the strict minimum. An extracted centreline
+            # has pinch points -- a single sample where the corridor momentarily
+            # measures 0.10 m on a track whose median is 1.00 m -- and taking
+            # the minimum hands the controller a corridor narrower than the car
+            # (half-width 0.12 m), which is unsatisfiable everywhere. The
+            # percentile is still conservative: it is narrower than 90% of the
+            # lap. Pass half_width explicitly to override.
+            half_width = (float(np.percentile(raw[:, 2:4], 10.0)) * float(scale)
+                          if raw.shape[1] >= 4 else 0.75)
         return Track(xy[:, 0], xy[:, 1], half_width, ds=ds)
 
     @staticmethod
@@ -323,6 +330,25 @@ class Track:
         above is the trustworthy measurement.
         """
         here = Path(__file__).resolve().parent / "tracks" / "icra2025_centerline.csv"
+        return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)
+
+    @staticmethod
+    def icra2026_t1(scale: float = 1.0, half_width: float | None = None,
+                    ds: float = 0.1) -> "Track":
+        """ICRA 2026 Track 1, outer loop, from the competition occupancy grid.
+
+        69.3 m, 1.00 m median half-width, extracted at 100% inside the corridor
+        and closing to 0.07 m.
+
+        **The corridor branches**, so it has no unique centreline -- an outer
+        ring plus an inner section, and "the" centreline of a branching
+        corridor is a choice of route rather than a property of the geometry.
+        Three methods failed on exactly that before the framing changed: a loop
+        is named by the *hole it encircles*, so choosing the hole chooses the
+        loop. See ``centerline_around`` in ``tools/centerline_from_map.py``.
+        The inner loop is ``hole_rank=1`` (16.2 m) if it is ever wanted.
+        """
+        here = Path(__file__).resolve().parent / "tracks" / "icra2026_t1_centerline.csv"
         return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)
 
     @staticmethod
