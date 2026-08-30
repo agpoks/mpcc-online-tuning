@@ -479,22 +479,30 @@ class PolicyTuner:
 def fixed_schedule(feat, theta0):
     """The hand-written control the gate requires beating.
 
-    A lookup, not a learner: if an opponent is close and the pass is physically
-    available, use the measured *aggressive overtake* weights; otherwise the
-    *follow* ones. Both come from ``experiments/overtake_or_follow.py``, where
-    the behaviour boundary is the ratio q_v/q_c and the safe pass is
-    (q_v, q_c) = (2.0, 1.0) against a follow at (0.5, 10.0).
+    A lookup, not a learner. It sees the **same features the networks see**,
+    including the opponent class -- withholding one from the baseline and then
+    beating it would measure the handicap, not the policy.
 
-    It commits on a single frame and has no idea how fast it is closing, which
-    is precisely the defect a recurrent policy is supposed to fix.
+    The rule is the obvious one a driver would write down: pass a stopped
+    object or a slower car when the manoeuvre is available; never attempt it
+    against a car that is faster, because you are being caught rather than
+    catching; and against an equal car only when the gap is genuinely open.
+
+    It commits on a single frame, which is precisely the defect a recurrent
+    policy is supposed to fix.
     """
-    gap_brake, avail = feat[6], feat[7]
-    th = np.array(theta0, float)
-    if gap_brake < 0.6 and avail > 0.0:
-        th[0], th[2] = np.log(1.0), np.log(2.0)     # q_c, q_v -- overtake
-    else:
-        th[0], th[2] = np.log(10.0), np.log(0.5)    # follow
-    return th
+    gap_m, avail = float(feat[8]), float(feat[7])
+    cls = int(np.argmax(feat[14:18])) if len(feat) >= 18 else 1
+    close = gap_m < 0.6
+    if cls == 0:                       # static: must go around or park
+        want = close
+    elif cls == 1:                     # slower: pass when available
+        want = close and avail > 0.0
+    elif cls == 2:                     # equal: only with room to spare
+        want = close and avail > 0.35
+    else:                              # faster: never
+        want = False
+    return behaviour_theta("overtake" if want else "follow", "neutral", theta0)
 
 
 # --------------------------------------------------------------------------

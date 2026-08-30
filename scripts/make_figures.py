@@ -617,7 +617,11 @@ def fig_adaptation():
              max_iter=60, max_obstacles=1)
     cell = LTCCell(N_FEATURES, 12, seed=0)
     pol = WeightPolicy(cell, theta0, THETA_LO, THETA_HI, seed=0)
-    tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0, seed=0)
+    # Same configuration as experiments/ltc_behaviour.py. The figure had its
+    # own PolicyTuner without the trust region and prior, so it kept drawing
+    # the runaway after the experiment had stopped exhibiting it.
+    tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
+                        seed=0, trust_region=0.01, theta_prior=0.5)
 
     ep_ratio, ep_cov, last = [], [], None
     for ep in range(12):

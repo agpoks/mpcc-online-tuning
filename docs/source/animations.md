@@ -63,6 +63,38 @@ This is the mismatch the tuning is supposed to absorb, and
 region exists — every open-loop run with `r_d=10` completes 400 steps — and the
 online tuner does not reach it from the bicycle plant's initialisation.
 
+## Two cost weights decide whether the car passes
+
+```{image} _static/anim/mpcc_behaviour.gif
+:alt: follow and overtake side by side against the same opponent
+:width: 100%
+```
+
+The same controller, the same opponent, the same track. The only difference is
+`q_v/q_c` — below 1 on the left, above it on the right — and the keep-out
+circle is drawn rather than implied, because an animation showing a car
+swerving without showing what it swerves around has hidden the mechanism.
+
+Measured: **13.0 m following against 40.3 m overtaking**, neither crashing. The
+live readout carries the ratio, so the number crossing 1.0 *is* the decision
+being made.
+
+## A stopped car is not a slow car
+
+```{image} _static/anim/mpcc_static_vs_dynamic.gif
+:alt: the same weights following a moving car, and parking behind a stopped one
+:width: 100%
+```
+
+**Identical weights**, and the only difference is whether the obstacle is going
+anywhere. Following a moving car works (13.0 m). Following a *stopped* one is
+not caution, it is stopping — 2.6 m, and the episode simply times out.
+
+This is why "stay behind" has to be conditioned on a classification, and why
+that classification cannot come from a single frame: a stopped car and a slow
+car are identical in one observation, and only their positions over time
+differ. See [the behaviour policy](behaviour_policy.md).
+
 ## The tuner, tuning
 
 ```{image} _static/anim/mpcc_tuning.gif
