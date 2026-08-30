@@ -64,6 +64,7 @@ from mpcc_tuning.mpcc import WEIGHT_NAMES
 def build_ocp(track, horizon: int = 12, dt: float = 0.15,
               car_half_width: float = 0.12, max_obstacles: int = 0,
               obs_margin: float = 0.15, spline_mode: str = "parameter",
+              obs_shape: str = "circle", car_half_length: float = 0.285,
               name: str = "mpcc_tuning"):
     """The MPCC as an :class:`AcadosOcp`.
 
@@ -107,7 +108,8 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         pos = track.pos(s)
         ref_x, ref_y = pos[0], pos[1]
         phi = track.tangent_angle(s)
-    obs = ca.SX.sym("obs", 3 * max_obstacles) if max_obstacles else None
+    stride = 3 if obs_shape == "circle" else 4
+    obs = ca.SX.sym("obs", stride * max_obstacles) if max_obstacles else None
     if obs is not None:
         p_list.append(obs)
     model.p = ca.vertcat(*p_list)
@@ -124,9 +126,22 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
 
     h = [e_c]                                  # corridor, as in the NLP
     for j in range(max_obstacles):
-        ox, oy, r_raw = obs[3 * j], obs[3 * j + 1], obs[3 * j + 2]
+        ox, oy, r_raw = obs[stride * j], obs[stride * j + 1], obs[stride * j + 2]
         r_eff = r_raw + obs_margin             # inactive slot: r_raw = -margin
-        h.append((px - ox) ** 2 + (py - oy) ** 2 - r_eff ** 2)
+        dx, dy = px - ox, py - oy
+        if obs_shape == "circle":
+            h.append(dx ** 2 + dy ** 2 - r_eff ** 2)
+        else:
+            # Same ellipse as mpcc_tuning/mpcc.py: in the opponent's frame,
+            # (u/a)^2 + (v/b)^2 >= 1, scaled by a*b so the row keeps the units
+            # of the circular one and the slack weights stay comparable.
+            psi_o = obs[stride * j + 3]
+            cu, su = ca.cos(psi_o), ca.sin(psi_o)
+            u_ax = cu * dx + su * dy
+            v_ax = -su * dx + cu * dy
+            a_e = r_eff + car_half_length
+            b_e = r_eff * (car_half_width / max(car_half_length, 1e-9)) + car_half_width
+            h.append(((u_ax / a_e) ** 2 + (v_ax / b_e) ** 2 - 1.0) * (a_e * b_e))
     model.con_h_expr = ca.vertcat(*h)
     nh = len(h)
 
@@ -166,11 +181,12 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     ocp.cost.Zl = Z.copy(); ocp.cost.Zu = Z.copy()
     ocp.cost.zl = z.copy(); ocp.cost.zu = z.copy()
 
-    n_p = n_th + (3 if spline_mode == "parameter" else 0) + 3 * max_obstacles
+    n_p = n_th + (3 if spline_mode == "parameter" else 0) + stride * max_obstacles
     ocp.parameter_values = np.zeros(n_p)
     if max_obstacles:
-        ocp.parameter_values[-3 * max_obstacles:] = np.tile(
-            [0.0, 0.0, -obs_margin], max_obstacles)
+        off = ([0.0, 0.0, -obs_margin] if obs_shape == "circle"
+               else [0.0, 0.0, -obs_margin, 0.0])
+        ocp.parameter_values[-stride * max_obstacles:] = np.tile(off, max_obstacles)
 
     ocp.solver_options.integrator_type = "ERK"
     ocp.solver_options.sim_method_num_stages = 4
@@ -188,7 +204,8 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
 
 
 def pack_params(theta, track=None, s_nodes=None, obstacles=(), max_obstacles=0,
-                obs_margin: float = 0.15, spline_mode: str = "parameter"):
+                obs_margin: float = 0.15, spline_mode: str = "parameter",
+                obs_shape: str = "circle"):
     """Per-stage parameter vectors: ``[theta | ref (3) | obstacles (3M)]``.
 
     In ``parameter`` mode the reference point is sampled at the *predicted*
@@ -196,7 +213,9 @@ def pack_params(theta, track=None, s_nodes=None, obstacles=(), max_obstacles=0,
     can no longer move its own reference within a solve.
     """
     theta = np.asarray(theta, float)
-    obs = np.tile([0.0, 0.0, -obs_margin], (max_obstacles, 1))
+    off = ([0.0, 0.0, -obs_margin] if obs_shape == "circle"
+           else [0.0, 0.0, -obs_margin, 0.0])
+    obs = np.tile(off, (max_obstacles, 1))
     for i, o in enumerate(list(obstacles)[:max_obstacles]):
         obs[i] = o
     obs = obs.ravel()

@@ -107,7 +107,8 @@ class MPCC:
     def __init__(self, track, model: KinematicBicycle | None = None, horizon: int = 20,
                  dt: float = 0.1, car_half_width: float = 0.12, max_iter: int = 60,
                  max_obstacles: int = 0, obs_margin: float = 0.15,
-                 obs_slack: tuple = (200.0, 5.0)):
+                 obs_slack: tuple = (200.0, 5.0), obs_shape: str = "circle",
+                 car_half_length: float = 0.285):
         self.track = track
         self.model = model or KinematicBicycle(dt=dt)
         self.N, self.dt = int(horizon), float(dt)
@@ -121,7 +122,19 @@ class MPCC:
         # (quadratic, linear) slack penalty -- acados' Zl and zl. The template
         # uses 200 / 5 for the obstacle rows; kept, so the two agree.
         self.obs_Z, self.obs_z = (float(v) for v in obs_slack)
-        self._obstacles = np.zeros((0, 3))
+        # A car is about 0.57 x 0.30 m -- nearly twice as long as it is wide --
+        # so a circular keep-out is conservative along the flanks and optimistic
+        # at the corners. That is exactly backwards for overtaking, which
+        # happens side by side. An ellipse aligned with the opponent's heading
+        # costs one rotation and is still smooth.
+        if obs_shape not in ("circle", "ellipse"):
+            raise ValueError("obs_shape must be 'circle' or 'ellipse'")
+        self.obs_shape = obs_shape
+        self.car_half_length = float(car_half_length)
+        self.car_half_width = float(car_half_width)
+        #: (x, y, r) per obstacle for a circle; (x, y, r, psi) for an ellipse.
+        self.obs_stride = 3 if obs_shape == "circle" else 4
+        self._obstacles = np.zeros((0, self.obs_stride))
         self._build(max_iter)
         self._w0 = None   # warm start
 
@@ -135,7 +148,7 @@ class MPCC:
         theta = ca.MX.sym("theta", self.n_theta)
         # Obstacles as runtime parameters, [ox, oy, r_raw] each, and one slack
         # per obstacle per shooting node from k=1 (stage 0 is pinned to x0).
-        obs = ca.MX.sym("obs", 3 * M)
+        obs = ca.MX.sym("obs", self.obs_stride * M)
         S = ca.MX.sym("S", M, N)
         p = ca.vertcat(x0, theta, obs) if M else ca.vertcat(x0, theta)
         w = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
@@ -169,11 +182,33 @@ class MPCC:
             # with inactive obstacles passed as r_raw = -obs_margin so r_eff is
             # exactly zero -- no max() and so no kink in the NLP.
             for j in range(M):
-                ox, oy, r_raw = obs[3 * j], obs[3 * j + 1], obs[3 * j + 2]
+                st = self.obs_stride
+                ox, oy, r_raw = obs[st * j], obs[st * j + 1], obs[st * j + 2]
                 r_eff = r_raw + self.obs_margin
-                dist2 = (X[0, k + 1] - ox) ** 2 + (X[1, k + 1] - oy) ** 2
+                dx, dy = X[0, k + 1] - ox, X[1, k + 1] - oy
                 s_kj = S[j, k]
-                g.append(dist2 - r_eff ** 2 + s_kj)
+                if self.obs_shape == "circle":
+                    h_j = dx ** 2 + dy ** 2 - r_eff ** 2
+                else:
+                    # In the opponent's frame: u along its heading, w across.
+                    # (u/a)^2 + (w/b)^2 >= 1, with the ego's own body added to
+                    # both semi-axes so the constraint is between two rectangles
+                    # rather than between a point and one.
+                    psi_o = obs[st * j + 3]
+                    cu, su = ca.cos(psi_o), ca.sin(psi_o)
+                    # NOT `w`: that is the decision vector, and shadowing it
+                    # here makes nlp={"x": w} a scalar expression, which CasADi
+                    # reports as "argument 0(x) is not symbolic" from inside
+                    # nlpsol rather than at the assignment.
+                    u_ax = cu * dx + su * dy
+                    v_ax = -su * dx + cu * dy
+                    a = r_eff + self.car_half_length
+                    b = r_eff * (self.car_half_width / max(self.car_half_length, 1e-9)) \
+                        + self.car_half_width
+                    # Scaled by a*b so the row has the units of the circular one
+                    # (squared distance) and the slack penalty Z is comparable.
+                    h_j = ((u_ax / a) ** 2 + (v_ax / b) ** 2 - 1.0) * (a * b)
+                g.append(h_j + s_kj)
                 lbg.append(0.0)
                 ubg.append(ca.inf)
                 # acados' Zl (quadratic) and zl (linear) on the same row,
@@ -233,7 +268,7 @@ class MPCC:
         have to carry it. That is also how the acados version passes them: as
         stage parameters set once per tick.
         """
-        obs = np.asarray(list(obstacles), float).reshape(-1, 3)
+        obs = np.asarray(list(obstacles), float).reshape(-1, self.obs_stride)
         if len(obs) > self.max_obstacles:
             raise ValueError(
                 f"{len(obs)} obstacles but the OCP was built for "
@@ -248,7 +283,9 @@ class MPCC:
         Same trick as the acados template, and for the same reason: it avoids a
         ``max(0, .)`` in the NLP.
         """
-        q = np.tile([0.0, 0.0, -self.obs_margin], (self.max_obstacles, 1))
+        off = ([0.0, 0.0, -self.obs_margin] if self.obs_shape == "circle"
+               else [0.0, 0.0, -self.obs_margin, 0.0])
+        q = np.tile(off, (self.max_obstacles, 1))
         if len(self._obstacles):
             q[:len(self._obstacles)] = self._obstacles
         return q.ravel()

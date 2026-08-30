@@ -197,3 +197,53 @@ def test_plant_without_opponents_is_unchanged(track):
     for _ in range(20):
         _s, _r, off, _tr = P.step(np.array([0.0, 0.5, 1.0]))
     assert not off and P.failure is None
+
+
+# -- elliptical keep-out ---------------------------------------------------
+
+def test_ellipse_semi_axes_beat_a_circle_where_it_matters(track):
+    """A car is twice as long as it is wide, so a circle is wrong both ways.
+
+    Alongside -- which is where overtaking happens -- a circle inscribing the
+    car's length is far too conservative; nose-to-tail it is optimistic. The
+    ellipse is the point of the exercise, so the asymmetry is asserted.
+    """
+    m = MPCC(track, model=KinematicBicycle(dt=0.15), horizon=12, dt=0.15,
+             max_obstacles=1, obs_shape="ellipse")
+    r = 0.20
+    a = r + m.obs_margin + m.car_half_length
+    b = (r + m.obs_margin) * (m.car_half_width / m.car_half_length) + m.car_half_width
+    assert a > 2.0 * b, f"semi-axes {a:.3f} along vs {b:.3f} across"
+    circle = r + m.obs_margin
+    assert b < circle < a, "the circle should sit between the two semi-axes"
+
+
+def test_ellipse_orientation_is_used(track):
+    """Rotating the opponent must move the constraint, or psi is being ignored."""
+    import numpy as np
+    m = MPCC(track, model=KinematicBicycle(dt=0.15), horizon=12, dt=0.15,
+             max_obstacles=1, obs_shape="ellipse")
+    # Close, and big enough that the constraint actually binds. At 1.8 m with
+    # r=0.2 the ellipse is inactive in every orientation, and the plans then
+    # match for a trivial reason -- which is what the first version of this
+    # test measured.
+    ox, oy = np.array(track.pos(1.6)).ravel()
+    state = start_state(track)
+    theta = MPCCWeights(q_c=0.3, q_v=2.0).to_log()
+    outs = []
+    for psi_o in (0.0, np.pi / 2):
+        m.reset()
+        m.set_obstacles([(ox, oy, 0.55, psi_o)])
+        sol = m.value(state, theta)
+        assert sol["ok"]
+        outs.append(sol["w"][:m._nx].reshape(5, m.N + 1, order="F")[:2].copy())
+    assert np.abs(outs[0] - outs[1]).max() > 1e-4, \
+        "the plan is identical for a 90-degree rotation: psi is not entering"
+
+
+def test_circle_mode_is_unchanged_by_the_ellipse_work(track):
+    """The default must still be the circle, with its three-number obstacles."""
+    m = MPCC(track, model=KinematicBicycle(dt=0.15), horizon=12, dt=0.15,
+             max_obstacles=2)
+    assert m.obs_shape == "circle" and m.obs_stride == 3
+    assert m._p_sym.shape[0] == 5 + len(WEIGHT_NAMES) + 3 * 2
