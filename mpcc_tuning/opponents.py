@@ -30,6 +30,60 @@ from __future__ import annotations
 import numpy as np
 
 
+class ObstacleTracker:
+    """Estimate whether an obstacle is moving, from its positions alone.
+
+    This exists because **"stay behind" is only a behaviour if the obstacle is
+    dynamic.** Against a static one -- a cone, a stopped car, debris -- staying
+    behind means stopping forever, and the only options are to go around or to
+    park. So the posture has to be conditioned on a classification, and that
+    classification is not given.
+
+    **It cannot be made from one frame.** A stopped car and a slow car are
+    identical in a single observation; only their positions *over time* differ.
+    That makes static-versus-dynamic a genuinely temporal decision, and unlike a
+    closing rate it gates the entire behaviour choice rather than tuning it.
+
+    On the vehicle this is what ``datmo`` (detection and tracking of moving
+    objects) provides, with the same caveats: it is an *estimate*, it is late,
+    and it is sometimes wrong. Here it is an exponentially-weighted speed over
+    observed positions -- the crudest thing that works, and honest about being
+    an estimate rather than the true ``Opponent.speed``.
+    """
+
+    def __init__(self, dt: float, tau: float = 0.4, moving_thresh: float = 0.25):
+        self.dt, self.a = float(dt), float(np.exp(-float(dt) / max(tau, 1e-6)))
+        self.moving_thresh = float(moving_thresh)
+        self.reset()
+
+    def reset(self) -> None:
+        self._prev = None
+        self.speed = 0.0
+        self.n = 0
+
+    def update(self, xy) -> float:
+        """One observation. Returns the current speed estimate."""
+        q = np.asarray(xy, float)[:2]
+        if self._prev is not None:
+            v = float(np.linalg.norm(q - self._prev) / self.dt)
+            self.speed = self.a * self.speed + (1.0 - self.a) * v
+            self.n += 1
+        self._prev = q
+        return self.speed
+
+    @property
+    def is_dynamic(self) -> bool:
+        """``True`` once the evidence says it is moving.
+
+        Deliberately requires a few observations: with ``n`` small the estimate
+        is one finite difference, and a single noisy frame would flip the whole
+        behaviour. That warm-up is the cost of the decision being temporal, and
+        it is not an implementation detail -- it is what a one-frame policy
+        cannot pay.
+        """
+        return self.n >= 3 and self.speed > self.moving_thresh
+
+
 class Opponent:
     """A car driving the centreline at constant speed, at a fixed offset."""
 

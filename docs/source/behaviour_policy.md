@@ -170,3 +170,60 @@ Two things gate that, and neither is about the network:
 
 So: multiple cars on the bicycle plant now; multiple cars on `scuderia` after
 item 4.
+
+
+## Measured: the behaviours, on a circuit we did not design
+
+`experiments/behaviour_modes.py`, on the Red Bull Ring at F1TENTH's 1:10
+scaling (`Track.spielberg()`, public `f1tenth_racetracks` data, see
+`mpcc_tuning/tracks/PROVENANCE.md`).
+
+The synthetic `circuit` could not be used for this. Its tightest corner admits
+3.9 m/s against the car's 4.0 m/s cap, so the car sits flat out for the whole
+lap and every weight setting lands within 1 m of every other. Spielberg's
+tightest corner admits 2.5 m/s, so the controller *must* modulate speed — three
+weight settings gave 45.9, 54.3 and 57.6 m.
+
+| posture | aggression | covered | passes | switches |
+|---|---|---|---|---|
+| stay behind | cautious / neutral / aggressive | 33.6 / 34.7 / 34.7 m | 0.00 | 0 / 0 / 0 |
+| overtake when safe | cautious / neutral / aggressive | 33.6 / 54.7 / **74.6** m | 0.00 / 0.67 / **1.00** | 1.3 / 2.0 / 2.0 |
+| always try | cautious / neutral / aggressive | 33.6 / 54.7 / **74.6** m | 0.00 / 0.67 / **1.00** | 0.7 / 1.7 / 2.0 |
+
+Zero collisions in 27 runs; closest approach +0.056 m outside the keep-out.
+
+**The behaviours are expressible and the effect is large** — 34 m following
+against 74.6 m overtaking, 2.2×, no crashes, from two cost weights with the
+MPCC enforcing every constraint unchanged.
+
+**But aggression is the axis that decides the outcome, and the posture is
+not.** The two overtaking postures differ in what they *decide* — the switch
+counts separate, so the availability gate does fire — and are identical in what
+they *achieve*. That is a criticism of the experiment, not of the policy: one
+slower car on a wide circuit makes a pass almost always available, so "when
+safe" and "always" should coincide. **So this establishes that a weight policy
+can express overtaking, and not that it can express *safe* overtaking.**
+Separating them needs a case where the pass is genuinely unavailable.
+
+### Three defects, and the one that mattered
+
+Each was silent and each produced a plausible table.
+
+**Aggression crossed the behaviour boundary.** Scaling `q_c` and `q_v`
+oppositely put "cautious overtake" at ratio 0.71 — below 1, so it followed.
+Measured, it was byte-identical to never passing.
+
+**The safety ceiling and the aggression dial collided.** With `q_v` clipped at
+the measured ceiling, aggressive and neutral overtaking became the same
+weights. Aggression above neutral now acts on `q_c` instead.
+
+**The engagement test was denominated in braking distance**, which vanishes at
+low speed. At 1.4 m/s it demanded a 0.54 m gap while the keep-out holds the car
+at 1.04 m — it asked for a proximity the safety constraint forbids — and fired
+on **0 of 400 ticks**.
+
+Only the third mattered, and the first two were fixed *first*: the table did
+not move, and re-running is what showed the diagnosis was wrong. A
+safety-relevant component that is silently inert reads as working rather than
+as broken, which is the same failure this project already records for its
+[safety filters](filters.md) — *a wrong filter intervenes less, not more.*

@@ -53,6 +53,13 @@ oval alone suggests --- situation-dependent weights pay when part of the lap
 rewards the wrong thing, and cost a little when it does not --- and we identify
 the fraction of the lap that is straight as the variable that decides which.
 
+On a published circuit --- the Red Bull Ring at F1TENTH scaling --- the same
+weights express the behaviours directly: following covers \SI{34}{\meter} and
+overtaking \SI{74.6}{\meter}, $2.2\times$, with no crashes. Aggression is the
+axis that decides the outcome; the overtaking \emph{posture} changes the
+decision and not the result, so we establish that a weight policy expresses
+overtaking and \emph{not} that it expresses safe overtaking.
+
 Two further results are unconditional. Adding a soft obstacle keep-out makes
 overtake-versus-follow expressible at all, and it is then governed by a
 \emph{ratio} of two weights: across two decades in each, every setting with
@@ -308,6 +315,92 @@ run.
   \label{fig:overtake}
 \end{figure}
 
+\section{The behaviours, on a circuit we did not design}\label{sec:behaviour}
+
+Every track above is synthetic and built here, and Section~\ref{sec:circuit} is
+itself a demonstration that a conclusion can reverse between two such tracks. We
+therefore repeat the behaviour measurement on the Red Bull Ring at
+F1TENTH's 1:10 scaling, from the public \texttt{f1tenth\_racetracks} data.
+
+The choice is not only about provenance. On our synthetic circuit the tightest
+corner admits \SI{3.9}{\meter\per\second} against the vehicle's
+\SI{4}{\meter\per\second} cap, so the car sits flat out for the whole lap and
+every weight setting lands within \SI{1}{\meter} of every other: the task cannot
+discriminate. Spielberg's tightest corner admits
+\SI{2.5}{\meter\per\second}, so the controller must modulate speed and the
+weights have something to do --- three settings gave $45.9$, $54.3$ and
+\SI{57.6}{\meter}.
+
+Two weights carry behaviour. Following is a ratio $q_v/q_c$ below one and
+overtaking a ratio above it; \emph{aggression} scales how hard the behaviour is
+pursued without crossing that boundary. Crossing it is a change of behaviour,
+not of intensity. Three postures are compared: never pass, pass only when the
+manoeuvre is physically available, and always attempt it.
+
+\begin{table}[t]
+  \centering
+  \caption{Three postures by three aggressions, Spielberg, one slower opponent,
+  three seeds. Zero collisions in 27 runs; closest approach
+  $+\SI{0.056}{\meter}$ outside the keep-out.}
+  \label{tab:behaviour}
+  \begin{tabular}{llrrr}
+    \toprule
+    posture & aggression & covered & passes & switches \\
+    \midrule
+    stay behind        & cautious   & \SI{33.6}{\meter} & 0.00 & 0.0 \\
+    stay behind        & neutral    & \SI{34.7}{\meter} & 0.00 & 0.0 \\
+    stay behind        & aggressive & \SI{34.7}{\meter} & 0.00 & 0.0 \\
+    overtake when safe & cautious   & \SI{33.6}{\meter} & 0.00 & 1.3 \\
+    overtake when safe & neutral    & \SI{54.7}{\meter} & 0.67 & 2.0 \\
+    overtake when safe & aggressive & \textbf{\SI{74.6}{\meter}} & \textbf{1.00} & 2.0 \\
+    always try         & cautious   & \SI{33.6}{\meter} & 0.00 & 0.7 \\
+    always try         & neutral    & \SI{54.7}{\meter} & 0.67 & 1.7 \\
+    always try         & aggressive & \SI{74.6}{\meter} & 1.00 & 2.0 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{The behaviours are expressible and the effect is large.} Following
+covers \SI{34}{\meter}; overtaking at high aggression covers
+\SI{74.6}{\meter} --- $2.2\times$ --- with one pass per episode and no crashes,
+from moving two cost weights while the MPCC enforces every constraint
+unchanged.
+
+\textbf{But aggression is the axis that matters, and the posture is not.} The
+two overtaking postures differ in what they \emph{decide} --- the switch counts
+separate, so the availability gate does fire --- and are identical in what they
+\emph{achieve}, to three significant figures. We attribute this to the
+experiment rather than to the policy: one slower car on a wide circuit makes a
+pass almost always available, so ``when safe'' and ``always'' should coincide.
+Separating them needs a case where the pass is genuinely unavailable, and we do
+not have one. The claim that a weight policy can express \emph{safe} overtaking
+is therefore \textbf{not} established here; only that it can express overtaking.
+
+\subsection{Three defects, and what found them}
+Each was silent, and each produced a table that looked like a result.
+
+\emph{Aggression crossed the behaviour boundary.} Scaling $q_c$ and $q_v$
+oppositely put ``cautious overtake'' at a ratio of $0.71$, below one, so it
+followed --- measured, byte-identical to never passing.
+
+\emph{The ceiling and the dial collided.} With $q_v$ clipped at the measured
+safe ceiling, aggressive and neutral overtaking became the same weights. Above
+neutral, aggression now acts on $q_c$: caring less about the racing line rather
+than wanting more speed, which is what the ceiling leaves available.
+
+\emph{The engagement test was denominated in braking distance}, which vanishes
+at low speed. At \SI{1.4}{\meter\per\second} it demanded a \SI{0.54}{\meter}
+gap while the keep-out holds the car at \SI{1.04}{\meter} --- \textbf{it asked
+for a proximity the safety constraint forbids}, and fired on 0 of 400 ticks.
+Engagement is a question about the geometry of two cars and is now measured in
+car lengths.
+
+Only the third mattered. We report all three because the first two were
+\emph{fixed first}, the table did not move, and a re-run is what revealed that
+the diagnosis was wrong --- and because a safety-relevant component that is
+silently inert reads as working rather than as broken, which is the same failure
+mode this project has recorded before in its safety filters.
+
 \section{Do named sectors pay for themselves?}
 No. Table~\ref{tab:circuit}: four labels cost twice the parameters of three and
 return a difference of \SI{7}{\centi\meter} at $0.8$ standard errors. We report
@@ -319,8 +412,9 @@ worth having; only the first is usually reported.
 
 \section{Limitations}
 The behaviour policy of Section~\ref{sec:policy} is specified and not measured.
-Every result here is on two tracks, and Section~\ref{sec:circuit} is precisely a
-demonstration that two is not many --- the conclusion reversed between them, and
+The behaviour result is on one opponent geometry, and the postures could not be
+separated by it. Every scheduling result is on two synthetic tracks, and
+Section~\ref{sec:circuit} is precisely a demonstration that two is not many --- the conclusion reversed between them, and
 we have no basis for predicting a third. The overtake grid is one opponent
 geometry. The plant is a kinematic bicycle
 with a grip limit the controller does not model; results against a fitted-tyre

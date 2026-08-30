@@ -357,7 +357,51 @@ not win."*
       (12.0 m against a pass's 36.8 m). A head that never passes still scores
       respectably, because progress alone pays.
 
-### 2e. The four behaviour personas — two axes, and one of them collapses
+### 2e. Behaviour personas — **measured on a real circuit**
+
+`mpcc_tuning/ltc.py` (`BEHAVIOURS`, `AGGRESSION`, `POSTURES`),
+`experiments/behaviour_modes.py`, `Track.spielberg()`.
+
+- [x] Named behaviours over the weights: follow / overtake, crossed with
+      cautious / neutral / aggressive, and three postures — stay behind,
+      overtake when safe, always try.
+- [x] Measured on the Red Bull Ring at F1TENTH scaling (public data, copied in
+      with provenance). **34 m following against 74.6 m overtaking, 2.2×, 1.00
+      passes, zero crashes in 27 runs.** The behaviours are expressible.
+- [x] Use a real track, because the synthetic `circuit` is ceiling-limited —
+      its tightest corner admits 3.9 m/s against a 4.0 cap, so every weight
+      setting lands within 1 m. Spielberg's admits 2.5 m/s and discriminates.
+- [ ] **The postures do not separate, and that is the experiment's fault.**
+      `overtake_when_safe` and `always_try` differ in switch count but are
+      identical in distance and passes. One slower car on a wide circuit makes
+      a pass almost always available. **So we have shown a weight policy
+      expresses overtaking, NOT that it expresses *safe* overtaking** — which
+      is the claim the safety argument actually needs. Build a case where the
+      pass is genuinely unavailable: a narrow section, a blind corner, a faster
+      opponent, or two cars abreast.
+- [ ] `cautious` never completes a pass in any posture. Arguably correct for a
+      cautious driver; check it is not a speed floor artefact.
+
+### Three defects found by measurement, not review
+
+Worth keeping because the first two were fixed first and the table did not move.
+
+1. **Aggression crossed the behaviour boundary** — `q_c/sqrt(g)` with `q_v*g`
+   put "cautious overtake" at ratio 0.71, below 1, so it followed. Crossing the
+   boundary is a change of *behaviour*, not of intensity.
+2. **The ceiling and the dial collided** — with `q_v` clipped at the measured
+   ceiling, aggressive and neutral overtaking were the same weights.
+3. **The engagement test was denominated in braking distance**, which vanishes
+   at low speed: at 1.4 m/s it demanded a 0.54 m gap while the keep-out holds
+   the car at 1.04 m, so it asked for a proximity the safety constraint
+   forbids. It fired on 0 of 400 ticks. **This was the only one that mattered**,
+   and it made the LTC/MLP arms learn overtaking from a feature that never
+   changed — so `benchmarks/results/ltc.json` had to be re-run.
+
+   Same shape as the filter lesson in `docs/source/filters.md`: a wrong
+   safety-relevant component *intervenes less*, so it reads as working.
+
+### The old 2e note — two axes, one of which collapses
 
 Wanted: *overtaking*, *following*, *safe driver*, *aggressive driver*. The
 overtake grid already gives the axes, and they are orthogonal:

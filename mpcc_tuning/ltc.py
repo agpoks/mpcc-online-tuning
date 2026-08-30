@@ -235,7 +235,7 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
 
     # No opponent is a *state*, not a missing value: saturate the gap features
     # rather than pass zeros, which would read as "someone is right here".
-    gap_brake, ttc, avail = 1.0, 1.0, 0.0
+    gap_brake, ttc, avail, gap_m = 1.0, 1.0, 0.0, 1.0
     if len(opponents):
         best = None
         for o in opponents:
@@ -246,6 +246,16 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
         if d < track.length / 2:
             brake = max(v * v / (2.0 * a_max), 1e-3)
             gap_brake = float(np.tanh(d / (3.0 * brake)))
+            # An *absolute* gap as well, and it is not redundant. Braking
+            # distance vanishes at low speed -- at 1.4 m/s it is 0.26 m, so
+            # "within three braking distances" is 0.54 m, while the keep-out
+            # holds the car 1.04 m away and its own effective radius is 0.39 m.
+            # An engagement test on gap_brake therefore asks for a proximity
+            # the safety constraint forbids: measured, it fired on 0 of 400
+            # ticks at low aggression and 5 of 400 at neutral, which is why
+            # that cell was bimodal. Engagement is a question about the
+            # *geometry* of the two cars, so it is measured in car lengths.
+            gap_m = float(np.tanh(d / (6.0 * ENGAGE_SCALE)))
             closing = v - o.speed
             ttc = float(np.tanh((d / closing) / 4.0)) if closing > 1e-3 else 1.0
             # Is the pass physically available: the lateral acceleration needed
@@ -253,11 +263,15 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
             t_gap = d / max(closing, 1e-3)
             a_need = 2.0 * 0.30 / max(t_gap ** 2, 1e-6)
             avail = float(np.clip(1.0 - a_need / a_lat_max, -1.0, 1.0))
-    f += [gap_brake, ttc, avail]
+    f += [gap_brake, ttc, avail, gap_m]
     return np.array(f, float)
 
 
-N_FEATURES = 8
+#: Length scale for the engagement test, in metres -- roughly a car length. Not
+#: a braking distance: see the note in :func:`features`.
+ENGAGE_SCALE = 0.5
+
+N_FEATURES = 9
 THETA_LO = np.log(np.array([0.05, 0.05, 0.02, 1e-3, 1e-3, 1e-3]))
 #: Ceiling on q_v at 2.0 -- measured: it saturates above ~2 on an empty track
 #: and every attempted pass above it leaves the track with an opponent present.
@@ -362,3 +376,135 @@ def fixed_schedule(feat, theta0):
     else:
         th[0], th[2] = np.log(10.0), np.log(0.5)    # follow
     return th
+
+
+# --------------------------------------------------------------------------
+# Named behaviours
+# --------------------------------------------------------------------------
+#: The behaviours the weights are supposed to express, as (q_c, q_v) pairs at
+#: neutral aggression. Read them against the two axes measured in
+#: ``experiments/overtake_or_follow.py``: the *ratio* q_v/q_c decides whether
+#: the car goes around or sits behind (15/15 cells, boundary at 1), and the
+#: *magnitude* of q_v decides whether it survives doing so.
+#:
+#: So FOLLOW is not "slow" -- it is a ratio below 1. And OVERTAKE is not "fast"
+#: -- it is a ratio above 1. Aggression is the separate axis.
+BEHAVIOURS = {
+    "follow":          dict(q_c=10.0, q_v=0.5),   # ratio 0.05 -- sits behind
+    "overtake":        dict(q_c=1.0,  q_v=2.0),   # ratio 2.0  -- goes around
+}
+
+#: Aggression scales how hard a behaviour is pursued. It does **not** move the
+#: behaviour across the ratio boundary, and an earlier version did: with
+#: ``q_c / sqrt(g)`` and ``q_v * g`` the "cautious overtake" cell landed at
+#: q_v/q_c = 0.71, below the measured boundary of 1, so it *followed*.
+#: Measured, it was byte-identical to ``stay_behind``: 33.6 m and 0.00 passes.
+#: A cautious overtake that does not overtake is not a cautious overtake.
+AGGRESSION = {"cautious": 0.5, "neutral": 1.0, "aggressive": 2.0}
+
+#: How far a behaviour is allowed to sit from the boundary, as a ratio. Follow
+#: must stay below 1 and overtake above it, whatever the aggression.
+_RATIO_MARGIN = 1.35
+
+
+def behaviour_theta(name, aggression="neutral", theta0=None):
+    """A named behaviour at a named aggression, as log weights.
+
+    ``theta0`` supplies the four weights this does not touch (q_l, r_d, r_a,
+    r_dv); only q_c and q_v carry behaviour.
+
+    Aggression scales q_v, and q_c is then set so the *ratio* stays on the
+    behaviour's own side of 1 -- the boundary measured in
+    ``experiments/overtake_or_follow.py``. Crossing it is a change of
+    behaviour, not a change of intensity, and aggression must not do that.
+    """
+    th = np.array(theta0, float).copy()
+    b = BEHAVIOURS[name]
+    g = AGGRESSION[aggression] if isinstance(aggression, str) else float(aggression)
+    q_v = float(np.clip(b["q_v"] * g, np.exp(THETA_LO[2]), np.exp(THETA_HI[2])))
+    ratio = b["q_v"] / b["q_c"]
+    if ratio > 1.0:
+        # An overtaking behaviour. Aggression also lowers q_c, because q_v is
+        # capped by the *measured* ceiling (above ~2 every attempted pass left
+        # the track) and would otherwise saturate: without this, "aggressive
+        # overtake" and "neutral overtake" are the same weights. So above
+        # neutral, aggression is expressed as caring less about the racing line
+        # rather than as wanting more speed -- which is what the ceiling leaves
+        # available, and is arguably the more honest reading of aggression.
+        q_c = min(b["q_c"] / g, q_v / _RATIO_MARGIN)
+    else:                                # a following behaviour
+        q_c = max(b["q_c"], q_v * _RATIO_MARGIN)
+    th[0], th[2] = np.log(q_c), np.log(q_v)
+    return np.clip(th, THETA_LO, THETA_HI)
+
+
+#: The three overtaking postures a driver actually chooses between. The middle
+#: one is the interesting case: it is the only one that consults whether the
+#: pass is *physically available* rather than merely desirable.
+POSTURES = ("stay_behind", "overtake_when_safe", "always_try")
+
+
+def pass_is_available(feat, track=None, s=None, v=None, a_lat_max: float = 6.0,
+                      grip: float = 1.0, margin: float = 0.35):
+    """Is the pass physically available, against the **friction ellipse**?
+
+    An earlier version tested only the lateral acceleration needed to change
+    lane, ``2 w / t_gap**2``, against the full grip limit. That is satisfied
+    almost always, and the consequence was measured: ``overtake_when_safe`` and
+    ``always_try`` came out **identical in all nine cells** -- same distance,
+    same passes, same switch count. The gate the whole safety argument rests on
+    was doing nothing.
+
+    Two things were missing. The car is already **using grip to corner**, so the
+    lateral acceleration available for a lane change is what is left over, not
+    the whole budget: ``a_free**2 = (a_lat_max mu)**2 - (v**2 kappa)**2``. And a
+    pass needs a **closing speed** at all -- with none, ``t_gap`` is unbounded
+    and the test passes trivially while the manoeuvre never completes.
+    """
+    ttc, lane, gap_m = float(feat[6]), float(feat[7]), float(feat[8])
+    if ttc >= 1.0 - 1e-9:            # no closing speed: nothing to time the pass by
+        return False
+    budget = a_lat_max * grip
+    if track is not None and s is not None and v is not None:
+        a_corner = abs(v * v * track.curvature(track.wrap(s)))
+        budget = float(np.sqrt(max(budget ** 2 - a_corner ** 2, 0.0)))
+    # ``lane`` is 1 - a_need/a_lat_max, so a_need = (1 - lane) * a_lat_max.
+    a_need = (1.0 - lane) * a_lat_max
+    return bool(a_need < (1.0 - margin) * budget and gap_m < 0.85)
+
+
+def posture_theta(posture, feat, aggression="neutral", theta0=None,
+                  gap_close=0.6, track=None, s=None, v=None, is_dynamic=True):
+    """Choose weights from a posture and the current situation.
+
+    ``feat`` is :func:`features`' output; index 5 is the gap in braking
+    distances and index 7 is whether the lateral acceleration the pass needs is
+    inside the grip limit.
+
+    ``is_dynamic`` says whether the obstacle has been *observed* to move. It is
+    an estimate from :class:`~mpcc_tuning.opponents.ObstacleTracker`, not ground
+    truth, because on a vehicle it is one too.
+
+    ``overtake_when_safe`` is the posture the safety argument is about: it
+    commits only when the opponent is close enough to matter **and** the
+    manoeuvre is available, and follows otherwise. ``always_try`` drops the
+    availability test, which is what a driver with more ambition than grip does
+    and is included so that the cost of dropping it can be measured rather than
+    asserted.
+    """
+    # Index 8, the absolute gap -- not index 5, the braking-distance gap.
+    close = float(feat[8]) < gap_close
+    if posture == "stay_behind":
+        # Following is only a behaviour against something that is *going
+        # somewhere*. Behind a static obstacle it is not caution, it is
+        # stopping -- so the posture falls through to passing. That distinction
+        # is what makes "stay behind" a choice rather than a refusal, and it
+        # needs the obstacle *classified*, which cannot be done from a single
+        # frame: a stopped car and a slow one are identical in one observation.
+        # See mpcc_tuning.opponents.ObstacleTracker.
+        want = close and not is_dynamic
+    elif posture == "always_try":
+        want = close
+    else:
+        want = close and pass_is_available(feat, track=track, s=s, v=v)
+    return behaviour_theta("overtake" if want else "follow", aggression, theta0)

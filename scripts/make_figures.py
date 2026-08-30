@@ -432,9 +432,136 @@ def fig_overtake():
     print("  wrote overtake_grid.png")
 
 
+def fig_spielberg():
+    """The published circuit, and why it is the one that can measure behaviour.
+
+    The point is the speed limit each corner imposes, so the centreline is
+    coloured by ``sqrt(a_lat_max / kappa)`` -- a sequential ramp, because the
+    quantity is a magnitude with an order. The synthetic circuit is shown beside
+    it at the same scale and on the same ramp, where it is almost uniformly at
+    the cap and therefore cannot discriminate between weight settings.
+    """
+    from matplotlib.collections import LineCollection
+    from mpcc_tuning.model import A_LAT_MAX, SPEED_MAX
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.0, 4.4))
+    tracks = [("circuit (synthetic)", Track.circuit()),
+              ("Spielberg (F1TENTH 1:10)", Track.spielberg())]
+    for ax, (name, tr) in zip(axes, tracks):
+        k = np.abs([tr.curvature(v) for v in tr.s])
+        vmax = np.minimum(np.sqrt(A_LAT_MAX / np.maximum(k, 1e-6)), SPEED_MAX)
+        pts = tr.center.reshape(-1, 1, 2)
+        segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
+        lc = LineCollection(segs, cmap="viridis", norm=plt.Normalize(1.5, SPEED_MAX),
+                            linewidth=4.0, capstyle="round")
+        lc.set_array(vmax[:-1])
+        ax.add_collection(lc)
+        ax.set_aspect("equal")
+        ax.autoscale_view()
+        ax.axis("off")
+        # What matters is the *slowest corner the car actually reaches*, not
+        # the fraction of the lap at the cap. Measured, that fraction points
+        # the wrong way: Spielberg is at the cap for 97% of its lap and the
+        # synthetic circuit for 58%, yet it is Spielberg that discriminates
+        # between weight settings. A track punishes a bad weight only where it
+        # is grip-limited at all, and the circuit's *hardest* corner still
+        # allows 3.94 m/s against a 4.0 cap.
+        driven = 80.0                       # ~400 steps at the speeds reached
+        m = tr.s <= driven
+        ax.plot(*tr.center[m].T, "-", color=INK, linewidth=0.9, alpha=0.55,
+                zorder=4)
+        ax.set_title(f"{name}\n{tr.length:.0f} m · "
+                     f"{driven / tr.length:.2f} laps in an episode · "
+                     f"slowest corner driven {vmax[m].min():.2f} m/s",
+                     fontsize=9, color=INK)
+    cb = fig.colorbar(lc, ax=axes, fraction=0.03, pad=0.02)
+    cb.set_label("grip-limited corner speed [m/s]   (vehicle cap 4.0)", fontsize=8.5)
+    cb.ax.tick_params(labelsize=8)
+    fig.suptitle("A track measures a weight policy only where it is grip-limited. "
+                 "The synthetic circuit's\n*hardest* corner still allows 3.94 m/s "
+                 "against a 4.0 cap, so nothing is ever punished; the thin line "
+                 "marks the section actually driven.",
+                 fontsize=9.5, color=INK, y=1.03)
+    fig.savefig(OUT / "spielberg.png", dpi=170, bbox_inches="tight")
+    print("  wrote spielberg.png")
+
+
+def fig_behaviour():
+    """Behaviour as two axes: what it achieves, and what it decides."""
+    d = _load("behaviour_modes.json")["summary"]
+    post = ["stay_behind", "overtake_when_safe", "always_try"]
+    aggr = ["cautious", "neutral", "aggressive"]
+    kinds = sorted({k.split("/")[0] for k in d}) if "/" in next(iter(d)) else [None]
+    kinds = [k for k in ("dynamic", "static") if k in kinds] or [None]
+    fig, axes = plt.subplots(1, len(kinds), figsize=(5.4 * len(kinds), 4.0),
+                             squeeze=False)
+    x = np.arange(len(aggr))
+    for ax, kind in zip(axes[0], kinds):
+        for i, p_ in enumerate(post):
+            key = (lambda g: f"{kind}/{p_}/{g}") if kind else (lambda g: f"{p_}/{g}")
+            cov = [d[key(g)]["covered"] for g in aggr]
+            sd = [d[key(g)]["sd"] for g in aggr]
+            ax.errorbar(x + (i - 1) * 0.13, cov, yerr=sd, marker="o", markersize=7,
+                        linewidth=2.0, capsize=3, color=CAT[i],
+                        label=p_.replace("_", " "))
+            for j, g in enumerate(aggr):
+                n = d[key(g)]["passes"]
+                if n > 0:
+                    ax.annotate(f"{n:.2f}", xy=(x[j] + (i - 1) * 0.13, cov[j]),
+                                xytext=(0, 9), textcoords="offset points",
+                                fontsize=7, ha="center", color=CAT[i])
+        ax.set_xticks(x, aggr)
+        ax.set_xlabel("aggression")
+        ax.grid(alpha=0.22, linewidth=0.6, axis="y")
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+        ax.set_title(f"{kind or 'opponent'} obstacle", fontsize=10, color=INK)
+    axes[0][0].set_ylabel("distance covered [m]")
+    axes[0][0].legend(frameon=False, fontsize=8.5, loc="upper left")
+    fig.suptitle("Behaviour from two cost weights. Labels are passes per episode; "
+                 "bars are the seed range.", fontsize=9.5, color=INK, y=1.02)
+    fig.tight_layout()
+    fig.savefig(OUT / "behaviour.png", dpi=170, bbox_inches="tight")
+    print("  wrote behaviour.png")
+
+
+def fig_ltc_gate():
+    """The gate: four arms, distance against crash rate.
+
+    Two measures that must be read together -- an arm that passes more by
+    crashing more has not done better -- so they are the two axes rather than
+    two bars, and the pass count is the label.
+    """
+    d = _load("ltc.json")["summary"]
+    order = [("global", "one theta"), ("fixed", "fixed schedule"),
+             ("mlp", "per-tick MLP"), ("ltc", "LTC (recurrent)")]
+    fig, ax = plt.subplots(figsize=(6.0, 4.2))
+    for i, (k, label) in enumerate(order):
+        v = d[k]
+        ax.errorbar(100 * v["crashes"], v["covered"], yerr=v["sd"], marker="o",
+                    markersize=11, capsize=4, linewidth=2.0, color=CAT[i], zorder=3)
+        ax.annotate(f"  {label}\n  {v['passes']:.2f} passes",
+                    xy=(100 * v["crashes"], v["covered"]), fontsize=8.5,
+                    color=CAT[i], va="center", ha="left")
+    ax.set_xlabel("crashes [% of episodes]   ->  worse")
+    ax.set_ylabel("distance covered [m]   ->  better")
+    ax.set_xlim(10, 95)
+    ax.grid(alpha=0.22, linewidth=0.6)
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    ax.set_title("The gate: the hand-written schedule wins.\n"
+                 "Both learned arms pass more and crash twice as often; the LTC's "
+                 "error bar is five times the schedule's.",
+                 fontsize=9.5, color=INK)
+    fig.tight_layout()
+    fig.savefig(OUT / "ltc_gate.png", dpi=170, bbox_inches="tight")
+    print("  wrote ltc_gate.png")
+
+
 FIGS = {"geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
-        "overtake": fig_overtake}
+        "overtake": fig_overtake, "spielberg": fig_spielberg,
+        "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

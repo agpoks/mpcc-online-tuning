@@ -13,6 +13,8 @@ differentiated by the same machinery that differentiates everything else.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import casadi as ca
 import numpy as np
 
@@ -235,6 +237,46 @@ class Track:
             if inside:
                 return c
         return 0
+
+    @staticmethod
+    def from_centerline(path, scale: float = 1.0, half_width: float | None = None,
+                        ds: float = 0.1, stride: int = 1) -> "Track":
+        """A track from an ``f1tenth_racetracks`` centreline CSV.
+
+        Format: ``# x_m, y_m, w_tr_right_m, w_tr_left_m``. This repo's
+        :class:`Track` carries a *constant* half-width, so a variable-width
+        circuit is reduced to its narrowest point unless ``half_width`` is given
+        --- narrowest rather than mean, because the corridor constraint has to
+        hold everywhere and a mean would put the car outside the real track at
+        the tightest part.
+
+        ``scale`` multiplies the geometry. It scales the lap length and every
+        radius together, so it trades "how long is a lap" against "can the car
+        take the tightest corner" and those cannot be set independently.
+        """
+        raw = np.genfromtxt(str(path), delimiter=",", comments="#")
+        raw = raw[::max(int(stride), 1)]
+        xy = raw[:, :2] * float(scale)
+        if half_width is None:
+            half_width = float(np.min(raw[:, 2:4])) * float(scale) if raw.shape[1] >= 4 \
+                else 0.75
+        return Track(xy[:, 0], xy[:, 1], half_width, ds=ds)
+
+    @staticmethod
+    def spielberg(scale: float = 1.0, half_width: float | None = None,
+                  ds: float = 0.15) -> "Track":
+        """The Red Bull Ring at F1TENTH's 1:10 scaling. A track nobody here designed.
+
+        Every other track in this module is synthetic and built by hand, and a
+        synthetic track can be built to suit the hypothesis being tested --- the
+        per-sector result in ``docs/source/results.md`` is precisely a case of a
+        conclusion moving between two tracks that were both designed here. A
+        published circuit is the control for that.
+
+        See ``mpcc_tuning/tracks/PROVENANCE.md``.
+        """
+        here = Path(__file__).resolve().parent / "tracks" / "Spielberg_centerline.csv"
+        return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)
 
     @staticmethod
     def circuit(half_width: float = 0.75, ds: float = 0.1) -> "Track":
