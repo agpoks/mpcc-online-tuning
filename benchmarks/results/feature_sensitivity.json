@@ -1,0 +1,27 @@
+{
+  "sector": {
+    "spread": 0.45934136689401345,
+    "relative": 0.019383845211110473,
+    "used": false
+  },
+  "opponent class": {
+    "spread": 0.3433401759663279,
+    "relative": 0.0144184654132789,
+    "used": false
+  },
+  "curvature preview": {
+    "spread": 0.20647453736601898,
+    "relative": 0.00866009267774698,
+    "used": false
+  },
+  "gap": {
+    "spread": 0.40464160739267757,
+    "relative": 0.017114718781708487,
+    "used": false
+  },
+  "track width": {
+    "spread": 0.04821528547592754,
+    "relative": 0.002032394973319903,
+    "used": false
+  }
+}

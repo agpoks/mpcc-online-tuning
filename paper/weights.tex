@@ -745,7 +745,9 @@ Fig.~\ref{fig:gate} plots the two measures against each other, which is how
 they have to be read: an arm that passes more by crashing more has not done
 better.
 
-\textbf{Verdict: not claimed.} $\text{LTC} - \text{fixed} = -\SI{12.3}{\meter}$
+\textbf{Verdict: not claimed} --- and Section~\ref{sec:degenerate} shows the
+comparison is weaker still than that, because both learned arms collapse to
+constants. $\text{LTC} - \text{fixed} = -\SI{12.3}{\meter}$
 at $2.0$ SE and $\text{LTC} - \text{MLP} = -\SI{3.3}{\meter}$ at $0.5$ SE. The
 first gap \emph{is} separated, so on this task the recurrent policy is not
 merely unproven against a fifteen-line lookup --- it is measurably worse than
@@ -792,6 +794,56 @@ bugs.
   with it. \texttt{scripts/make\_figures.py}.}
   \label{fig:adapt}
 \end{figure}
+
+\subsection{The policy degenerates to a constant}\label{sec:degenerate}
+Drawing the emitted weights was not enough on its own, because a flat trace can
+be read as ``it settled''. The decisive measurement is a sensitivity sweep:
+train the policy, freeze it, then vary one feature group at a time and record
+the $\theta$ it emits.
+
+\begin{table}[t]
+  \centering
+  \caption{Spread of the emitted $q_v/q_c$ when one feature group is swept and
+  the rest held neutral, after training. Three seeds.
+  \texttt{experiments/feature\_sensitivity.py}.}
+  \label{tab:sens}
+  \begin{tabular}{lrr}
+    \toprule
+    feature group & spread & relative \\
+    \midrule
+    named sector      & 0.46 & $1.9\%$ \\
+    opponent class    & 0.34 & $1.4\%$ \\
+    curvature preview & 0.21 & $0.9\%$ \\
+    gap               & 0.40 & $1.7\%$ \\
+    corridor width    & 0.05 & $0.2\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The trained policy emits $q_v/q_c \approx 19.8$ \emph{whatever it is shown}.
+Across all four sectors: $19.83, 19.94, 19.36, 20.22$. Across all four opponent
+classes: $20.30, 19.83, 19.93, 19.73$. \textbf{It is not a policy; it is a
+constant, and all eighteen features are decorative.} Every comparison in
+Section~\ref{sec:gate} is therefore between two constants, and should be read
+as such.
+
+\textbf{The output parameterisation is not the cause.} We tried three --- a hard
+clip, a $\tanh$ centred on the feasible box, and a $\tanh$ anchored at the
+reference controller with asymmetric span --- and all three end at
+$q_v/q_c \approx 19.7$ with the features ignored. The untrained policy is
+responsive (ratio $0.70$--$0.95$ over random inputs); \emph{training} is what
+destroys it. TD($\lambda$) drives $\theta$ monotonically, $\theta$ reaches
+whichever bound exists, the squash saturates there, the output stops responding
+to its input, and the policy collapses. Each bound changed \emph{where} it
+saturates and never \emph{whether}.
+
+This is the failure our companion work documents for a \emph{single} global
+$\theta$~\cite{paper1} --- a proxy optimised past the point where the proxy is
+valid, with nothing to stop it --- inherited whole by a policy over $\theta$. No
+bound on the output can repair it, because the deficiency is that nothing makes
+stopping preferable to continuing. \textbf{A stopping criterion is a
+prerequisite for this line of work, not an improvement to it}, and we would not
+run another policy comparison without one.
 
 \subsection{Two bugs a table could not show}
 Drawing the emitted weights found, in sequence, two faults that twenty runs and

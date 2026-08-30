@@ -287,6 +287,42 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2z. The policy degenerates to a constant — the blocking result
+
+`experiments/feature_sensitivity.py`. Train the policy, freeze it, sweep one
+feature group, record the emitted θ.
+
+    feature group        spread of q_v/q_c   relative
+    named sector                    0.46        1.9%
+    opponent class                  0.34        1.4%
+    curvature preview               0.21        0.9%
+    gap                             0.40        1.7%
+    corridor width                  0.05        0.2%
+
+**The trained policy emits q_v/q_c ≈ 19.8 whatever it is shown.** All eighteen
+features are decorative. Every LTC gate number reported (31.8, 29.3, 24.0,
+32.5 m) was a comparison between two constants and is void.
+
+**Three output parameterisations, same endpoint**: hard clip, tanh centred on
+the box, tanh anchored at the reference with asymmetric span. The *untrained*
+policy is responsive (ratio 0.70–0.95); training destroys it. TD(λ) drives θ
+monotonically, θ hits whatever bound exists, the squash saturates, the output
+stops responding. Each bound moved *where* it saturates, never *whether*.
+
+This is item 5's failure — "optimised a proxy past the point where the proxy
+was valid, with nothing to stop it" — inherited whole.
+
+- [ ] **A stopping criterion is a prerequisite for item 2, not an improvement
+      to it.** No output bound can supply one; the deficiency is that nothing
+      makes stopping preferable to continuing. Candidates, none tried: a
+      terminal value that stops the critic under-estimating at saturation; a
+      decaying step size; keep-best-and-revert.
+- [ ] **Do not run another policy comparison until it exists.** Four gate runs
+      have now measured a constant.
+- [ ] The lesson for the method, and it is cheap: a unit test that a feature is
+      *present* passes happily while the policy ignores it. Sensitivity of a
+      *trained* policy is the only test that separates them.
+
 ## 2. Weights as a behaviour policy — the direction
 
 θ is a behaviour parameterisation, not just a tuning vector: `q_v` sets

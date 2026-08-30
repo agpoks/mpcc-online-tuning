@@ -231,10 +231,30 @@ class WeightPolicy:
         else:
             h, imm, leak = self.cell.step(feat)
             self.P = leak[:, None] * self.P + imm
-        mid, half = 0.5 * (self.hi + self.lo), 0.5 * (self.hi - self.lo)
-        z = (self.theta0 - mid) / half + self.G @ h
-        self._sq = 1.0 - np.tanh(z) ** 2          # d(theta)/dz, for the chain
-        theta = mid + half * np.tanh(z)
+        # theta0 is the OPERATING POINT, not an offset into a box centred
+        # elsewhere. Writing theta = mid + half*tanh(z) puts the reference
+        # controller wherever it happens to fall in the box -- and if that is
+        # out on the tail, the squash is already saturated at the start, the
+        # output stops responding to the input, and the policy degenerates to a
+        # constant. Measured before this change: the trained policy emitted
+        # q_v/q_c ~ 19.6 for EVERY input, and all eighteen features moved it by
+        # under 2.2%. It was not a policy, it was a constant.
+        #
+        # Anchoring the squash at theta0 puts the reference at tanh(0) -- the
+        # steepest point -- so the policy starts maximally responsive and
+        # deviates from a controller that works.
+        z = self.G @ h
+        t = np.tanh(z)
+        # ASYMMETRIC span: as much room as the box allows on each side
+        # separately. A symmetric min(theta0-lo, hi-theta0) collapses to ZERO
+        # wherever the reference sits on a bound -- and the working controller
+        # has q_v = 2.0 and q_l = 200, which are exactly the ceilings, so those
+        # two weights could never move at all. With separate spans a weight at
+        # its ceiling can still be reduced, which is the correct behaviour: the
+        # ceiling is a safety result, not a statement that the weight is right.
+        span = np.where(t >= 0.0, self.hi - self.theta0, self.theta0 - self.lo)
+        self._sq = (1.0 - t ** 2) * span           # d(theta)/dz, for the chain
+        theta = self.theta0 + span * t
         self._h = h
         return theta
 
@@ -246,8 +266,9 @@ class WeightPolicy:
         neuron's own influence and drops the coupling between neurons.
         """
         g = np.asarray(dQ_dtheta, float)
-        # Through the squash: d(theta)/dz = half * (1 - tanh^2 z).
-        g = g * 0.5 * (self.hi - self.lo) * self._sq
+        # Through the squash: d(theta)/dz = span * (1 - tanh^2 z), already
+        # folded into _sq because span depends on the sign of tanh(z).
+        g = g * self._sq
         dG = np.outer(g, self._h)
         dcell = (g @ self.G)[:, None] * self.P
         return dG, dcell
