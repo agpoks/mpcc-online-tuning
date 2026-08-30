@@ -103,8 +103,12 @@ as an assumption, and Section~\ref{sec:rti} shows it is one.
   \label{fig:geometry}
 \end{figure}
 
-The cost, with $\theta = \log(q_c, q_l, q_v, r_\delta, r_a, r_{\dot s})$ the
-learnable weights,
+MPCC tracks a \emph{path} and carries its own progress $s$ as a decision
+variable, so the reference point is chosen by the solver rather than obtained
+by projection, and the vector to the car splits into a contouring error across
+the path and a lag error along it (Fig.~\ref{fig:geometry}). The cost, with
+$\theta = \log(q_c, q_l, q_v, r_\delta, r_a, r_{\dot s})$ the learnable
+weights,
 \begin{equation}
   J = \sum_k q_c e_c^2 + q_l e_l^2 - q_v \dot s\,\Delta t
       + r_\delta \delta^2 + r_a a^2 + r_{\dot s}(\dot s - v)^2 .
