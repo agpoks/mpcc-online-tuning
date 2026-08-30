@@ -1,10 +1,9 @@
 % Paper 2. Situation-dependent cost weights and behaviour parameterisation.
 %
-% Status: DRAFT, and deliberately incomplete in a specific way. Sections with
-% measured numbers name the script that produced them. Section VI (the
-% behaviour policy) is a METHOD WITHOUT RESULTS -- it is specified here because
-% the specification is what the next experiment tests, and it is marked as
-% unmeasured everywhere it appears. Nothing in it may be claimed.
+% Status: DRAFT. Every number is measured and reproducible from the script
+% named in its caption. The behaviour policy of Sec. V-D was specified before
+% it was run and its gate was fixed in advance; Sec. IX reports the outcome,
+% which is negative, and says so.
 %
 % Paper 1 is main.tex ("Differentiating a Real-Time MPC Is Safe"), which
 % establishes the gradient this paper uses. Cite, do not restate.
@@ -20,7 +19,6 @@
 \usepackage{algpseudocode}
 \usepackage[hidelinks]{hyperref}
 \newcommand{\todo}[1]{\textbf{[TODO: #1]}}
-\newcommand{\unmeasured}{\textbf{[NOT MEASURED]}\ }
 
 \title{\LARGE\bf Cost Weights Are a Behaviour Parameterisation:\\
 Situation-Dependent Tuning of a Model Predictive Contouring Controller}
@@ -90,8 +88,56 @@ only what is needed. The MPCC cost is
 \end{equation}
 with $\theta = \log(q_c, q_l, q_v, r_\delta, r_a, r_{\dot s})$ the learnable
 parameters, and $\mathrm{d}J^\star/\mathrm{d}\theta$ obtained from the partial
-derivative of the Lagrangian at the solution. $N = 12$, \SI{20}{\hertz},
-TD($\lambda$) with $\gamma = 0.98$, $\lambda = 0.9$, $\alpha = 2\times10^{-3}$.
+derivative of the Lagrangian at the solution. $e_c$ and $e_l$ are the
+contouring and lag errors against a reference path carried as a periodic
+B-spline in the progress variable $s$, so the solver chooses its own reference
+point rather than projecting onto the path.
+
+\subsection{The models, and the difference between them}\label{sec:models}
+Two vehicle models appear, and keeping them distinct is what makes the question
+askable at all.
+
+\emph{The controller's model} is a kinematic bicycle,
+\begin{equation}
+  \dot x = v\cos\psi,\quad \dot y = v\sin\psi,\quad
+  \dot\psi = \frac{v}{L}\tan\delta,\quad \dot v = a - c_d v,
+  \label{eq:bicycle}
+\end{equation}
+with the progress state $\dot s = v_s$ appended, integrated by RK4 over $N=12$
+shooting nodes at a \SI{0.15}{\second} interval. State
+$[x, y, \psi, v, s]$, input $[\delta, a, v_s]$. Parameters
+$L=\SI{0.33}{\meter}$, $c_d = 0.15$, $|\delta|\le\SI{0.40}{\radian}$,
+$|a|\le\SI{4}{\meter\per\second\squared}$,
+$v\in[0,\SI{4}{\meter\per\second}]$. Track limits enter as a bound on the
+contouring error, $|e_c| \le w - r_{\text{car}}$, with $w$ the track
+half-width and $r_{\text{car}}=\SI{0.12}{\meter}$.
+
+\emph{The plant} is the same bicycle plus one thing the controller does not
+have: a tyre limit, imposed as a cap on yaw rate,
+\begin{equation}
+  \dot\psi \leftarrow \mathrm{clip}\!\left(\frac{v}{L}\tan\delta,\;
+  \pm\frac{a_{\text{lat,max}}\,\mu}{v}\right),
+  \quad a_{\text{lat,max}} = \SI{6}{\meter\per\second\squared}.
+  \label{eq:grip}
+\end{equation}
+
+\textbf{The mismatch is the experiment, not a defect.} A limit the controller
+has never heard of is exactly what should surface as cost weights that are
+wrong for the real vehicle, and it is what a weight policy is being asked to
+compensate for. A shared model between plant and controller would make the
+question unaskable. Equation~\eqref{eq:grip} is also what makes a track able to
+\emph{measure} a weight policy: where $v_{\max}=\sqrt{a_{\text{lat,max}}\mu/
+\kappa}$ exceeds the vehicle's speed cap the corner is not grip-limited, no
+weight setting is penalised there, and the track is silent about the policy
+(Section~\ref{sec:behaviour}, Fig.~\ref{fig:spielberg}).
+
+The controller is solved with IPOPT to convergence throughout this paper; a
+real-time iteration and its consequences for the gradient are the subject
+of~\cite{paper1}. The outer loop is TD($\lambda$) with $\gamma = 0.98$,
+$\lambda = 0.9$, $\alpha = 2\times10^{-3}$, at \SI{20}{\hertz}. The reward is
+the real objective --- metres of centreline progress per tick, $-5$ for leaving
+the track, which ends the episode --- and deliberately not $J$: were they the
+same quantity the MPC would already be optimal for it by construction.
 
 \section{Method}\label{sec:method}
 
@@ -167,9 +213,9 @@ $> 0.999$ and relative error $< 5\times10^{-2}$, the same thresholds as the
 obstacle-free check.
 
 \subsection{The behaviour policy}\label{sec:policy}
-\unmeasured Everything in this subsection is specified but not yet run, and
-nothing in it is claimed. It is stated in full because the specification is what
-the next experiment tests.
+This subsection specifies the policy; Section~\ref{sec:gate} reports what
+happened when it was run. The gate below was fixed \emph{before} the
+experiment.
 
 The target is a map $\phi : \text{situation} \to \theta$. Section~\ref{sec:axes}
 constrains its shape in two ways that a design should respect rather than
@@ -180,11 +226,20 @@ the magnitude of $q_v$, a different axis, so the output must be bounded by a
 ceiling on $q_v$ rather than by a box.
 
 \emph{Features.} Keyed on quantities with physical units, so that the map
-transfers between tracks and speeds: time-to-collision with the car ahead; the
-gap measured against braking distance $v^2/2a_{\max}$ rather than in metres;
-the lateral acceleration a pass would require against $a_{\text{lat,max}}\mu$,
-i.e.\ whether the pass is physically available at all; curvature preview at
-several distances; and margin to the boundary.
+transfers between tracks and speeds: curvature preview at three distances;
+speed as a fraction of the cap; margin to the boundary; time-to-collision;
+the lateral acceleration a pass would require against the grip left over after
+cornering; and the gap to the car ahead, expressed \emph{both} against braking
+distance $v^2/2a_{\max}$ and in absolute car lengths.
+
+That the gap needs both is a correction we had to measure. A gap in braking
+distances is the right quantity for ``can I stop'', but it is the wrong one for
+``is this car close enough to engage'', because braking distance vanishes at low
+speed: at \SI{1.4}{\meter\per\second} it makes a three-braking-distance
+threshold \SI{0.54}{\meter}, while the keep-out itself holds the car
+\SI{1.04}{\meter} away. \textbf{The engagement test then asks for a proximity
+the safety constraint forbids}, and it fired on 0 of 400 ticks. Engagement is a
+question about the geometry of two cars and is measured in car lengths.
 
 \emph{The precondition that decides whether memory is needed.} If $\phi$ is
 given the opponent's velocity, there is no hidden state and no temporal pattern,
@@ -221,8 +276,8 @@ fixed schedule should be strong, and the network can only win on the temporal
 axis. Published results for this cell family on a closely related overtaking
 task are \emph{not} favourable --- an LTC ranked sixth of seven cells and made
 the fewest passes, below a memoryless MLP, though no cell in that comparison was
-separated from another given the seed spread. We therefore regard a negative
-outcome as the likely one and will report it as such.
+separated from another given the seed spread. We therefore regarded a negative
+outcome as the likely one, and Section~\ref{sec:gate} is that outcome.
 
 \subsection{Protocol}
 The only stochastic element is actuator exploration noise, so a seed is a draw
@@ -231,11 +286,14 @@ variation measures the learner's reliability rather than the task's. Sweeps over
 fixed weights are deterministic and single-run, and there each cell is exact
 while the \emph{geometry} is $n=1$ --- we say which is which.
 
-Episodes are 400 steps at \SI{20}{\hertz}. Tracks: a \SI{26.7}{\meter} oval
-(straights and two \SI{180}{\degree} corners), and a \SI{47.2}{\meter} circuit
-built to contain all four sector types with a minimum radius of
-\SI{2.59}{\meter}, chosen to match the oval so that a scheduling result is not
-confounded by an initialisation failure.
+Episodes are 400 steps at \SI{20}{\hertz}. Three tracks: a \SI{26.7}{\meter}
+oval (straights and two \SI{180}{\degree} corners); a \SI{47.2}{\meter}
+synthetic circuit built to contain all four sector types, with a minimum radius
+of \SI{2.59}{\meter} chosen to match the oval so a scheduling result is not
+confounded by an initialisation failure; and the Red Bull Ring at F1TENTH's
+1:10 scaling (\SI{343}{\meter}, public \texttt{f1tenth\_racetracks} data), which
+nobody in this work designed. The third is not decoration: Section~\ref{sec:circuit}
+is a demonstration that a conclusion reverses between the first two.
 
 \section{When one weight vector is unstable}\label{sec:seeds}
 \todo{six-seed oval table: global 8.9 (sd 0.9) 6/6 collapsed vs per-bin 77.8
@@ -330,6 +388,20 @@ discriminate. Spielberg's tightest corner admits
 \SI{2.5}{\meter\per\second}, so the controller must modulate speed and the
 weights have something to do --- three settings gave $45.9$, $54.3$ and
 \SI{57.6}{\meter}.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/spielberg.png}
+  \caption{A track measures a weight policy only where it is grip-limited.
+  Colour is $\sqrt{a_{\text{lat,max}}\mu/\kappa}$ against the vehicle's
+  \SI{4}{\meter\per\second} cap; the thin line is the section driven in one
+  episode. The synthetic circuit's \emph{hardest} corner still allows
+  \SI{3.94}{\meter\per\second}, so no weight setting is ever punished. Note the
+  naive metric points the wrong way --- Spielberg is at the cap for $97\%$ of
+  its lap and the circuit for $58\%$ --- because what matters is the minimum
+  reached, not the fraction.}
+  \label{fig:spielberg}
+\end{figure}
 
 Two weights carry behaviour. Following is a ratio $q_v/q_c$ below one and
 overtaking a ratio above it; \emph{aggression} scales how hard the behaviour is
@@ -455,6 +527,72 @@ the diagnosis was wrong --- and because a safety-relevant component that is
 silently inert reads as working rather than as broken, which is the same failure
 mode this project has recorded before in its safety filters.
 
+\section{Does the recurrence earn its place?}\label{sec:gate}
+
+Section~\ref{sec:policy}'s gate, run. Four arms on the oval with one slower
+opponent, identical in everything except what emits $\theta$: one global
+$\theta$ tuned by TD($\lambda$); the hand-written schedule; a memoryless MLP;
+and the LTC. Both networks are trained by the \emph{same} rule --- the
+envelope gradient $\mathrm{d}Q/\mathrm{d}\theta$ chained through the policy to
+$\mathrm{d}Q/\mathrm{d}\phi$, with the influence of the recurrent state carried
+in RFLO form $P \leftarrow \text{leak}\cdot P + \text{imm}$. For the LTC that
+leak is $1/(1+\Delta t(1/\tau + f)) < 1$ \emph{structurally}, guaranteed by
+$1/\tau > 0$: the cell cannot learn to hold its state perfectly and so cannot
+make the influence series diverge, which elsewhere requires an arbitrary cap.
+
+\begin{table}[t]
+  \centering
+  \caption{The gate. Five seeds, twenty runs. Distance and crashes must be read
+  together: an arm that passes more by crashing more has not done better.}
+  \label{tab:gate}
+  \begin{tabular}{lrrrr}
+    \toprule
+    & covered & sd & passes & crashes \\
+    \midrule
+    one $\theta$          & \SI{18.8}{\meter} & 4.6 & 0.33 & $22\%$ \\
+    \textbf{fixed schedule} & \textbf{\SI{36.3}{\meter}} & \textbf{2.1} & 1.02 & $\mathbf{35\%}$ \\
+    per-tick MLP          & \SI{23.7}{\meter} & 9.5 & 1.35 & $72\%$ \\
+    LTC (recurrent)       & \SI{29.3}{\meter} & 11.1 & \textbf{1.50} & $72\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/ltc_gate.png}
+  \caption{The gate, as the two measures that must be read together. The
+  hand-written schedule is up and to the left. Both learned arms pass more and
+  crash twice as often, and the LTC's error bar is five times the schedule's.}
+  \label{fig:gate}
+\end{figure}
+
+\textbf{Verdict: not claimed.} $\text{LTC} - \text{fixed} = -\SI{7.0}{\meter}$
+at $1.4$ SE and $\text{LTC} - \text{MLP} = +\SI{5.6}{\meter}$ at $0.9$ SE.
+Neither gap is separated, so the LTC is not shown \emph{worse} than the
+schedule --- it is not shown better, which for a component one is proposing to
+add is the same answer.
+
+Three things are worth more than the verdict.
+
+\emph{The hand-written schedule wins, and it is not a straw man}: it encodes
+the $q_v/q_c$ boundary measured in Section~\ref{sec:axes}. A baseline with the
+measurement built into it is a far harder target than a heuristic, and that is
+much of why learning loses here.
+
+\emph{The LTC's defect is variance, not inferiority.} Its standard deviation is
+five times the schedule's; it holds both the two best individual runs and the
+worst. That is the failure reported for this cell family elsewhere --- not
+uniformly worse, but less reliable, which points at initialisation rather than
+at the update equation.
+
+\emph{Learning made the controller more reckless, which inverts the companion
+result.} On a closely related task every learned cell roughly halved a scripted
+policy's crash rate; here the scripted policy crashes $35\%$ of episodes and
+both learned arms $72\%$. The action space plausibly explains it: there the
+network emits steering and can learn to avoid, whereas here it emits cost
+weights and the way to overtake is to raise $q_v$, which is also the way to
+leave the track.
+
 \section{Do named sectors pay for themselves?}
 No. Table~\ref{tab:circuit}: four labels cost twice the parameters of three and
 return a difference of \SI{7}{\centi\meter} at $0.8$ standard errors. We report
@@ -465,7 +603,6 @@ correction turns out not to change any outcome we can measure. Both facts are
 worth having; only the first is usually reported.
 
 \section{Limitations}
-The behaviour policy of Section~\ref{sec:policy} is specified and not measured.
 The behaviour result is on one opponent geometry, and the postures could not be
 separated by it. Every scheduling result is on two synthetic tracks, and
 Section~\ref{sec:circuit} is precisely a demonstration that two is not many --- the conclusion reversed between them, and
