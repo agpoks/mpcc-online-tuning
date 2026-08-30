@@ -279,7 +279,7 @@ class Track:
         return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)
 
     @staticmethod
-    def icra2025(scale: float = 1.0, half_width: float | None = None,
+    def icra2025(scale: float = 2.0, half_width: float | None = None,
                  ds: float = 0.1) -> "Track":
         """The ICRA 2025 competition track, from the team's own occupancy grid.
 
@@ -290,8 +290,37 @@ class Track:
 
         The centreline was extracted from the ROS map beside it by
         ``tools/centerline_from_map.py``: 100% of it lies inside the corridor
-        and it closes to \SI{0.19}{\meter}. That extraction is the thing
+        and it closes to 0.15 m. That extraction is the thing
         ``docs/source/plant.md`` had listed as missing.
+
+        **``scale`` defaults to 2, and that is not cosmetic.** At 1:1 the two
+        hairpins (at s = 18.9 m and s = 67.4 m -- real geometry, not seam
+        artefacts) have a 0.59 m radius against a car whose geometric minimum
+        turn radius is 0.78 m, so the map is not drivable as recorded.
+
+        **And it needs ``r_d = 10``.** Swept open-loop at scale 2, 400 steps:
+
+            q_v   r_d    covered   steps   outcome
+            0.3   1.0     17.2 m     400   survived
+            0.3  10.0      0.9 m     400   survived
+            1.0   1.0     12.9 m     113   off
+            1.0  10.0     17.0 m     400   survived
+            2.0   1.0     12.9 m     101   off
+            2.0  10.0     17.1 m     400   survived
+
+        Every run at ``r_d = 10`` completes; the ``r_d = 1`` runs crash except
+        at the slowest progress weight. That is the **same lever, and the same
+        sentence**, as ``docs/source/plant.md`` reports for the fitted-tyre
+        plant -- a steering-rate penalty produces a command the vehicle can
+        actually follow, whether what it cannot follow is an unmodelled tyre or
+        a hairpin tighter than its turning circle.
+
+        Note the curvature column is not to be trusted here: the reported
+        minimum radius goes 0.59, 0.76, 1.04 m for scales 1, 2, 3 where
+        geometry says 0.59, 1.18, 1.77. ``Track.curvature``'s stencil is a
+        fixed 0.6 m while the sample spacing grows with scale, so larger scales
+        resolve more pixel wiggle and cancel the geometric gain. The drive test
+        above is the trustworthy measurement.
         """
         here = Path(__file__).resolve().parent / "tracks" / "icra2025_centerline.csv"
         return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)

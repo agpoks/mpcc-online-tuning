@@ -708,7 +708,72 @@ def fig_adaptation():
     print("  wrote adaptation.png")
 
 
-FIGS = {"adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
+def fig_filmstrip():
+    """Stills from the animations, because a PDF cannot hold a GIF.
+
+    ``\\includegraphics`` has no GIF support, so the animations are docs and
+    presentation assets and can never appear in the paper. A filmstrip is the
+    paper's version of the same evidence: the same runs, sampled at four times,
+    with the keep-out drawn.
+    """
+    from mpcc_tuning.ltc import behaviour_theta
+    from mpcc_tuning.mpcc import MPCC, MPCCWeights
+    from mpcc_tuning.model import KinematicBicycle
+    from mpcc_tuning.opponents import Opponent
+    from examples.tune_online import Plant
+
+    track = Track.oval()
+    t0 = MPCCWeights(q_l=200.0, r_d=1.0).to_log()
+    rows = [("follow  $q_v/q_c<1$", behaviour_theta("follow", "neutral", t0), 1.0),
+            ("overtake  $q_v/q_c>1$", behaviour_theta("overtake", "aggressive", t0), 1.0),
+            ("same weights, stopped car", behaviour_theta("follow", "neutral", t0), 0.0)]
+    runs = []
+    for label, th, vo in rows:
+        m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
+                 max_iter=60, max_obstacles=1)
+        opp = Opponent(track, s0=3.0, speed=vo, radius=0.24)
+        P = Plant(track, dt=0.05, max_steps=220, opponents=[opp])
+        s5 = P.reset(); m.reset()
+        xy, op, cov = [], [], 0.0
+        for _ in range(220):
+            m.set_obstacles(P.keepouts())
+            u = m.value(s5, th)["u0"]
+            s5, r, off, tr = P.step(u); cov += r
+            xy.append((s5[0], s5[1])); op.append(tuple(opp.pose()[:2]))
+            if off or tr:
+                break
+        runs.append((label, np.array(xy), np.array(op), cov))
+        print(f"    {label}: {cov:.1f} m", flush=True)
+
+    K = 4
+    fig, axes = plt.subplots(len(runs), K, figsize=(3.1 * K, 2.5 * len(runs)))
+    for i, (label, xy, op, cov) in enumerate(runs):
+        idx = np.linspace(0, len(xy) - 1, K).round().astype(int)
+        for j, k in enumerate(idx):
+            ax = axes[i, j]
+            ax.plot(track.center[:, 0], track.center[:, 1], "-", color="0.88",
+                    lw=9, solid_capstyle="round", zorder=1)
+            ax.plot(xy[:k + 1, 0], xy[:k + 1, 1], "-", color=BLUE, lw=1.8, zorder=3)
+            ax.plot(xy[k, 0], xy[k, 1], "o", ms=7, color=BLUE, mec="white",
+                    mew=1.0, zorder=5)
+            ax.plot(op[k, 0], op[k, 1], "o", ms=7, color=RED, mec="white",
+                    mew=1.0, zorder=5)
+            ax.add_patch(plt.Circle((op[k, 0], op[k, 1]), 0.24, fill=False,
+                                    ls="--", lw=1.1, color=RED, zorder=4))
+            ax.set_aspect("equal"); ax.axis("off")
+            if i == 0:
+                ax.set_title(f"t = {k * 0.05:.1f} s", fontsize=8.5, color=INK)
+        axes[i, 0].text(-0.04, 0.5, f"{label}\n{cov:.1f} m", transform=axes[i, 0].transAxes,
+                        rotation=90, va="center", ha="right", fontsize=8.5, color=INK)
+    fig.suptitle("The same controller and the same opponent; only $q_v$ and $q_c$ differ.\n"
+                 "Dashed circle is the keep-out. Bottom row: identical weights, "
+                 "but the obstacle is stopped.", fontsize=9.5, color=INK, y=1.02)
+    fig.tight_layout()
+    fig.savefig(OUT / "filmstrip.png", dpi=170, bbox_inches="tight")
+    print("  wrote filmstrip.png")
+
+
+FIGS = {"filmstrip": fig_filmstrip, "adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "spielberg": fig_spielberg,
         "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}
