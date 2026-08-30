@@ -524,6 +524,42 @@ is a divergence signature rather than a tuning artefact.
       down, because the filter absorbs the consequence and it never reaches the
       return. The intervention *is* the missing error signal.
 
+## 5b. A real competition track — 80% done, and the last 20% is a decision
+
+`tools/centerline_from_map.py`, and the ICRA 2026 maps
+(`ICRA_T1_..._gimped.pgm/.yaml`, `ICRA_T2_..._gimped_ev13.pgm/.yaml`, 0.05 m/px).
+This is the centreline extraction `docs/source/plant.md` has listed as missing
+since the `scuderia_gym_jax` bridge was written.
+
+    map   lap      half-width (median)   fraction inside the corridor
+    T1    53.0 m   0.95 m                81.8%
+    T2    41.3 m   0.45 m                78.7%
+
+Plausible laps and widths, most of each contour tracking the corridor — and the
+remaining fifth cutting straight across the infield. **Do not use the output as
+a track until that is fixed.**
+
+- [ ] **Both tracks branch**: an outer ring plus an inner section. Free space is
+      not an annulus, so there is no unique centreline — "the" centreline is a
+      choice of *route*, not a property of the geometry. Every purely geometric
+      method fails here for that reason. Fix it by choosing the route, not by
+      more geometry.
+- [ ] Route from a driven path is the cheap fix: project a racing rosbag's
+      trajectory onto the corridor and take the branch it uses. **The bag we
+      have does not supply one** — `ICRA26_..._TRACK_2_0955` is a 96 m SLAM
+      mapping run at 0.29 m/s whose start and end are 39 m apart. A bag of
+      actual laps would settle it immediately.
+- [ ] Or prune the branch explicitly: keep the cycle enclosing the largest
+      infield, discard spurs. That is a graph decision on the medial axis.
+- [ ] `Track` carries a **constant** half-width; T2 varies 0.45 m median against
+      a 1.79 m maximum. Either take the minimum (safe, wastes track) or teach
+      `Track` a per-station width.
+
+Three methods were tried and the failures are recorded in the tool's docstring:
+skeletonization loops around every cone; marching outward from the infield
+outline fails because the infield is strongly concave (compactness 0.11 on T1);
+the equidistance contour is the closest and is what the tool implements.
+
 ## 6. Filters on a state estimate
 
 Every filter reads the true state. On the car it reads an estimate, and every
