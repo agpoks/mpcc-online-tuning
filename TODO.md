@@ -35,6 +35,56 @@ against 50 ms at 20 Hz. **It is CasADi `qrqp`, not acados** — see item 3.
 
 ---
 
+## Status board — done, and whether the paper says so
+
+Two different questions, and a thing can pass the first and fail the second.
+**Done** = measured and committed. **In the paper** = a section or table carries
+the result, with a figure that is `\ref`'d in the text.
+
+| item | done | in paper | note |
+|---|---|---|---|
+| 1. per-segment, six seeds | yes | yes | §V, `reversal.png` |
+| 1b. named sectors | yes | yes | §VI, `tracks.png` |
+| — sector4 vs curvature3 | yes | yes | null, 0.8 SE |
+| — circuit reverses item 1 | yes | yes | §V-A |
+| 2a. obstacle keep-out | yes | yes | §IV-C |
+| — **elliptical** keep-out | yes | **NO** | needs a subsection |
+| 2b. safe region | partial | yes | ceiling bracketed 2–10, not pinned |
+| 2c. physics features | yes | partial | 18 features listed, no result yet |
+| 2d. LTC gate | yes | yes | §IX, NOT CLAIMED |
+| — online adaptation | yes | yes | §X, `adaptation.png` |
+| — **RFLO vs exact RTRL** | yes | **NO** | cosine 0.9997; belongs in §X |
+| — trust region + prior | yes | partial | argued in §X, no table |
+| 2e. personas | yes | yes | §VII, `behaviour.png` |
+| — static vs dynamic | yes | yes | §VII-B, the livelock |
+| 3. **acados** | yes | **NO** | paper 1 still says "hand-rolled, not acados" |
+| 4. tuner on fitted tyres | no | n/a | blocks 4b |
+| 4b. multi-car scuderia | no | n/a | blocked on 4 |
+| 5. bound where θ goes | partial | partial | trust region exists |
+| 5b. ICRA track | partial | **NO** | 100% in corridor, seam kink open |
+| 6. filters on an estimate | no | n/a | |
+| 6b. ROS export | no | n/a | |
+| animations | yes | yes | 5 GIFs on the animations page |
+
+**Why this table exists.** A result gets measured, committed, and never reaches
+the paper. It has happened five times: `gradient_check.png` absent from paper 1;
+two figures orphaned in paper 2; five figures placed but never `\ref`'d; both
+new GIFs committed but referenced nowhere; and the three rows marked **NO**
+above. Check this table before calling anything finished.
+
+- [ ] **Ellipse keep-out into the paper.** 0.635 m along against 0.267 m
+      across, where the circle used 0.350 both ways — so every closest-approach
+      number reported so far was measured against a keep-out that forbids the
+      manoeuvre it was measuring.
+- [ ] **RFLO vs exact RTRL into §X.** Cosine 0.9997 is what rules the gradient
+      *out* as the cause of the runaway; without it §X asserts the objective is
+      at fault instead of showing it.
+- [ ] **Paper 1 says the RTI is hand-rolled and not acados. That is now
+      false.** `mpcc_tuning/acados_ocp.py` compiles and solves at 1.63 ms mean.
+      Either re-run the influence measurement against a real `SQP_RTI` step —
+      the check that paper's headline owes — or say plainly that acados exists
+      and the check has not been redone.
+
 ## Order of work
 
 Sequenced by what unblocks what, not by interest.
