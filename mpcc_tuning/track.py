@@ -279,6 +279,24 @@ class Track:
         return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)
 
     @staticmethod
+    def icra2025(scale: float = 1.0, half_width: float | None = None,
+                 ds: float = 0.1) -> "Track":
+        """The ICRA 2025 competition track, from the team's own occupancy grid.
+
+        A \SI{106.9}{\meter} serpentine over a 26.5 x 12.3 m footprint with a
+        0.70 m median half-width -- a real circuit, driven by the real car this
+        work is aimed at, and neither designed here nor scaled from a full-size
+        one.
+
+        The centreline was extracted from the ROS map beside it by
+        ``tools/centerline_from_map.py``: 100% of it lies inside the corridor
+        and it closes to \SI{0.19}{\meter}. That extraction is the thing
+        ``docs/source/plant.md`` had listed as missing.
+        """
+        here = Path(__file__).resolve().parent / "tracks" / "icra2025_centerline.csv"
+        return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)
+
+    @staticmethod
     def circuit(half_width: float = 0.75, ds: float = 0.1) -> "Track":
         """A closed lap containing all four sector types, by construction.
 
