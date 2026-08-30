@@ -340,8 +340,10 @@ manoeuvre is physically available, and always attempt it.
 \begin{table}[t]
   \centering
   \caption{Three postures by three aggressions, Spielberg, one slower opponent,
-  three seeds. Zero collisions in 27 runs; closest approach
-  $+\SI{0.056}{\meter}$ outside the keep-out.}
+  three seeds, against a moving car and a stopped one. Zero collisions in 54
+  runs and closest approach $+\SI{0.056}{\meter}$ outside the keep-out --- but
+  see Section~\ref{sec:static}: the \SI{5.6}{\meter} rows are a livelock, so
+  zero crashes conceals a failure here rather than demonstrating safety.}
   \label{tab:behaviour}
   \begin{tabular}{llrrr}
     \toprule
@@ -356,6 +358,14 @@ manoeuvre is physically available, and always attempt it.
     always try         & cautious   & \SI{33.6}{\meter} & 0.00 & 0.7 \\
     always try         & neutral    & \SI{54.7}{\meter} & 0.67 & 1.7 \\
     always try         & aggressive & \SI{74.6}{\meter} & 1.00 & 2.0 \\
+    \midrule
+    \multicolumn{5}{l}{\emph{against a \textbf{static} obstacle}} \\
+    stay behind        & cautious / neutral & \SI{5.6}{\meter} & 0.00 & 1.0 \\
+    overtake when safe & cautious / neutral & \SI{5.6}{\meter} & 0.00 & 2.0 \\
+    always try         & cautious / neutral & \SI{5.6}{\meter} & 0.00 & 1.0 \\
+    stay behind        & aggressive & \SI{75.0}{\meter} & 1.00 & 2.0 \\
+    overtake when safe & aggressive & \SI{75.2}{\meter} & 1.00 & 2.0 \\
+    always try         & aggressive & \SI{75.0}{\meter} & 1.00 & 2.0 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -375,6 +385,50 @@ pass almost always available, so ``when safe'' and ``always'' should coincide.
 Separating them needs a case where the pass is genuinely unavailable, and we do
 not have one. The claim that a weight policy can express \emph{safe} overtaking
 is therefore \textbf{not} established here; only that it can express overtaking.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figures/behaviour.png}
+  \caption{Behaviour from two cost weights, against a moving car and against a
+  stopped one. Aggression decides the outcome; the posture does not. The floor
+  at \SI{5.6}{\meter} in the right panel is a livelock, not a slow lap: the car
+  parks behind the static obstacle and the episode times out.
+  \texttt{experiments/behaviour\_modes.py}.}
+  \label{fig:behaviour}
+\end{figure}
+
+\subsection{A stopped car is not a slow car}\label{sec:static}
+``Stay behind'' is a behaviour only against something that is going somewhere.
+Behind a \emph{static} obstacle it is not caution, it is stopping. The posture
+must therefore be conditioned on a classification, and \textbf{that
+classification cannot be made from a single frame} --- a stopped car and a slow
+car are identical in one observation, and only their positions over time
+differ. We estimate it from observed positions with an exponential filter that
+requires three observations before it will commit; it is not given the
+opponent's true speed. It classified correctly on $100\%$ of moving runs and
+$0\%$ of stationary ones.
+
+This is a stronger argument for a recurrent policy than a closing rate, because
+it \emph{gates the entire behaviour choice} rather than tuning it, and it is
+what a detection-and-tracking stack supplies on a vehicle.
+
+Table~\ref{tab:behaviour} and Fig.~\ref{fig:behaviour} give the result, and it
+is not the one we expected. With the classification in place ``stay behind''
+correctly goes around a stopped obstacle (\SI{75.0}{\meter}, one pass). But
+\textbf{at cautious and neutral aggression every posture stalls at
+\SI{5.6}{\meter}}: the car parks behind the obstacle and the episode times out.
+Two of three settings livelock, and no run in the entire study crashed --- so a
+crash rate of zero here conceals a failure rather than demonstrating safety.
+
+The mechanism is a trap worth naming. Our availability test requires a closing
+speed. As the car slows toward a static obstacle the closing speed tends to
+zero, so the test reports no pass available, so the car keeps following, so it
+stops --- \textbf{and once stopped it can never authorise the manoeuvre that
+would restore the motion the test demands}. Escaping it required
+$q_c \le 0.5$: a static obstacle sits \emph{on} the reference line
+permanently, so the contouring weight must yield before the car will leave the
+line at all, and that threshold is lower than the one that suffices to pass a
+moving car.
 
 \subsection{Three defects, and what found them}
 Each was silent, and each produced a table that looked like a result.

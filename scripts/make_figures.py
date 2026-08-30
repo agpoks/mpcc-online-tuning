@@ -493,8 +493,11 @@ def fig_behaviour():
     aggr = ["cautious", "neutral", "aggressive"]
     kinds = sorted({k.split("/")[0] for k in d}) if "/" in next(iter(d)) else [None]
     kinds = [k for k in ("dynamic", "static") if k in kinds] or [None]
+    # Shared y. The static panel's 5.6 m stall only reads as a failure against
+    # the 34 m of merely following and the 75 m of passing; on its own axis it
+    # is just a low point.
     fig, axes = plt.subplots(1, len(kinds), figsize=(5.4 * len(kinds), 4.0),
-                             squeeze=False)
+                             squeeze=False, sharey=True)
     x = np.arange(len(aggr))
     for ax, kind in zip(axes[0], kinds):
         for i, p_ in enumerate(post):
@@ -508,7 +511,7 @@ def fig_behaviour():
                 n = d[key(g)]["passes"]
                 if n > 0:
                     ax.annotate(f"{n:.2f}", xy=(x[j] + (i - 1) * 0.13, cov[j]),
-                                xytext=(0, 9), textcoords="offset points",
+                                xytext=(0, 9 + 9 * i), textcoords="offset points",
                                 fontsize=7, ha="center", color=CAT[i])
         ax.set_xticks(x, aggr)
         ax.set_xlabel("aggression")
@@ -516,10 +519,17 @@ def fig_behaviour():
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
         ax.set_title(f"{kind or 'opponent'} obstacle", fontsize=10, color=INK)
+        if kind == "static":
+            # The livelock, named on the figure rather than left to the caption.
+            ax.annotate("car stops behind the obstacle\nand never recovers",
+                        xy=(0.5, 5.6), xytext=(0.15, 22), fontsize=8, color=INK,
+                        arrowprops=dict(arrowstyle="->", color="0.45", lw=1.0))
     axes[0][0].set_ylabel("distance covered [m]")
     axes[0][0].legend(frameon=False, fontsize=8.5, loc="upper left")
-    fig.suptitle("Behaviour from two cost weights. Labels are passes per episode; "
-                 "bars are the seed range.", fontsize=9.5, color=INK, y=1.02)
+    fig.suptitle("Behaviour from two cost weights. Aggression is the axis that "
+                 "decides the outcome; the posture is not.\nLabels are passes per "
+                 "episode; bars are the seed range.",
+                 fontsize=9.5, color=INK, y=1.04)
     fig.tight_layout()
     fig.savefig(OUT / "behaviour.png", dpi=170, bbox_inches="tight")
     print("  wrote behaviour.png")
