@@ -180,3 +180,25 @@ def test_mlp_carries_no_influence():
     cell = MLPCell(N_FEATURES, 12, seed=0)
     _h, _imm, leak = cell.step(np.zeros(N_FEATURES))
     assert (leak == 0.0).all()
+
+
+def test_theta0_must_be_strictly_inside_the_box():
+    """An anchor on a bound has zero gradient on that side -- refuse to build.
+
+    This shipped: q_l and q_v were anchored exactly on their ceilings, so the
+    two weights that carry behaviour and safety could only ever be revised
+    downward, and the policy gradient through them was identically zero
+    whenever the pre-activation was non-negative. The failure looks like "the
+    policy learns a constant", which is a long way from its cause.
+    """
+    cell = LTCCell(N_FEATURES, 6, seed=0)
+    bad = TH0.copy()
+    with pytest.raises(ValueError, match="strictly interior"):
+        WeightPolicy(cell, bad, THETA_LO, bad.copy())      # hi == theta0
+
+
+def test_every_shipped_weight_has_room_to_move_both_ways():
+    """The real bounds, against the real offline anchor."""
+    th0 = MPCCWeights(q_c=1.0, q_v=2.0, q_l=200.0, r_d=1.0).to_log()
+    assert (THETA_HI - th0 > 1e-6).all(), "a weight cannot be increased"
+    assert (th0 - THETA_LO > 1e-6).all(), "a weight cannot be decreased"

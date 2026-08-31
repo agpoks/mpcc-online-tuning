@@ -199,6 +199,19 @@ class WeightPolicy:
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
+        # theta0 must be STRICTLY inside the box. The output map anchors there
+        # with span = hi - theta0 above and theta0 - lo below, and the policy
+        # gradient carries a factor of that span, so a dimension whose anchor
+        # sits on a bound has exactly zero gradient on that side -- it can be
+        # revised one way only, and silently. That shipped: q_l and q_v were
+        # both anchored on their ceilings. Loud, because the symptom (a policy
+        # that learns a constant) looks nothing like the cause.
+        dead = (self.hi - self.theta0 <= 0) | (self.theta0 - self.lo <= 0)
+        if dead.any():
+            raise ValueError(
+                f"theta0 lies on a bound in dimension(s) {np.flatnonzero(dead).tolist()}: "
+                f"the policy gradient there is identically zero on one side. "
+                f"Widen the box so every anchor is strictly interior.")
         rng = np.random.default_rng(seed + 7919)
         self.G = rng.normal(0.0, out_scale / np.sqrt(cell.n),
                             (len(self.theta0), cell.n))
@@ -386,15 +399,92 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
     return np.array(f, float)
 
 
+
+#: Width of the meta-RL feedback vector: previous theta (8, as a fraction of
+#: its own span), previous reward, previous TD error.
+N_META = 10
+
+
+def meta_features(theta_prev=None, r_prev=0.0, td_prev=0.0,
+                  lo=None, hi=None, r_scale=1.0):
+    """The meta-RL feedback vector: what the policy just did, and what it got.
+
+    Adapted from RTRRL (Lemmel & Grosu, arXiv:2311.04830), whose "meta-RL"
+    architecture feeds the PREVIOUS ACTION AND REWARD back in as network
+    inputs, after the basal-ganglia loop it is modelled on. That is the one
+    component of that method we had never tested, and the measurement that
+    motivates testing it is this: freeing the output layer (the anti-saturation
+    term, :attr:`PolicyTuner.entropy`) moved theta off its bound but left it
+    almost constant across sectors -- 1.733 / 1.610 / 1.877 / 1.622 -- while
+    halving distance covered. So the readout was never the binding constraint,
+    and the remaining candidate acts UPSTREAM of it.
+
+    The reasoning for why it might bind: every entry in :func:`features` is a
+    snapshot of *now* -- curvature ahead, speed fraction, gap. Nothing tells
+    the network how the last thing it tried went. A policy that cannot observe
+    its own effect has no way to represent "q_v of 1.7 was too timid here",
+    only "this is a hairpin", and a constant is a defensible answer to the
+    second question. Feeding theta back makes the mapping situation -> theta
+    conditionable on the trajectory of thetas already tried.
+
+    Our "action" is theta, not an actuator command, so it is theta that is fed
+    back -- 8 values, each as its position within its own [lo, hi] span so the
+    scale matches the other dimensionless features. The TD error is included
+    beyond RTRRL's action+reward pair because with an MPC critic it is directly
+    available and is the sharper signal: reward says what happened, the TD
+    error says how much of it was a surprise.
+
+    Returns a zero vector on the first step, which is correct -- there is no
+    previous action to report.
+    """
+    f = np.zeros(N_META)
+    if theta_prev is not None:
+        lo = THETA_LO if lo is None else np.asarray(lo, float)
+        hi = THETA_HI if hi is None else np.asarray(hi, float)
+        span = np.where(hi - lo > 1e-9, hi - lo, 1.0)
+        f[:8] = np.clip((np.asarray(theta_prev, float) - lo) / span, 0.0, 1.0)
+    # Both signals are unbounded, so squash rather than clip: a single large
+    # TD error should not saturate the input for the rest of the episode.
+    f[8] = np.tanh(float(r_prev) / max(float(r_scale), 1e-9))
+    f[9] = np.tanh(float(td_prev))
+    return f
+
 #: Length scale for the engagement test, in metres -- roughly a car length. Not
 #: a braking distance: see the note in :func:`features`.
 ENGAGE_SCALE = 0.5
 
 N_FEATURES = 18      # 9 + sector(4) + width(1) + opponent class(4)
-THETA_LO = np.log(np.array([0.05, 0.05, 0.02, 1e-3, 1e-3, 1e-3]))
+THETA_LO = np.log(np.array([0.05, 0.05, 0.02, 1e-3, 1e-3, 1e-3, 0.02, 0.30]))
 #: Ceiling on q_v at 2.0 -- measured: it saturates above ~2 on an empty track
 #: and every attempted pass above it leaves the track with an opponent present.
-THETA_HI = np.log(np.array([20.0, 200.0, 2.0, 10.0, 10.0, 10.0]))
+#: d_obs is a berth in metres. The 0.02 m floor is deliberate: driven to zero
+#: the keep-out shrinks to the opponent's own radius and "aggressive" becomes
+#: "touching", which is a broken constraint rather than a bold overtake.
+#: k_v is a grip *utilisation* and its correct value is sqrt(mu/mu_hat).
+#: Bounded to [0.30, 1.30]: below 0.3 the car crawls, above 1.3 it is
+#: claiming 70% more grip than it assumed, which is not confidence but a
+#: guarantee of leaving the track.
+#: The ceiling must sit STRICTLY ABOVE theta0, not on it.
+#:
+#: It did not, and that was a hole in the learning path rather than a matter of
+#: taste. theta0 is the offline-tuned weight vector -- deliberately, since the
+#: offline parameters are meant to be stable and the online policy adjusts
+#: around them -- and the box was drawn with two of those values exactly on its
+#: edge: q_l at 200 and q_v at 2.0. The output map anchors at theta0 with an
+#: asymmetric span, span = hi - theta0 above and theta0 - lo below, and the
+#: policy gradient flows through (1 - tanh^2 z) * span. With hi == theta0 that
+#: span is zero, so for q_l and q_v the gradient was identically zero whenever
+#: the pre-activation was non-negative -- half the time, structurally.
+#:
+#: q_v is the parameter that carries behaviour (the ratio q_v/q_c) and safety
+#: (its magnitude), so the most consequential weight was the one that could
+#: only ever be revised downward.
+#:
+#: The measured facts behind the old caps are unchanged: q_v saturates around 2
+#: on an empty track and above it attempted passes leave the track. Those are
+#: now points INSIDE the box that the learner can reach and be penalised for,
+#: which is what a learned parameter needs, instead of walls it is pinned to.
+THETA_HI = np.log(np.array([20.0, 400.0, 3.0, 10.0, 10.0, 10.0, 0.60, 1.30]))
 assert len(WEIGHT_NAMES) == len(THETA_LO) == len(THETA_HI)
 
 
@@ -411,11 +501,54 @@ class PolicyTuner:
 
     def __init__(self, mpcc, policy, gamma=0.98, lam=0.9, alpha=2e-3,
                  clip=1.0, delta_clip=1.0, explore=0.05, seed=0,
-                 trust_region: float | None = None, theta_prior: float = 0.0):
+                 trust_region: float | None = None, theta_prior: float = 0.0,
+                 theta_explore: float = 0.0, entropy: float = 0.0):
         from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
         self.mpcc, self.pol = mpcc, policy
         self.gamma, self.lam, self.alpha = gamma, lam, alpha
         self.clip, self.delta_clip, self.explore = clip, delta_clip, explore
+        # Exploration in THETA, not only in the actuator.
+        #
+        # The inherited scheme perturbs u0, which is *downstream* of theta: the
+        # MPCC has already solved by then. So the learner computes
+        # dQ/dtheta . dtheta/dphi -- how the value would change if theta
+        # changed -- while theta is never actually varied, and it never observes
+        # the consequence of a different weight vector, only of a different
+        # actuator command. With no contrast between theta values there is
+        # nothing to say which situation wants which theta, which is consistent
+        # with a policy that learns a good CONSTANT and never a function.
+        #
+        # In RTRRL the policy's output IS the action, so sampling the action
+        # explores the policy. Here it does not, and that difference is a
+        # property of putting an optimal-control problem between the policy and
+        # the plant rather than something to be copied across.
+        self.theta_explore = float(theta_explore)
+        # Entropy regularisation, adapted rather than copied.
+        #
+        # RTRRL adds the gradient of the ACTION DISTRIBUTION's entropy, scaled
+        # by eta_H, to the policy and RNN gradients, and reports it as a
+        # trade-off "between consistency and best possible reward". It is the
+        # only term in that method which actively opposes a policy becoming
+        # deterministic.
+        #
+        # Our policy has no action distribution -- it emits theta, and the MPCC
+        # turns that into an action. So the analogue is not entropy over
+        # actions but a pressure away from SATURATION of the output map: the
+        # measured failure is that tanh(G h) is driven to +-1, at which point
+        # the derivative vanishes, the output stops depending on the input, and
+        # the policy freezes wherever it arrived. Every configuration tried --
+        # three output parameterisations, with and without a trust region, with
+        # and without a prior, three levels of theta exploration -- ends pinned
+        # at a bound (0.006, 0.100, 19.8, 39.97), never in the interior.
+        #
+        # So the term added here is a gradient on |tanh(z)|, pushing z back
+        # towards the responsive part of the curve. It is the same *purpose* as
+        # RTRRL's entropy bonus -- keep the policy from collapsing to a
+        # deterministic corner -- expressed for a policy whose output is a cost
+        # function rather than a distribution.
+        self.entropy = float(entropy)
+        # Meta-RL feedback state: what the policy last did and what came of it.
+        self._last_theta, self._last_r, self._last_td = None, 0.0, 0.0
         self._lim = np.array([STEER_MAX, ACCEL_MAX])
         self.rng = np.random.default_rng(seed)
         # A bound on the STEP, not on the output. Bounding the output only says
@@ -460,11 +593,25 @@ class PolicyTuner:
     def act(self, feat, state5):
         """Emit theta for this tick, solve, and return ``(theta, action)``."""
         theta = self.pol.step(feat)
+        if self.theta_explore > 0:
+            theta = np.clip(theta + self.rng.normal(0.0, self.theta_explore,
+                                                    theta.shape),
+                            self.pol.lo, self.pol.hi)
         out = self.mpcc.value(state5, theta)
         action = self._explore(out["u0"])
         q = self.mpcc.action_value(state5, theta, action, v_out=out)
         self._pending = (state5, theta, q)
+        self._last_theta = theta
         return theta, action
+
+    def meta_vec(self, r_scale: float = 1.0):
+        """The meta-RL feedback vector for the NEXT tick.
+
+        Concatenate this onto :func:`features` to give the policy RTRRL's
+        meta-RL input. Zero before the first action, which is correct.
+        """
+        return meta_features(self._last_theta, self._last_r, self._last_td,
+                             self.pol.lo, self.pol.hi, r_scale)
 
     def learn(self, reward, next_state5, next_feat, terminated):
         """One TD update, then emit the next tick's theta and action."""
@@ -475,11 +622,19 @@ class PolicyTuner:
             v_next = 0.0 if terminated else -q["value"]
             delta = float(np.clip(reward + self.gamma * v_next - (-pq),
                                   -self.delta_clip, self.delta_clip))
+            self._last_r, self._last_td = float(reward), delta
             dG, dc = pg
             self.eG = self.gamma * self.lam * self.eG + self._norm(-dG, "G")
             self.ec = self.gamma * self.lam * self.ec + self._norm(-dc, "c")
             dG = self.alpha * delta * self.eG
             dc = self.alpha * delta * self.ec
+            if self.entropy > 0:
+                # d/dG of -sum(tanh(z)^2) with z = G h, which is
+                # -2 tanh(z) (1 - tanh^2 z) h^T -- zero in the middle of the
+                # curve and strongest exactly where the output is saturating.
+                t = np.tanh(self.pol.G @ self.pol._h)
+                dG = dG - (self.alpha * self.entropy
+                           * np.outer(2.0 * t * (1.0 - t ** 2), self.pol._h))
             if self.trust_region is not None:
                 n = float(np.sqrt((dG ** 2).sum() + (dc ** 2).sum()))
                 if n > self.trust_region:
