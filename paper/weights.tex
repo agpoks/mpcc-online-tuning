@@ -994,6 +994,31 @@ produce the observed collapse was present throughout, and that the earlier
 elimination of the output map was performed on an instance of the output map
 that was itself broken.
 
+\paragraph{Re-measured, and it was not the cause.} Repeating the sensitivity
+sweep against the widened box gives sector $6.0\% \pm 2.2\%$, opponent class
+$3.5\% \pm 0.7\%$, curvature preview $2.0\% \pm 0.5\%$, gap $4.7\% \pm 2.4\%$
+and corridor width $1.3\% \pm 0.4\%$ (three seeds; the error bar is over seeds,
+which the original table lacked). Every group remains below the threshold at
+which we would call a feature used. Per seed the four sector values are
+$[1.25, 1.25, 1.28, 1.29]$, $[2.82, 2.86, 3.09, 2.79]$ and
+$[1.96, 1.92, 1.99, 1.95]$: within a seed that is one number, and the variation
+is \emph{between} seeds rather than between sectors.
+
+What the fix changed is which constant. The emitted ratio moved from $19.8$,
+pinned against a bound, to $1.25$--$2.8$ in the interior. The output is no
+longer welded to a wall, which is a real repair and a necessary one, but being
+un-pinned is not the same as being situation-dependent, and we had conflated
+the two. \textbf{The policy still learns a constant, and the cause is still
+open.}
+
+A measurement caveat that matters for how such a claim is tested. Scoring the
+weights the policy \emph{emits while driving}, binned by the sector the car is
+in, gives $14.1\% \pm 3.9\%$ for the same policy the frozen sweep scores at
+$6.0\%$. The driving measure attributes any within-episode drift to whichever
+sector the car happened to occupy; the frozen sweep holds the input and
+isolates the response. The two are not interchangeable, and the more flattering
+one is the less trustworthy.
+
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{figures/driving_sectors.png}
