@@ -10,7 +10,41 @@ def load(pgm, yaml_path=None, res=0.05, origin=(0.0, 0.0)):
         origin = tuple(float(v) for v in m["origin"].strip("[] ").split(",")[:2])
     return np.array(Image.open(pgm)), res, origin
 
-def corridor(im, close_px=2, min_hole_px=300):
+def connect_cone_rows(occ, bridge_px=21, min_cone_px=8, max_cone_px=200):
+    """Join a row of cones into one continuous wall.
+
+    A line of cones IS a track boundary. Filling them -- which is what a naive
+    hole-fill does, and what this tool did -- turns that boundary into free
+    space, so the extracted corridor lets the car drive straight through a wall
+    and the centreline can be routed on the wrong side of it. That is a
+    correctness bug in the track, not a cosmetic one in the figure.
+
+    Cones on these maps are 8-200 px blobs spaced a median of 15.7 px apart
+    (0.78 m at 0.05 m/px), 19.4 px at the 90th percentile. A morphological
+    closing wide enough to bridge that spacing links each row into a barrier,
+    while leaving isolated obstacles and the outer walls as they are.
+    """
+    lab, k = ndi.label(occ)
+    if k == 0:
+        return occ
+    sizes = np.array(ndi.sum(occ, lab, range(1, k + 1)))
+    cone = np.isin(lab, [i + 1 for i, sz in enumerate(sizes)
+                         if min_cone_px <= sz <= max_cone_px])
+    # Close only the cone-sized blobs, so bridging a cone row cannot also weld
+    # two genuine walls together across a gap the car is meant to drive through.
+    b = int(bridge_px) | 1
+    joined = ndi.binary_closing(cone, np.ones((b, b)))
+    # Keep only what the closing added *between* cones: a closed blob that
+    # touches no cone is an artefact of the kernel, not a wall.
+    joined &= ndi.binary_dilation(cone, np.ones((b, b)))
+    return occ | joined
+
+
+def corridor(im, close_px=2, min_hole_px=300, connect_cones=True,
+             bridge_px=21):
+    if connect_cones:
+        occ = connect_cone_rows(im <= 50, bridge_px=bridge_px)
+        im = np.where(occ, 0, im)
     free = im >= 250
     free = ndi.binary_closing(free, np.ones((close_px*2+1,)*2))
     free = ndi.binary_opening(free, np.ones((3, 3)))
@@ -64,10 +98,10 @@ def cycle(sk):
     return pts[order]
 
 def centerline(pgm, yaml_path=None, res=0.05, origin=(0,0), min_width_px=5,
-               n_out=800, smooth_m=0.35):
+               n_out=800, smooth_m=0.35, connect_cones=True, bridge_px=21):
     im, res, origin = load(pgm, yaml_path, res, origin)
     H, W = im.shape
-    corr, free = corridor(im)
+    corr, free = corridor(im, connect_cones=connect_cones, bridge_px=bridge_px)
     dist = ndi.distance_transform_edt(corr)
     core = corr & (dist >= min_width_px/2)
     lab, k = ndi.label(core)
@@ -100,7 +134,8 @@ def centerline(pgm, yaml_path=None, res=0.05, origin=(0,0), min_width_px=5,
 
 
 def centerline_around(pgm, yaml_path=None, res=0.05, origin=(0, 0), hole_rank=0,
-                      close_px=2, n_out=800, smooth_m=0.35):
+                      close_px=2, n_out=800, smooth_m=0.35, connect_cones=True,
+                      bridge_px=21):
     """Centreline of ONE loop, chosen by which hole it goes around.
 
     A branching corridor -- an outer ring plus an inner section, as on the ICRA
@@ -120,7 +155,8 @@ def centerline_around(pgm, yaml_path=None, res=0.05, origin=(0, 0), hole_rank=0,
 
     im, res, origin = load(pgm, yaml_path, res, origin)
     H, W = im.shape
-    corr, free = corridor(im, close_px=close_px)
+    corr, free = corridor(im, close_px=close_px, connect_cones=connect_cones,
+                          bridge_px=bridge_px)
     filled = ndi.binary_fill_holes(free)
     hl, hk = ndi.label(filled & ~free)
     if hk == 0:

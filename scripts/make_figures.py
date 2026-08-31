@@ -17,6 +17,7 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib.colors as mcolors  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
@@ -876,7 +877,20 @@ def fig_icra():
         else:
             xy, w, L, ok, gap, _a = cl.centerline_around(str(pgm), str(yml),
                                                          hole_rank=rank)
-        ax.imshow(im, cmap="gray")
+        # Draw the map the PLANNER sees, not the raw grid. A row of cones is a
+        # boundary, but as separate blobs it is mostly free space between them,
+        # and filling holes to tame the skeleton turned that boundary into
+        # driveable track -- so the picture showed a corridor the car could cut
+        # straight through. connect_cone_rows welds neighbouring cones into one
+        # wall; what is shaded here is the corridor after that weld.
+        occ = cl.connect_cone_rows(im <= 50)
+        shown = np.where(occ, 0, im)
+        ax.imshow(shown, cmap="gray")
+        weld = occ & ~(im <= 50)
+        # Not RED -- that is the centreline's colour, and a wall drawn in it
+        # reads as track.
+        ax.imshow(np.ma.masked_where(~weld, weld),
+                  cmap=mcolors.ListedColormap(["#d97706"]), alpha=0.9, zorder=2)
         ax.plot((xy[:, 0] - org[0]) / res, (org[1] + H * res - xy[:, 1]) / res,
                 "-", color=RED, lw=2.2, zorder=3)
         ax.plot((xy[0, 0] - org[0]) / res, (org[1] + H * res - xy[0, 1]) / res,
@@ -886,10 +900,12 @@ def fig_icra():
         ax.axis("off")
         print(f"    {name}: {L:.1f} m, {100*ok:.0f}% in corridor", flush=True)
     fig.suptitle("Centrelines extracted from the competition teams' own occupancy "
-                 "grids. Track 1's corridor BRANCHES,\nso it has no unique "
-                 "centreline -- a loop is named by the hole it encircles, and this "
-                 "is the outer one.",
-                 fontsize=9.5, color=INK, y=1.03)
+                 "grids. Track 1's corridor BRANCHES, so it has\nno unique centreline "
+                 "-- a loop is named by the hole it encircles, and this is the outer "
+                 "one. Gaps between neighbouring\ncones are welded into solid wall "
+                 "(red) so a row of cones bounds the corridor instead of being "
+                 "driven through.",
+                 fontsize=9.5, color=INK, y=1.05)
     fig.tight_layout()
     fig.savefig(OUT / "icra_tracks.png", dpi=170, bbox_inches="tight")
     print("  wrote icra_tracks.png")
@@ -992,7 +1008,59 @@ def fig_driving_sectors():
     print("  wrote driving_sectors.png")
 
 
-FIGS = {"driving": fig_driving_sectors, "architecture": fig_architecture, "icra": fig_icra,
+def fig_online_curve():
+    """The learning curve of every parameter, in real time while driving.
+
+    Not "distance per episode" -- the parameters themselves, tick by tick, on a
+    continuous axis across episode boundaries. Three things are only visible
+    this way: whether a weight moves at all, whether it moves *within* a lap or
+    only between them, and whether it settles or keeps drifting.
+
+    Read from benchmarks/results/weight_matrix.json so the figure and the table
+    come from the same run.
+    """
+    d = _load("weight_matrix.json")
+    names = d["weights"]
+    T = np.array(d["trace"])
+    if not len(T):
+        print("  no trace recorded"); return
+    ep, sec, wts = T[:, 0], T[:, 3], T[:, 5:]
+    t = np.arange(len(T))
+
+    fig, axes = plt.subplots(2, 1, figsize=(11.0, 5.6), sharex=True,
+                             gridspec_kw=dict(height_ratios=[2.3, 1.0]))
+    ax = axes[0]
+    for k, n in enumerate(names):
+        ax.plot(t, wts[:, k], "-", lw=1.3, color=CAT[k % len(CAT)]
+                if k < len(CAT) else None, label=n, alpha=0.9)
+    for b in np.flatnonzero(np.diff(ep)) + 1:
+        ax.axvline(b, color="0.85", lw=0.8, zorder=0)
+    ax.set_yscale("log")
+    ax.set_ylabel("weight (log)")
+    ax.legend(fontsize=7.5, frameon=False, ncol=4, loc="upper left")
+    ax.set_title("every parameter, every control tick, while the car drives "
+                 "(grey lines are episode boundaries)", fontsize=9.5, color=INK)
+    bx = axes[1]
+    for k in range(4):
+        m = sec == k
+        if m.any():
+            bx.fill_between(t, 0, 1, where=m, transform=bx.get_xaxis_transform(),
+                            color=CAT[k], alpha=0.16, linewidth=0,
+                            label=Track.SECTOR_NAMES[k])
+    bx.set_xlabel("control tick (continuous across episodes)")
+    bx.set_yticks([]); bx.set_ylabel("sector")
+    bx.legend(fontsize=7.5, frameon=False, ncol=4, loc="upper left")
+    for a_ in axes:
+        for sp in ("top", "right"):
+            a_.spines[sp].set_visible(False)
+    fig.suptitle("Real-time online learning: all eight MPCC weights as they are "
+                 "adapted during driving.", fontsize=9.5, color=INK, y=1.01)
+    fig.tight_layout()
+    fig.savefig(OUT / "online_curve.png", dpi=170, bbox_inches="tight")
+    print("  wrote online_curve.png")
+
+
+FIGS = {"online": fig_online_curve, "driving": fig_driving_sectors, "architecture": fig_architecture, "icra": fig_icra,
         "filmstrip": fig_filmstrip, "adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "spielberg": fig_spielberg,
