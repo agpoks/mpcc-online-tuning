@@ -76,19 +76,37 @@ import numpy as np
 
 from mpcc_tuning.model import ACCEL_MAX, SPEED_MAX, STEER_MAX, KinematicBicycle
 
-WEIGHT_NAMES = ("q_c", "q_l", "q_v", "r_d", "r_a", "r_dv")
+#: The learnable parameters. The last is a **distance, not a cost**, and that
+#: distinction was measured rather than assumed.
+#:
+#: The obvious candidate was the slack penalty on the keep-out -- price
+#: intrusion, and a cheap price should mean a willingness to squeeze past. It
+#: does nothing: the slack is zero unless the constraint is violated, the
+#: solver simply does not violate it, and sweeping that penalty over two orders
+#: of magnitude moved the closest approach by 0.000 m. What *does* move it is
+#: the keep-out's own margin -- 0.15 to 0.45 m changed clearance from 0.570 to
+#: 0.765 m and progress from 1.185 to 0.491.
+#:
+#: So ``d_obs`` is the berth the driver insists on, in metres, and it is the
+#: parameter that expresses **how badly the pass is wanted**: small squeezes
+#: through a gap, large waits for a clean one. A behaviour policy that cannot
+#: vary it is deciding overtake-versus-follow entirely through q_v and q_c
+#: while the term that actually prices proximity stays frozen.
+WEIGHT_NAMES = ("q_c", "q_l", "q_v", "r_d", "r_a", "r_dv", "d_obs", "k_v")
 
 
 @dataclass
 class MPCCWeights:
     """The tunable weights. ``to_log``/``from_log`` are what the learner moves."""
 
-    q_c: float = 10.0     # contouring error
+    q_c: float = 10.0     # contouring error -- how hard the line is held
     q_l: float = 10.0     # lag error
-    q_v: float = 1.0      # reward for progress
-    r_d: float = 0.1      # steering effort
-    r_a: float = 0.01     # acceleration effort
+    q_v: float = 1.0      # reward for progress -- aggression
+    r_d: float = 0.1      # steering effort -- how sharply it is willing to turn
+    r_a: float = 0.01     # acceleration effort -- how hard it steps on the gas
     r_dv: float = 0.1     # keep the progress rate near the actual speed
+    d_obs: float = 0.15   # keep-out margin [m] -- how wide a berth an opponent gets
+    k_v: float = 0.85     # fraction of the grip-limited corner speed it will use
 
     def to_log(self) -> np.ndarray:
         return np.log(np.array([getattr(self, n) for n in WEIGHT_NAMES], dtype=float))
@@ -108,11 +126,14 @@ class MPCC:
                  dt: float = 0.1, car_half_width: float = 0.12, max_iter: int = 60,
                  max_obstacles: int = 0, obs_margin: float = 0.15,
                  obs_slack: tuple = (200.0, 5.0), obs_shape: str = "circle",
-                 car_half_length: float = 0.285):
+                 car_half_length: float = 0.285, terminal_speed: bool = True,
+                 terminal_grip: float = 0.85, speed_from_grip: bool = True,
+                 assumed_grip: float = 1.0):
         self.track = track
         self.model = model or KinematicBicycle(dt=dt)
         self.N, self.dt = int(horizon), float(dt)
         self.margin = track.half_width - car_half_width
+        self.car_half_width = float(car_half_width)
         self.n_theta = len(WEIGHT_NAMES)
         # A fixed budget of keep-outs, as in the acados template: the OCP is
         # built once, so the number of obstacles is structural and only their
@@ -135,12 +156,22 @@ class MPCC:
         #: (x, y, r) per obstacle for a circle; (x, y, r, psi) for an ellipse.
         self.obs_stride = 3 if obs_shape == "circle" else 4
         self._obstacles = np.zeros((0, self.obs_stride))
+        # Assume slightly LESS grip than the plant has for the terminal
+        # promise; a safety condition that assumes the best case is not one.
+        self.terminal_speed = bool(terminal_speed)
+        self.terminal_grip = float(terminal_grip)
+        self.speed_from_grip = bool(speed_from_grip)
+        self.assumed_grip = float(assumed_grip)
         self._build(max_iter)
         self._w0 = None   # warm start
 
     # -- construction ------------------------------------------------------
     def _build(self, max_iter: int) -> None:
         N = self.N
+        car_half_width = self.car_half_width
+        terminal_speed, terminal_grip = self.terminal_speed, self.terminal_grip
+        speed_from_grip, assumed_grip = self.speed_from_grip, self.assumed_grip
+        from mpcc_tuning.model import A_LAT_MAX as a_lat_max
         M = self.max_obstacles
         X = ca.MX.sym("X", 5, N + 1)     # [x, y, psi, v, s]
         U = ca.MX.sym("U", 3, N)         # [delta, a, v_s]
@@ -155,7 +186,8 @@ class MPCC:
         if M:
             w = ca.vertcat(w, ca.reshape(S, -1, 1))
 
-        q_c, q_l, q_v, r_d, r_a, r_dv = (ca.exp(theta[i]) for i in range(self.n_theta))
+        (q_c, q_l, q_v, r_d, r_a, r_dv,
+         d_obs, k_v) = (ca.exp(theta[i]) for i in range(self.n_theta))
 
         g, lbg, ubg = [ca.reshape(X[:, 0] - x0, -1, 1)], [0.0] * 5, [0.0] * 5
         J = 0
@@ -170,11 +202,46 @@ class MPCC:
             g.append(X[:, k + 1] - nxt)
             lbg += [0.0] * 5
             ubg += [0.0] * 5
-            # Stay on the track. As an inequality on the contouring error, which
-            # is the natural coordinate here -- the MPCC already computes it.
-            g.append(e_c)
-            lbg.append(-self.margin)
-            ubg.append(self.margin)
+            # Stay on the track, as an inequality on the contouring error --
+            # the natural coordinate here, since the MPCC already computes it.
+            #
+            # On a variable-width circuit this is TWO rows, because the corridor
+            # is not symmetric about the centreline and its bounds are functions
+            # of s. A constant bound cannot represent a track that varies from
+            # 0.69 m to 3.13 m round a lap, and a controller given one number
+            # for the whole track cannot be asked whether its weights should
+            # depend on the width.
+            # GRIP-LIMITED SPEED, with a learnable utilisation factor.
+            #
+            # A flat speed cap is an assumption; the physical limit is
+            # v <= sqrt(a_lat_max * mu / |kappa|), which varies round the lap.
+            # k_v is the fraction of that the controller believes it can use --
+            # exactly what a driver calibrates on an unfamiliar surface. If the
+            # plant's true grip is mu and the controller assumes mu_hat, the
+            # correct value is sqrt(mu / mu_hat), so unlike every other weight
+            # here this one has a KNOWN RIGHT ANSWER and learning it can be
+            # checked rather than merely reported.
+            #
+            # Note this puts theta into g for the first time. formulation.md
+            # says the lambda term "is the whole point" the moment that
+            # happens, and it is implemented; tests/test_gradient.py checks it.
+            if speed_from_grip:
+                kap_k = self.track.curvature_sym(X[4, k])
+                g.append(a_lat_max * assumed_grip
+                         - X[3, k] ** 2 * ca.fabs(kap_k) / (k_v ** 2 + 1e-9))
+                lbg.append(0.0)
+                ubg.append(ca.inf)
+
+            if getattr(self.track, "variable_width", False):
+                wl, wr = self.track.width(X[4, k])
+                g.append(wl - car_half_width - e_c)      # room to the left
+                lbg.append(0.0); ubg.append(ca.inf)
+                g.append(e_c + wr - car_half_width)      # room to the right
+                lbg.append(0.0); ubg.append(ca.inf)
+            else:
+                g.append(e_c)
+                lbg.append(-self.margin)
+                ubg.append(self.margin)
             # Circular keep-outs on the *next* state, so k=1..N are covered and
             # the pinned stage 0 is not. Copied from
             # MPCC_planner_acados/scripts/generate_acados_solver.py:
@@ -184,7 +251,10 @@ class MPCC:
             for j in range(M):
                 st = self.obs_stride
                 ox, oy, r_raw = obs[st * j], obs[st * j + 1], obs[st * j + 2]
-                r_eff = r_raw + self.obs_margin
+                # The margin is LEARNABLE. An inactive slot is still switched
+                # off arithmetically, but now by passing r_raw = -d_obs from
+                # _obs_param, which reads the same theta.
+                r_eff = r_raw + d_obs
                 dx, dy = X[0, k + 1] - ox, X[1, k + 1] - oy
                 s_kj = S[j, k]
                 if self.obs_shape == "circle":
@@ -212,10 +282,33 @@ class MPCC:
                 lbg.append(0.0)
                 ubg.append(ca.inf)
                 # acados' Zl (quadratic) and zl (linear) on the same row,
-                # written out because a plain NLP has no idxsh.
+                # written out because a plain NLP has no idxsh. The quadratic
+                # term is now LEARNABLE -- q_obs is the price of getting close
+                # to an opponent, and a policy that cannot move it cannot
+                # express how badly it wants the pass. The linear term stays
+                # fixed so the constraint keeps a non-zero activation cost even
+                # if the learner drives q_obs down.
                 J += self.obs_Z * s_kj ** 2 + self.obs_z * s_kj
         e_cN, e_lN = self.track.errors(X[0, N], X[1, N], X[4, N])
         J += q_c * e_cN ** 2 + q_l * e_lN ** 2
+
+        # TERMINAL SAFETY CONSTRAINT. With the speed cap raised to a physical
+        # value, nothing else stops the horizon ending at a speed the car
+        # cannot hold through the corner it is entering -- the cap was doing
+        # that job by accident, and doing it everywhere rather than where it
+        # was needed.
+        #
+        # The condition is the cornering limit at the terminal station:
+        #     v_N^2 |kappa(s_N)| <= a_lat_max * grip
+        # so the last predicted state is one the vehicle can actually hold. It
+        # is a *terminal* constraint rather than a stage one because the stages
+        # are already bounded by the corridor; what the horizon lacks is a
+        # promise about what happens after it ends.
+        if terminal_speed:
+            kap = self.track.curvature_sym(X[4, N])
+            g.append(a_lat_max * terminal_grip - X[3, N] ** 2 * ca.fabs(kap))
+            lbg.append(0.0)
+            ubg.append(ca.inf)
 
         self._lbg, self._ubg = np.array(lbg), np.array(ubg)
         self._nx = 5 * (N + 1)
@@ -275,7 +368,7 @@ class MPCC:
                 f"{self.max_obstacles}; pass max_obstacles= at construction")
         self._obstacles = obs
 
-    def _obs_param(self) -> np.ndarray:
+    def _obs_param(self, d_obs: float | None = None) -> np.ndarray:
         """The obstacle parameter block, unused slots switched off.
 
         An unused slot is ``r_raw = -obs_margin``, so ``r_eff`` is exactly 0 and
@@ -283,17 +376,19 @@ class MPCC:
         Same trick as the acados template, and for the same reason: it avoids a
         ``max(0, .)`` in the NLP.
         """
-        off = ([0.0, 0.0, -self.obs_margin] if self.obs_shape == "circle"
-               else [0.0, 0.0, -self.obs_margin, 0.0])
+        m = self.obs_margin if d_obs is None else float(d_obs)
+        off = ([0.0, 0.0, -m] if self.obs_shape == "circle"
+               else [0.0, 0.0, -m, 0.0])
         q = np.tile(off, (self.max_obstacles, 1))
         if len(self._obstacles):
             q[:len(self._obstacles)] = self._obstacles
         return q.ravel()
 
     def _p(self, state5: np.ndarray, theta: np.ndarray) -> np.ndarray:
-        parts = [np.asarray(state5, float), np.asarray(theta, float)]
+        th = np.asarray(theta, float)
+        parts = [np.asarray(state5, float), th]
         if self.max_obstacles:
-            parts.append(self._obs_param())
+            parts.append(self._obs_param(float(np.exp(th[6])) if len(th) > 6 else None))
         return np.concatenate(parts)
 
     # -- solving -----------------------------------------------------------

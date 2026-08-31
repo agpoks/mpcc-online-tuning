@@ -102,8 +102,9 @@ def test_invisible_on_a_controller_that_would_not_crash(track, name):
 @pytest.mark.parametrize("name", FAST)
 def test_saves_a_controller_that_would_crash(track, name):
     from examples.tune_online import Plant
-    from mpcc_tuning.mpcc import MPCC
-    theta = np.log(np.array([0.41, 1.40, 22.0, 0.019, 0.006, 0.019]))
+    from mpcc_tuning.mpcc import MPCC, MPCCWeights
+    theta = MPCCWeights(q_c=0.41, q_l=1.40, q_v=22.0, r_d=0.019, r_a=0.006,
+                        r_dv=0.019).to_log()
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05, max_iter=60)
 
     def go(filt):
@@ -220,8 +221,9 @@ def test_intervention_rate_is_not_a_safety_metric(track):
     sign backwards, so it is pinned here.
     """
     from examples.tune_online import Plant
-    from mpcc_tuning.mpcc import MPCC
-    theta = np.log(np.array([0.41, 1.40, 22.0, 0.019, 0.006, 0.019]))
+    from mpcc_tuning.mpcc import MPCC, MPCCWeights
+    theta = MPCCWeights(q_c=0.41, q_l=1.40, q_v=22.0, r_d=0.019, r_a=0.006,
+                        r_dv=0.019).to_log()
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05, max_iter=60)
     rates = {}
     for grip in (0.6, 2.5):

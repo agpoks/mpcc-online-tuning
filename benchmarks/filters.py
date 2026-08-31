@@ -35,7 +35,8 @@ from mpcc_tuning.track import Track  # noqa: E402
 
 WEIGHTS = {
     "good": MPCCWeights().to_log(),
-    "bad": np.log(np.array([0.41, 1.40, 22.0, 0.019, 0.006, 0.019])),
+    "bad": MPCCWeights(q_c=0.41, q_l=1.40, q_v=22.0, r_d=0.019,
+                    r_a=0.006, r_dv=0.019).to_log(),
 }
 
 

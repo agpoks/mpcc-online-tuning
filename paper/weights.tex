@@ -715,7 +715,13 @@ is therefore \textbf{not} established here; only that it can express overtaking.
   grids, at 100\% inside the corridor. Track 1's corridor \emph{branches} --- an
   outer ring plus an inner section --- so it has no unique centreline; a loop is
   named by the hole it encircles, and this is the outer one. Track 1 is also
-  the only circuit here carrying all four named sector types.
+  the only circuit here carrying all four named sector types. Rows of cones are
+  \emph{welded} into continuous wall before extraction (orange): a cone row is
+  a boundary whose area is mostly the free space between the cones, so the
+  hole-filling the skeleton requires had been turning a wall into driveable
+  track, and the extracted line was free to cross it. After welding, no point
+  of the centreline lies inside a weld and the nearest clears it by
+  \SI{0.70}{\meter} against a \SI{0.12}{\meter} car half-width.
   \texttt{tools/centerline\_from\_map.py}.}
   \label{fig:icra}
 \end{figure}
@@ -920,10 +926,11 @@ constant, and all eighteen features are decorative.} Every comparison in
 Section~\ref{sec:gate} is therefore between two constants, and should be read
 as such.
 
-\textbf{The output parameterisation is not the cause.} We tried three --- a hard
-clip, a $\tanh$ centred on the feasible box, and a $\tanh$ anchored at the
-reference controller with asymmetric span --- and all three end at
-$q_v/q_c \approx 19.7$ with the features ignored. The untrained policy is
+\textbf{The output parameterisation is not the cause --- retracted; see
+Section~\ref{sec:deadspan}.} We tried three --- a hard clip, a $\tanh$ centred
+on the feasible box, and a $\tanh$ anchored at the reference controller with
+asymmetric span --- and all three end at $q_v/q_c \approx 19.7$ with the
+features ignored. The untrained policy is
 responsive (ratio $0.70$--$0.95$ over random inputs); \emph{training} is what
 destroys it. TD($\lambda$) drives $\theta$ monotonically, $\theta$ reaches
 whichever bound exists, the squash saturates there, the output stops responding
@@ -937,6 +944,55 @@ bound on the output can repair it, because the deficiency is that nothing makes
 stopping preferable to continuing. \textbf{A stopping criterion is a
 prerequisite for this line of work, not an improvement to it}, and we would not
 run another policy comparison without one.
+
+\subsection{A structural cause, and what it makes
+provisional}\label{sec:deadspan}
+The paragraph above is wrong, and the way it is wrong is worth reporting.
+
+The third parameterisation anchors the output at the reference controller
+$\theta_0$ and gives it an asymmetric span,
+%
+\begin{equation}
+  \theta = \theta_0 + s(t)\,t, \qquad
+  s(t) = \begin{cases} \theta_{\max} - \theta_0, & t \ge 0\\
+                       \theta_0 - \theta_{\min}, & t < 0\end{cases}
+  \label{eq:span}
+\end{equation}
+%
+with $t = \tanh(Gh)$, so the policy gradient carries a factor
+$\partial\theta/\partial z = (1 - t^2)\,s(t)$. We had set $\theta_0$ to the
+offline-tuned weights \emph{deliberately} --- the offline parameters are meant
+to be stable and the online policy adjusts around them --- and had drawn the
+box from measurements of where each weight stops helping. Two of those
+coincided: $q_l$ at $200$ and $q_v$ at $2.0$ were each equal to their own
+ceiling, so $s(t) = 0$ for $t \ge 0$ and the gradient through both weights was
+\emph{identically zero} whenever the pre-activation was non-negative. Half the
+time, structurally, the two weights had no learning signal and could only be
+revised downward.
+
+$q_v$ is the weight that carries behaviour, through the ratio $q_v/q_c$, and
+safety, through its magnitude. The most consequential parameter in the policy
+was the half-dead one. This also accounts for the signature every
+hypothesis we tested shared and none explained --- the output pinned at
+\emph{a bound}, at $0.006$, $0.100$, $19.8$ and $39.97$ across configurations
+--- and for Fig.~\ref{fig:driving}, where $q_v$ sits flat on the ceiling it
+could not be pushed off.
+
+We therefore mark as \textbf{provisional} every result in this section, the
+gate comparisons of Section~\ref{sec:gate}, and our adaptation of RTRRL's
+entropy regulariser~\cite{lemmel2023rtrrl} (which moved the output off its
+bound, $0.006 \to 1.733$, but bought no situation-dependence and halved
+distance covered, $4.9 \to 2.3$). All were measured on a policy whose behaviour
+weight could move one way only. The box has been widened so every anchor is
+strictly interior, and the policy now refuses to construct with an anchor on a
+bound; the re-measurement is not in this version.
+
+We are explicit that this does \emph{not} retract the stopping-criterion
+argument, which stands on its own evidence, and does not yet establish that the
+dead span was the sole cause. It establishes that a mechanism sufficient to
+produce the observed collapse was present throughout, and that the earlier
+elimination of the output map was performed on an instance of the output map
+that was itself broken.
 
 \begin{figure*}[t]
   \centering

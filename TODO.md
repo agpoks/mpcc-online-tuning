@@ -323,6 +323,38 @@ was valid, with nothing to stop it" — inherited whole.
       *present* passes happily while the policy ignores it. Sensitivity of a
       *trained* policy is the only test that separates them.
 
+### A structural cause, found 2026-08-31 — supersedes the hypotheses above
+
+θ0 is the offline-tuned weight vector, and the box was drawn with two of its
+entries **exactly on the ceiling**: q_l at 200 and q_v at 2.0. The anchored
+asymmetric squash — the third parameterisation listed above — computes
+
+    span = where(t >= 0, hi - θ0, θ0 - lo);   dθ/dz = (1 - tanh²z) · span
+
+so with `hi == θ0` the span is **zero** and the policy gradient through those
+two weights is identically zero whenever the pre-activation is non-negative.
+Half the time, structurally, q_l and q_v had no learning signal and could only
+ever be revised *downward*.
+
+q_v carries behaviour (the ratio q_v/q_c) and safety (its magnitude), so the
+most consequential weight in the policy was the half-dead one. This explains
+the signature that all four hypotheses shared and none accounted for — the
+output always pinned at *a bound* (0.006, 0.100, 19.8, 39.97).
+
+Fixed in 05b3e9d: ceilings raised so every anchor is strictly interior, and
+`WeightPolicy` now refuses to build with an anchor on a bound.
+
+- [ ] **Re-measure `feature_sensitivity.py` against the fixed box.** The table
+      at the top of this section, the four gate runs, and the entropy result
+      (0.006 → 1.733, spread 15.6%, distance halved 4.9 → 2.3) were all
+      measured on a policy whose behaviour weight could move one way only.
+      Provisional until re-run, in both directions — the collapse may simply
+      have been this.
+- [ ] Only after that: whether meta-RL feedback (`experiments/meta_rl.py`,
+      previous θ + reward + TD error as inputs, adapted from RTRRL) adds
+      anything the fixed box does not already supply. Running the comparison
+      before the box was fixed would have credited the fix to the feedback.
+
 ## 2. Weights as a behaviour policy — the direction
 
 θ is a behaviour parameterisation, not just a tuning vector: `q_v` sets

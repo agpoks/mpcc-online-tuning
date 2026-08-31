@@ -142,7 +142,8 @@ def test_it_runs_on_the_fitted_tyre_plant():
     measure solver noise. That failure is quiet, so it is pinned here.
     """
     track = Track.oval()
-    theta = np.log(np.array([10.0, 200.0, 0.02, 10.0, 0.01, 0.1]))
+    theta = MPCCWeights(q_c=10.0, q_l=200.0, q_v=0.02, r_d=10.0, r_a=0.01,
+                        r_dv=0.1).to_log()
     ref = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=8, dt=0.05,
                max_iter=200)
     states = reference_states(track, ref, theta, 20, plant="scuderia")

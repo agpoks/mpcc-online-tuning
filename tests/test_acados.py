@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 acados = pytest.importorskip("acados_template", reason="acados not installed")
 
 from mpcc_tuning.acados_ocp import build_ocp, pack_params  # noqa: E402
-from mpcc_tuning.mpcc import WEIGHT_NAMES  # noqa: E402
+from mpcc_tuning.mpcc import WEIGHT_NAMES, MPCCWeights  # noqa: E402
 from mpcc_tuning.track import Track  # noqa: E402
 
 
@@ -83,7 +83,8 @@ def test_solves_and_respects_the_corridor(track, tmp_path):
     p0, nxt = track.center[0], track.center[1]
     psi = float(np.arctan2(nxt[1] - p0[1], nxt[0] - p0[0]))
     x0 = np.array([p0[0], p0[1], psi, 1.5, 0.0])
-    theta = np.log(np.array([1.0, 10.0, 2.0, 1.0, 0.01, 0.1]))
+    theta = MPCCWeights(q_c=1.0, q_l=10.0, q_v=2.0, r_d=1.0, r_a=0.01,
+                        r_dv=0.1).to_log()
     s_nodes = x0[4] + np.arange(N + 1) * x0[3] * DT
     P = pack_params(theta, track=track, s_nodes=s_nodes, max_obstacles=1)
     for k in range(N + 1):

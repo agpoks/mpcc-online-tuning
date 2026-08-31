@@ -68,9 +68,11 @@ def test_the_model_has_a_lateral_acceleration_limit(track):
 def test_it_saves_a_controller_that_would_otherwise_crash(track):
     """The whole point: weights the tuner collapsed to, with and without."""
     from examples.tune_online import Plant
+    from mpcc_tuning.mpcc import MPCCWeights
     m = MPCC_ = __import__("mpcc_tuning.mpcc", fromlist=["MPCC"]).MPCC(
         track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05, max_iter=60)
-    theta = np.log(np.array([0.41, 1.40, 22.0, 0.019, 0.006, 0.019]))
+    theta = MPCCWeights(q_c=0.41, q_l=1.40, q_v=22.0, r_d=0.019, r_a=0.006,
+                        r_dv=0.019).to_log()
 
     def go(use_filter):
         f = PredictiveSafetyFilter(track)

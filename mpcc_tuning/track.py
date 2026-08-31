@@ -23,7 +23,7 @@ class Track:
     """Closed centreline with a constant half-width, as CasADi splines."""
 
     def __init__(self, xs: np.ndarray, ys: np.ndarray, half_width: float = 0.75,
-                 ds: float = 0.1, pad: int = 8):
+                 ds: float = 0.1, pad: int = 8, w_left=None, w_right=None):
         pts = np.stack([np.asarray(xs, float), np.asarray(ys, float)], axis=1)
         # Resample to uniform arc length first. The progress variable in MPCC
         # *is* arc length, so a spline parametrised by anything else quietly
@@ -51,6 +51,25 @@ class Track:
         self._x = ca.interpolant("cx", "bspline", [s_ext.tolist()], p_ext[:, 0].tolist())
         self._y = ca.interpolant("cy", "bspline", [s_ext.tolist()], p_ext[:, 1].tolist())
 
+        # Variable corridor width, as two more splines in s. A real circuit is
+        # not a constant-width ribbon -- the ICRA raceline data varies from
+        # 0.69 m to 3.13 m round one lap, a factor of 4.5 -- and a controller
+        # given one number for the whole track cannot be asked whether its
+        # weights should depend on the width. self.half_width remains the
+        # scalar fallback and the conservative summary of the lap.
+        self.variable_width = w_left is not None and w_right is not None
+        if self.variable_width:
+            wl = np.interp(grid, np.linspace(0.0, self.length, len(w_left),
+                                             endpoint=False), np.asarray(w_left, float))
+            wr = np.interp(grid, np.linspace(0.0, self.length, len(w_right),
+                                             endpoint=False), np.asarray(w_right, float))
+            self.w_left_samples, self.w_right_samples = wl, wr
+            self._wl = ca.interpolant("wl", "bspline", [s_ext.tolist()],
+                                      wl[idx % n].tolist())
+            self._wr = ca.interpolant("wr", "bspline", [s_ext.tolist()],
+                                      wr[idx % n].tolist())
+            self.half_width = float(np.percentile(np.minimum(wl, wr), 10.0))
+
     def wrap(self, s):
         """Arc length into ``[0, length)``, differentiably.
 
@@ -73,6 +92,29 @@ class Track:
         eps = 1e-3
         d = (self.pos(s + eps) - self.pos(s - eps)) / (2 * eps)
         return ca.atan2(d[1], d[0])
+
+    def width(self, s):
+        """``(w_left, w_right)`` at arc length ``s``, symbolic or numeric.
+
+        Falls back to the constant half-width when the track has no width data,
+        so every caller can use this unconditionally.
+        """
+        if not getattr(self, "variable_width", False):
+            return self.half_width, self.half_width
+        sw = self.wrap(s)
+        return self._wl(sw), self._wr(sw)
+
+    def curvature_sym(self, s):
+        """Curvature as a CasADi expression, for use inside the NLP.
+
+        :meth:`curvature` evaluates numerically with a wide stencil; this is the
+        same quantity built symbolically so a constraint can depend on it.
+        """
+        eps = 0.15
+        a = self.tangent_angle(self.wrap(s - eps))
+        b = self.tangent_angle(self.wrap(s + eps))
+        d = ca.atan2(ca.sin(b - a), ca.cos(b - a))
+        return d / (2.0 * eps)
 
     def errors(self, x, y, s):
         """Contouring and lag error, the two quantities MPCC is built around.
@@ -333,11 +375,38 @@ class Track:
         return Track.from_centerline(here, scale=scale, half_width=half_width, ds=ds)
 
     @staticmethod
+    def icra_t1_raceline(scale: float = 1.0, ds: float = 0.1) -> "Track":
+        """ICRA 2026 Track 1 from the team's optimised raceline, **variable width**.
+
+        The real experiment, as against the synthetic tracks above which exist
+        to demonstrate one thing at a time. \SI{71.7}{\meter}, corridor
+        \SI{0.69}{}--\SI{3.13}{\meter} (a factor of 4.5 round one lap),
+        minimum radius \SI{0.93}{\meter}, and the optimiser's own speed
+        profile from 2.4 to \SI{6.1}{\meter\per\second}.
+
+        Every other track here is a constant-width ribbon, and on one of those
+        the question "should the weights depend on the corridor width" cannot
+        be asked at all. See ``mpcc_tuning/tracks/PROVENANCE.md``.
+        """
+        here = Path(__file__).resolve().parent / "tracks" / "icra_t1_raceline.csv"
+        rows = [ln for ln in open(here) if not ln.startswith("#") and ln.strip()]
+        hdr = rows[0].strip().split(";")
+        col = {n: i for i, n in enumerate(hdr)}
+        d = np.array([[float(v) for v in r.split(";")] for r in rows[1:]])
+        xy = d[:, [col["x"], col["y"]]] * float(scale)
+        wl = d[:, col["w_left_m"]] * float(scale)
+        wr = d[:, col["w_right_m"]] * float(scale)
+        t = Track(xy[:, 0], xy[:, 1], ds=ds, w_left=wl, w_right=wr)
+        # The optimiser's reference speed, for comparison rather than for use.
+        t.v_ref = d[:, col["vx_mps"]]
+        return t
+
+    @staticmethod
     def icra2026_t1(scale: float = 1.0, half_width: float | None = None,
                     ds: float = 0.1) -> "Track":
         """ICRA 2026 Track 1, outer loop, from the competition occupancy grid.
 
-        69.3 m, 1.00 m median half-width, extracted at 100% inside the corridor
+        69.2 m, 1.00 m median half-width, extracted at 100% inside the corridor
         and closing to 0.07 m.
 
         **The corridor branches**, so it has no unique centreline -- an outer

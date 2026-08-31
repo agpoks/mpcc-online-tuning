@@ -1,0 +1,156 @@
+# RETUNE of v15_controller_sectors.yaml — Claude, 2026-06-02
+# Goals: (1) enable boundary interpolation, (2) fix the broken S3 sector that
+# made v15 fail to load, (3) calm the carpet corners S1/S2/S4 and the S11->S7
+# wobble. Does NOT overwrite v15_controller_sectors.yaml.
+#
+# Bag evidence (ICRA26_01062026_TRACK_2_1002, /sensors/core current_motor):
+#   actual |I| median 2.7 A, p90 7.2 A, p99 13.3 A, MAX 20.7 A.
+#   => the 60/80 A I_max limits are never reached; Q_I is a smoothness knob,
+#      not a current cap. Raised the absurd low Q_I values (0.001/0.25) that
+#      let the solver dump current onto low-grip carpet.
+supreme_mpc_i:
+  # Full width [m] of the linear blend straddling each sector boundary.
+  # Sized for ~5-7 control cycles (Ts=0.05s, 20Hz) at corner/back-stretch
+  # speeds, capped below the shortest sector (S12 = 1.9 m) so short sectors
+  # keep a flat core. Kills the single-cycle weight steps that cause wobble.
+  blend_dist: 1.0
+  defaults:
+    Tf: 0.5
+    Q_df: 35
+    Q_I: 0.5            # was 0.7 — currents are tiny (<=21 A), so high penalty just adds sluggishness
+    Q_vref: 100
+    Q_e: 395
+    Q_theta: 10
+    Q_sleft: 500
+    Q_sright: 500
+    I_max: 60
+    I_min: -60
+    DF_max: 35
+    DF_min: -35
+    curvature_depend_Q_df: false
+    kappa_thres_spitz: 0.5
+    kappa_thres_straight: 0.3
+    Q_df_spitz: 7
+    Q_df_straight: 105
+    Q_df_special: 5
+    special_start_t: 20
+    special_end_t: 25
+    preview_time: 0.25
+    intrusive_dist: 0
+    silent_mode_e_thres: 0.3
+    vx_min_for_model: 0.5
+  sectors:
+    - name: S1            # s 1.5-7.8, FAST (7.1-8.8 m/s), tight corridor (0.87 m), carpet, runs to wall
+      s_start: 1.4986
+      s_end: 7.7686
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+      Q_I: 0.3
+      Q_df: 35
+      Q_e: 520           # was default 395 — hold the line harder so it stops drifting toward the wall
+    - name: S2            # s 20.7-26.6, sharp (|k| 0.60), tight (0.98 m), CARPET, drifts + barely makes wall
+      s_start: 20.6744
+      s_end: 26.5830
+      Q_df: 25
+      Q_I: 0.6           # was 0.25 — was the LOW side of the S8->S2 jump; raise so it doesn't dump power on carpet (also kills the jump vs default 0.5)
+      Q_vref: 52         # was 62 — carry a bit less speed into the low-grip corner
+      DF_max: 45
+      DF_min: -45
+      Q_e: 500           # was 250 (!) — the single biggest cause of the drift: line-holding was de-weighted in the worst corner
+      I_max: 40          # was 60 — modest power cap on carpet (still 2x the 20 A ever used)
+      I_min: -40
+    - name: S3            # s 44.0-49.0, approach/brake into the tight S4 hairpin. GEOMETRY FIXED (v15 was 49.3839->49.035, a 2nd wrap sector -> load failure)
+      s_start: 43.9821
+      s_end: 49.0313
+      Q_I: 0.15
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+    - name: S4            # s 49.4-53.7, tightest/slowest (|k| 0.82), narrowest corridor (0.79 m), CARPET. start fixed (was 49.0313)
+      s_start: 49.3839
+      s_end: 53.6691
+      Q_df: 7
+      Q_I: 0.25          # was 0.001 — basically free current out of a tight carpet corner = wheelspin/drift on exit
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+      Q_e: 480           # was default 395 — narrow corridor, hold the line
+      I_max: 40
+      I_min: -40
+    - name: S5
+      s_start: 31.7312
+      s_end: 35.4912
+      Q_df: 7
+      Q_I: 0.1
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+    - name: S6
+      s_start: 7.8202
+      s_end: 14.6835
+      Q_df: 20
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+    - name: S7            # WRAP (s 70.5 -> 1.5), back stretch into start/finish — the S11->S7 wobble
+      s_start: 70.4514
+      s_end: 1.4733
+      Q_df: 22            # was 8.5 — way too low; near-zero steer-rate damping made the front twitchy. Raise to match S11 (30) so blend keeps the whole stretch smooth
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+      Q_e: 400
+    - name: S8            # fast straight into S2 braking — Q_I left at default 0.5 on purpose so S8->S2 has no jump
+      s_start: 14.7347
+      s_end: 18.7750
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+    - name: S9
+      s_start: 26.6358
+      s_end: 30.2079
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+      Q_I: 0.5
+    - name: S10
+      s_start: 64.1031
+      s_end: 66.3098
+      Q_df: 10
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+    - name: S11           # s 66.4-70.4, entry to the wobble back-stretch
+      s_start: 66.3861
+      s_end: 70.3749
+      Q_vref: 62
+      I_max: 60           # was 80 — pointless (never used >21 A); unify with the rest
+      I_min: -60
+      DF_max: 45
+      DF_min: -45
+      Q_I: 0.3
+      Q_df: 30
+    - name: S12
+      s_start: 41.3129
+      s_end: 43.1791
+      Q_df: 10
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+    - name: S13
+      s_start: 53.7230
+      s_end: 57.5499
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+      Q_I: 0.1
+    - name: S14
+      s_start: 57.6316
+      s_end: 61.1417
+      Q_df: 7
+      Q_vref: 62
+      DF_max: 45
+      DF_min: -45
+      Q_e: 400
+      Q_I: 0.1

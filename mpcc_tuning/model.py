@@ -15,8 +15,18 @@ import numpy as np
 WHEELBASE = 0.33
 STEER_MAX = 0.40
 ACCEL_MAX = 4.0
-SPEED_MAX = 4.0
+# 8.0, not 4.0. A flat cap does not describe a vehicle, it describes an
+# assumption -- and at 4 m/s the cap binds on 45-66% of every track here, so the
+# car is speed-limited rather than grip-limited and no weight setting is ever
+# punished. That is not a property of the controller, it is the cap
+# manufacturing an easy problem. The friction-ellipse profile in
+# mpcc_tuning/speed.py allows 7.34 m/s on the ICRA raceline and the team's own
+# optimiser reaches 6.09; at 8.0 the tyres set the speed everywhere.
+SPEED_MAX = 8.0
 DRAG = 0.15
+# Measured against the ICRA team's optimised raceline, their peak lateral
+# acceleration over a lap is 6.8 m/s^2, so this is about 12% conservative. Kept
+# conservative deliberately, and recorded rather than silently raised.
 A_LAT_MAX = 6.0
 
 
