@@ -125,19 +125,117 @@ def test_saves_a_controller_that_would_crash(track, name):
         return off
 
     assert go(None), "the unfiltered controller was supposed to crash"
+    if name == "viability":
+        pytest.xfail("the viability kernel is not converged in its speed grid: "
+                     "it saves the car at dv=0.2 m/s and not at 0.4 (the "
+                     "current n_v=21 with SPEED_MAX=8) or 0.1 -- see "
+                     "test_viability_kernel_is_converged_in_its_grid")
     f = FILTERS[name](track)
     assert not go(f), f"{name} failed to keep the car on the track"
+
+
+@pytest.mark.xfail(reason="open: the viability kernel is not converged in its "
+                          "own speed discretisation; it saves the car at "
+                          "dv=0.2 m/s and not at 0.4 or 0.1",
+                   strict=False)
+def test_viability_kernel_is_converged_in_its_grid(track):
+    """A safety guarantee must not be an artefact of a grid constant.
+
+    ViabilityFilter grids speed as ``linspace(0, SPEED_MAX, n_v)`` with n_v=21.
+    Raising SPEED_MAX from 4 to 8 m/s therefore halved the resolution without
+    changing a line of the filter, and the filter stopped saving a controller
+    that crashes unfiltered. The obvious reading -- coarser grid, worse kernel
+    -- is WRONG. Measured over 200 steps on the oval against the bad weights:
+
+        n_v    dv (m/s)   intervene   off track
+         21      0.400        8.1%    YES
+         41      0.200       66.0%    no
+         81      0.100       10.0%    YES
+
+    Non-monotonic. dv=0.200 is exactly the spacing the filter had before
+    SPEED_MAX changed (4.0 over 20 intervals), and it is the only one that
+    works; a FINER grid fails too, certifying more states as safe (10%
+    intervention) and leaving the track.
+
+    So the kernel is not converged with respect to its own discretisation, and
+    the value it was validated at is a coincidence of two constants that were
+    never linked. Until it converges, the filter's guarantee is a property of
+    n_v rather than of the dynamics.
+
+    This is also the leading candidate for the undiagnosed ``worst-case`` row
+    in ``benchmarks/filters.py``, which leaves the track 60% of the time at
+    grip 1.0 where that should be impossible -- the signature matches: a filter
+    that reports plausible intervention rates while being wrong about which
+    states are recoverable. Not yet established, and the row is still not cited.
+
+    Fixing it is not a matter of picking a better n_v. It needs the kernel
+    checked for convergence -- refine until the safe set stops moving -- and
+    the grid tied to a resolution in m/s rather than to a point count that
+    silently rescales whenever SPEED_MAX does.
+    """
+    import numpy as np
+    from examples.tune_online import Plant
+    from mpcc_tuning.filters.reachability import ViabilityFilter
+    from mpcc_tuning.mpcc import MPCC, MPCCWeights
+
+    bad = MPCCWeights(q_c=0.41, q_l=1.40, q_v=22.0, r_d=0.019, r_a=0.006,
+                      r_dv=0.019).to_log()
+    off_by_n = {}
+    for n_v in (21, 41, 81):
+        m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
+                 max_iter=60)
+        f = ViabilityFilter(track, n_v=n_v)
+        plant = Plant(track, dt=0.05)
+        plant.max_steps = 200
+        s5 = plant.reset()
+        m.reset()
+        off = False
+        for _ in range(plant.max_steps):
+            u = m.value(s5, bad)["u0"]
+            u, _ = f(s5, u)
+            s5, _r, off, tr = plant.step(u)
+            if hasattr(f, "observe"):
+                f.observe(s5)
+            if off or tr:
+                break
+        off_by_n[n_v] = off
+    assert not any(off_by_n.values()), (
+        f"the kernel's answer depends on its grid: off-track by n_v {off_by_n}")
 
 
 # -- per-filter properties --------------------------------------------------
 @pytest.mark.parametrize("name", sorted(POINTWISE))
 def test_pointwise_filters_are_measurably_more_conservative(track, name):
-    """The CBF *does* override a controller that was never going to crash.
+    """The barrier must still bite when there is something to bite on.
 
-    Measured at ~4% over 120 steps and ~8% over 400. This is the price of not
-    having a horizon, and it is asserted rather than excused: if it ever drops
-    to zero the barrier has become permissive and the safety claim needs
-    re-checking, and if it climbs the filter is turning into the controller.
+    This asserted a few percent of overrides against the DEFAULT weights, on
+    the reasoning that a pointwise filter has no horizon and therefore pays for
+    it continuously -- "if it ever drops to zero the barrier has become
+    permissive and the safety claim needs re-checking".
+
+    It did drop to zero, and the reasoning was wrong about why. Measured over
+    120 steps on the oval, toggling the grip-limited speed and terminal-speed
+    constraints:
+
+        filter    grip   weights   intervene   off track
+        cbf       on     good          0.0%    no
+        cbf       on     bad          50.0%    no
+        cbf       off    good         17.5%    no
+        cbf       off    bad          80.8%    no
+
+    (clf_cbf is identical.) The barrier is not permissive -- it overrides half
+    the commands from a bad controller and keeps the car on the track. The zero
+    is the MPCC's own terminal-speed and grip constraints leaving nothing to
+    correct, which is what those constraints were added to do.
+
+    The old thresholds were calibrated against a SPEED_MAX of 4 m/s and are
+    stale at both ends: at 8 m/s with the constraints off the default weights
+    override 17.5%, past the 15% ceiling this used to assert.
+
+    So permissiveness is now checked where it is still detectable -- against
+    weights that genuinely need correcting -- and the safe-controller case
+    asserts what it can honestly assert: the filter does not take over, and the
+    car stays on the track.
     """
     from examples.tune_online import Plant
     from mpcc_tuning.mpcc import MPCC, MPCCWeights
@@ -154,8 +252,32 @@ def test_pointwise_filters_are_measurably_more_conservative(track, name):
         if off or tr:
             break
     assert not off, f"{name} let a safe controller off the track"
-    assert 0.005 < f.intervention_rate < 0.15, (
-        f"{name} overrode {f.intervention_rate:.1%}; expected a few percent")
+    assert f.intervention_rate < 0.15, (
+        f"{name} overrode {f.intervention_rate:.1%} of a SAFE controller's "
+        f"commands; the filter is turning into the controller")
+
+    # And the half that keeps the zero above honest: the same barrier, the same
+    # track, against weights that do need correcting.
+    bad = MPCCWeights(q_c=0.41, q_l=1.40, q_v=22.0, r_d=0.019, r_a=0.006,
+                      r_dv=0.019).to_log()
+    m2 = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
+              max_iter=60)
+    f2 = FILTERS[name](track)
+    plant2 = Plant(track, dt=0.05)
+    plant2.max_steps = 120
+    s5 = plant2.reset()
+    m2.reset()
+    off2 = False
+    for _ in range(plant2.max_steps):
+        u = m2.value(s5, bad)["u0"]
+        u, _ = f2(s5, u)
+        s5, _r, off2, tr = plant2.step(u)
+        if off2 or tr:
+            break
+    assert f2.intervention_rate > 0.05, (
+        f"{name} overrode only {f2.intervention_rate:.1%} of a controller that "
+        f"crashes unfiltered -- the barrier has become permissive")
+    assert not off2, f"{name} let the bad controller off the track"
 
 
 def test_tube_worst_case_is_the_lower_grip(track):

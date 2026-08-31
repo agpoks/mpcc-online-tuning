@@ -152,6 +152,59 @@ six-seed result is a **three-bin curvature schedule, not a sector schedule.**
 cannot separate a 90-degree corner from a 180-degree one (item 1b). Calling it
 "per-sector" would overclaim.
 
+### Safety filters — two results from 2026-08-31, one of them bad
+
+**The pointwise filters are fine, and their zero is the MPCC improving.**
+`test_pointwise_filters_are_measurably_more_conservative` asserted a few
+percent of overrides against the default weights and got 0.0%. Measured over
+120 steps on the oval, toggling the grip-limited and terminal-speed
+constraints:
+
+    filter    grip   weights   intervene   off track
+    cbf       on     good          0.0%    no
+    cbf       on     bad          50.0%    no
+    cbf       off    good         17.5%    no
+    cbf       off    bad          80.8%    no
+
+`clf_cbf` identical. The barrier is not permissive — it overrides half of a bad
+controller's commands and keeps the car on the track. The zero is the MPCC's
+own terminal-speed and grip constraints leaving nothing to correct. The old
+thresholds were calibrated at SPEED_MAX 4 and are stale at *both* ends: at 8
+with the constraints off, the default weights override 17.5%, past the 15%
+ceiling the test used to assert. Test rewritten to check permissiveness against
+weights that need correcting.
+
+**The viability kernel is not converged in its own discretisation.** It grids
+speed as `linspace(0, SPEED_MAX, n_v)` with `n_v=21`, so raising SPEED_MAX 4→8
+halved the resolution without touching the filter, and it stopped saving a
+controller that crashes unfiltered. "Coarser is worse" is **wrong** — 200 steps
+on the oval, bad weights:
+
+    n_v    dv (m/s)   intervene   off track
+     21      0.400        8.1%    YES
+     41      0.200       66.0%    no
+     81      0.100       10.0%    YES
+
+Non-monotonic, and dv=0.200 is exactly the spacing from before SPEED_MAX
+changed. The only grid that works is the one it was implicitly validated on,
+and a *finer* grid fails too — certifying more states safe (10% intervention)
+and leaving the track. **The filter's guarantee is currently a property of
+`n_v`, not of the dynamics.**
+
+- [ ] **Check the kernel for convergence**: refine until the safe set stops
+      moving, and report the resolution at which it does. Picking a better
+      `n_v` is not a fix.
+- [ ] Tie the grid to a resolution in m/s, not a point count that silently
+      rescales whenever `SPEED_MAX` does.
+- [ ] **Leading candidate for the undiagnosed `worst-case` row** (leaves the
+      track 60% at grip 1.0, which should be impossible). The signature
+      matches: plausible intervention rates while wrong about which states are
+      recoverable. Not established — check it before believing it, and the row
+      stays uncited either way.
+- [ ] Both filter suites' stored benchmarks predate SPEED_MAX 4→8, the grip
+      constraints, and the 7th/8th weights. Regenerate before citing any of
+      them.
+
 ### Overleaf
 
 `https://git.overleaf.com/6a91eb483816017e248781d9` is a **full mirror of this
