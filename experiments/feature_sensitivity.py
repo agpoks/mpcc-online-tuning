@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -81,10 +82,29 @@ def ratio_for(pol, feat, settle=12):
     return float(np.exp(th[2]) / np.exp(th[0]))
 
 
+def _sweep_one(seed, episodes, steps, base):
+    """Train one seed and sweep every feature group. Module level so it pickles."""
+    pol = train(seed, episodes, steps)
+    per_group = {}
+    for g, (lo, hi) in GROUPS.items():
+        rs = []
+        if hi - lo > 1 and g in ("sector", "opponent class"):
+            for k in range(lo, hi):                  # sweep the one-hot
+                f = base.copy(); f[lo:hi] = 0.0; f[k] = 1.0
+                rs.append(ratio_for(pol, f))
+        else:
+            for v in (0.0, 0.5, 1.0):                # sweep the magnitude
+                f = base.copy(); f[lo:hi] = v
+                rs.append(ratio_for(pol, f))
+        per_group[g] = rs
+    return per_group
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--jobs", type=int, default=3)
     ap.add_argument("--episodes", type=int, default=12)
     ap.add_argument("--steps", type=int, default=260)
     ap.add_argument("--out", default=str(ROOT / "benchmarks" / "results"
@@ -96,31 +116,31 @@ def main(argv=None):
     base[9], base[15] = 1.0, 1.0            # straight, slower opponent
 
     out = {g: [] for g in GROUPS}
-    for seed in range(a.seeds):
-        print(f"  training seed {seed} ...", flush=True)
-        pol = train(seed, a.episodes, a.steps)
-        for g, (lo, hi) in GROUPS.items():
-            rs = []
-            if hi - lo > 1 and g in ("sector", "opponent class"):
-                for k in range(lo, hi):              # sweep the one-hot
-                    f = base.copy(); f[lo:hi] = 0.0; f[k] = 1.0
-                    rs.append(ratio_for(pol, f))
-            else:
-                for v in (0.0, 0.5, 1.0):            # sweep the magnitude
-                    f = base.copy(); f[lo:hi] = v
-                    rs.append(ratio_for(pol, f))
-            out[g].append(rs)
-            print(f"    {g:<18} ratios {np.round(rs, 3)}", flush=True)
+    # Seeds are independent; training them one after another on one core is
+    # hours of wall clock for no reason.
+    with ProcessPoolExecutor(max_workers=min(a.jobs, a.seeds)) as ex:
+        futs = [ex.submit(_sweep_one, seed, a.episodes, a.steps, base)
+                for seed in range(a.seeds)]
+        for seed, fut in enumerate(futs):
+            per_group = fut.result()
+            for g, rs in per_group.items():
+                out[g].append(rs)
+            print(f"  seed {seed} done", flush=True)
+            for g, rs in per_group.items():
+                print(f"    {g:<18} ratios {np.round(rs, 3)}", flush=True)
 
     print(f"\n  {'feature group':<18}{'spread of q_v/q_c':>20}{'relative':>11}   verdict")
     summary = {}
     for g, runs in out.items():
         R = np.array(runs)
+        per_seed_rel = (R.max(1) - R.min(1)) / np.maximum(R.mean(1), 1e-9)
         spread = float(np.mean(R.max(1) - R.min(1)))
-        rel = spread / max(float(R.mean()), 1e-9)
-        used = rel > 0.05
-        summary[g] = dict(spread=spread, relative=rel, used=bool(used))
-        print(f"  {g:<18}{spread:>20.4f}{rel:>10.1%}   "
+        rel = float(np.mean(per_seed_rel))
+        se = float(np.std(per_seed_rel, ddof=1) / np.sqrt(len(per_seed_rel)))
+        used = rel - se > 0.05
+        summary[g] = dict(spread=spread, relative=rel, relative_se=se,
+                          per_seed=per_seed_rel.tolist(), used=bool(used))
+        print(f"  {g:<18}{spread:>20.4f}{rel:>9.1%} +-{se:<6.1%} "
               f"{'USED' if used else 'ignored -- decorative'}")
     print("\n  A group whose spread is ~0 is in the input and not in the policy.")
     Path(a.out).write_text(json.dumps(summary, indent=2) + "\n")

@@ -148,14 +148,32 @@ def main(argv=None):
             print(f"    done {name:<24} seed {seed}  covered {c:6.1f}", flush=True)
 
     print()
-    print(f"  {'condition':<26}{'ratio across 4 sectors':>34}{'spread':>9}{'covered':>9}")
+    print(f"  {'condition':<24}{'ratio across 4 sectors':>32}"
+          f"{'spread +- SE':>16}{'covered +- SE':>16}")
     res = {}
     for name, _m, _e in CONDITIONS:
-        R, C = out[name]
-        R = np.nanmean(np.array(R), axis=0); cov = float(np.mean(C))
-        spread = float((np.nanmax(R) - np.nanmin(R)) / max(np.nanmean(R), 1e-9))
-        res[name] = dict(ratios=R.tolist(), spread=spread, covered=cov)
-        print(f"  {name:<26}{str(np.round(R, 3)):>34}{spread:>8.1%}{cov:>9.1f}")
+        Rs, C = out[name]
+        A = np.array(Rs)                      # (seeds, 4)
+        # Spread PER SEED, then averaged -- not the spread of the seed-averaged
+        # ratios. Averaging first washes out per-seed structure whenever seeds
+        # favour different sectors, which understates a policy that conditions
+        # on the sector differently from run to run, and it leaves no error bar
+        # at all. With n=3 the error bar is most of the story.
+        per_seed = ((np.nanmax(A, axis=1) - np.nanmin(A, axis=1))
+                    / np.maximum(np.nanmean(A, axis=1), 1e-9))
+        sp, sp_se = float(np.nanmean(per_seed)), float(
+            np.nanstd(per_seed, ddof=1) / np.sqrt(len(per_seed)))
+        cov, cov_se = float(np.mean(C)), float(np.std(C, ddof=1) / np.sqrt(len(C)))
+        res[name] = dict(ratios=np.nanmean(A, axis=0).tolist(),
+                         ratios_per_seed=A.tolist(),
+                         spread=sp, spread_se=sp_se,
+                         spread_per_seed=per_seed.tolist(),
+                         covered=cov, covered_se=cov_se, covered_per_seed=C)
+        print(f"  {name:<24}{str(np.round(np.nanmean(A, axis=0), 2)):>32}"
+              f"{sp:>10.1%} +-{sp_se:>4.1%}{cov:>10.1f} +-{cov_se:>4.1f}")
+    print()
+    print("  n=3. A difference smaller than the two SEs together is not a"
+          " difference.")
 
     print("\n  spread is across SECTORS: 0% means one weight vector everywhere,")
     print("  which is the failure this whole line of work is chasing.")
