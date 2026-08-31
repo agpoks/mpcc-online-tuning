@@ -128,6 +128,9 @@ class MPCC:
                  obs_slack: tuple = (200.0, 5.0), obs_shape: str = "circle",
                  car_half_length: float = 0.285, terminal_speed: bool = True,
                  terminal_grip: float = 0.85, speed_from_grip: bool = True,
+                 cbf: bool = False, cbf_alpha: float = 0.35,
+                 cbf_margin: float = 0.18, cbf_lookahead: float = 0.45,
+                 cbf_penalty: float = 1e3,
                  assumed_grip: float = 1.0):
         self.track = track
         self.model = model or KinematicBicycle(dt=dt)
@@ -161,6 +164,37 @@ class MPCC:
         self.terminal_speed = bool(terminal_speed)
         self.terminal_grip = float(terminal_grip)
         self.speed_from_grip = bool(speed_from_grip)
+        # A discrete control barrier function as a CONSTRAINT of the OCP rather
+        # than an override applied after it.
+        #
+        # The reason is specific to learning the weights. Anything expressed as
+        # a cost term is negotiable: the policy can learn a small weight for it
+        # and trade it away, which is item 5's failure -- a proxy optimised past
+        # the point where the proxy is valid -- applied to safety. A constraint
+        # cannot be learned away.
+        #
+        # It also removes a mismatch. With an external filter the learner
+        # differentiates the UNFILTERED problem while the plant executes the
+        # FILTERED action, so the value being learned is not the value being
+        # executed. Inside the OCP they are the same object.
+        #
+        # Deliberately NOT parameterised by theta. theta entering g is where the
+        # envelope gradient became unreliable: k_v enters the grip row and its
+        # analytic gradient goes to zero while finite differences read -4.5 once
+        # that row is ACTIVE (tests/test_obstacles.py, the xfail). A learnable
+        # barrier margin would add another such term in exactly that regime, so
+        # the margin is a constant and dJ*/dtheta stays free.
+        #
+        # Soft, with an explicit slack, for the same reason the keep-out is: a
+        # hard barrier can make the OCP infeasible, and an infeasible solve
+        # yields no action at all, which is worse than an override.
+        self.cbf = bool(cbf)
+        self.cbf_alpha = float(cbf_alpha)
+        self.cbf_margin = float(cbf_margin)
+        self.cbf_lookahead = float(cbf_lookahead)
+        self.cbf_penalty = float(cbf_penalty)
+        if not 0.0 < self.cbf_alpha <= 1.0:
+            raise ValueError("cbf_alpha must be in (0, 1]")
         self.assumed_grip = float(assumed_grip)
         self._build(max_iter)
         self._w0 = None   # warm start
@@ -181,10 +215,13 @@ class MPCC:
         # per obstacle per shooting node from k=1 (stage 0 is pinned to x0).
         obs = ca.MX.sym("obs", self.obs_stride * M)
         S = ca.MX.sym("S", M, N)
+        Sc = ca.MX.sym("Sc", N)          # barrier slacks, one per stage
         p = ca.vertcat(x0, theta, obs) if M else ca.vertcat(x0, theta)
         w = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
         if M:
             w = ca.vertcat(w, ca.reshape(S, -1, 1))
+        if self.cbf:
+            w = ca.vertcat(w, Sc)
 
         (q_c, q_l, q_v, r_d, r_a, r_dv,
          d_obs, k_v) = (ca.exp(theta[i]) for i in range(self.n_theta))
@@ -202,6 +239,18 @@ class MPCC:
             g.append(X[:, k + 1] - nxt)
             lbg += [0.0] * 5
             ubg += [0.0] * 5
+            if self.cbf:
+                # h(x_{k+1}) >= (1 - alpha) h(x_k), the discrete barrier
+                # condition, which by induction gives h_k >= (1-a)^k h_0 > 0.
+                # Same h as filters/cbf_qp.py's "braking" barrier so the
+                # in-solver and post-hoc versions are the SAME criterion and any
+                # difference between them is about where it is enforced.
+                g.append(self._barrier_sym(X[:, k + 1])
+                         - (1.0 - self.cbf_alpha) * self._barrier_sym(X[:, k])
+                         + Sc[k])
+                lbg.append(0.0)
+                ubg.append(ca.inf)
+                J += self.cbf_penalty * Sc[k] ** 2
             # Stay on the track, as an inequality on the contouring error --
             # the natural coordinate here, since the MPCC already computes it.
             #
@@ -315,7 +364,7 @@ class MPCC:
         self._nw = self._nx + 3 * N
         # Slacks live at the end of w, after the states and controls, so _nx and
         # the u0 slice keep their meaning and rti.py needs no change.
-        self._ns = M * N
+        self._ns = M * N + (N if self.cbf else 0)
         self._nw += self._ns
         lbw = np.concatenate([np.tile([-ca.inf, -ca.inf, -ca.inf, 0.0, -ca.inf], N + 1),
                               np.tile([-STEER_MAX, -ACCEL_MAX, 0.0], N),
@@ -349,6 +398,45 @@ class MPCC:
         lagrangian = J + ca.dot(lam_g, gg)
         self.dQ_dtheta = ca.Function("dQ", [w, lam_g, p],
                                      [ca.gradient(lagrangian, theta)])
+
+    # -- the barrier -------------------------------------------------------
+    def _barrier_sym(self, Xk):
+        """``h`` for one stage, as a CasADi expression.
+
+        The same quantity as :meth:`mpcc_tuning.filters.cbf_qp.CBFQP.barrier`
+        with ``h_kind="braking"``:
+
+            h = (w - margin) - |d| - T_look * |v sin(e_psi)|
+
+        The lookahead term is what stops it being myopic. Without it, ``h`` does
+        not contain the speed at all, so it permits full speed straight at a
+        wall until the step before contact -- still positive, still falling
+        slowly. Subtracting the lateral ground covered in ``T_look`` seconds at
+        the current closing rate makes the barrier shrink when the car is moving
+        *towards* a wall rather than merely sitting near one.
+
+        Uses ``width(s)`` rather than the constant half-width so it means the
+        same thing on a corridor that varies round the lap, and the narrower
+        side is the binding one.
+        """
+        x, y, psi, v, s = Xk[0], Xk[1], Xk[2], Xk[3], Xk[4]
+        e_c, _ = self.track.errors(x, y, s)
+        wl, wr = self.track.width(s)
+        # |z| smoothed as sqrt(z^2 + eps^2). Both absolute values here are on
+        # DECISION VARIABLES, unlike the grip row's |kappa|, which is a property
+        # of the track. A kink in a constraint that the solver is choosing
+        # across is not a detail: with the hard fabs, solves succeeded 16% of
+        # the time against pathological weights -- the barrier was not making
+        # the car safe, it was making the problem intractable, and an infeasible
+        # solve is no safety at all. eps is 1 cm and 1 cm/s, far below anything
+        # the barrier is meant to resolve.
+        eps = 1e-2
+        abs_e = ca.sqrt(e_c ** 2 + eps ** 2)
+        room = ca.fmin(wl, wr) - self.cbf_margin - abs_e
+        phi = self.track.tangent_angle(s)
+        e_psi = ca.atan2(ca.sin(phi - psi), ca.cos(phi - psi))
+        closing = v * ca.sin(e_psi)
+        return room - self.cbf_lookahead * ca.sqrt(closing ** 2 + eps ** 2)
 
     # -- obstacles ---------------------------------------------------------
     def set_obstacles(self, obstacles) -> None:

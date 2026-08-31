@@ -152,6 +152,55 @@ six-seed result is a **three-bin curvature schedule, not a sector schedule.**
 cannot separate a 90-degree corner from a 180-degree one (item 1b). Calling it
 "per-sector" would overclaim.
 
+### CBF as a constraint of the OCP — added 2026-08-31, `MPCC(cbf=True)`
+
+Why in the solver when a filter already exists: **when the cost weights are what
+is being learned, anything expressed as a cost term is negotiable.** The policy
+can learn a small weight for a safety term and trade it away — item 5's failure
+pointed at safety. A constraint cannot be learned away. It also removes a
+mismatch: with an external filter the learner differentiates the *unfiltered*
+problem while the plant executes the *filtered* action.
+
+Same barrier as `filters/cbf_qp.py` (`h_kind="braking"`, α=0.35, margin 0.18,
+lookahead 0.45), so the in-solver and post-hoc versions are the same criterion
+and any difference is about *where* it is enforced. `θ` is deliberately absent
+from it — measured: `cos 1.000000` unchanged.
+
+200 steps on the oval, no external filter:
+
+    cbf    weights   covered   off track   solve ok
+    off    good        28.7m   YES              74%
+    on     good        28.7m   no               72%
+    off    bad         12.9m   YES              56%
+    on     bad         10.9m   YES              46%
+
+With sensible weights it is **free**: same distance, no crash. Note the
+baseline — at SPEED_MAX 8 the default weights leave the track over 200 steps
+even with the grip and terminal constraints, so the barrier is doing real work.
+
+**The barrier must be smoothed.** `|e_c|` and `|v sin e_psi|` are absolute
+values on DECISION VARIABLES, unlike the grip row's `|kappa|`, which is a track
+property. With hard `fabs`, solves succeeded **16%** of the time against
+pathological weights — the barrier was not making the car safe, it was making
+the problem intractable, and an infeasible solve is no safety at all. With
+`sqrt(z^2 + eps^2)`, eps = 1 cm: 46%, and the progress cost with good weights
+disappears (27.7 → 28.7 m). Gradient cost of the smoothing is small:
+`cos 0.999985`, rel 0.0055.
+
+- [x] Gradient unaffected — θ stays out of `g`.
+- [ ] **Do not make the barrier margin learnable** until the active-constraint
+      gradient question is settled. `k_v` enters the grip row and its analytic
+      gradient collapses to zero once that row is active while finite
+      differences read −4.5. A learnable margin adds another such term in
+      exactly that regime.
+- [ ] **A constraint cannot rescue pathological weights** — bad weights still
+      leave the track, the constraint merely makes the OCP harder. So this
+      complements the external filter, it does not replace it, and the filter
+      is still what acts when the solve does not. State this in the paper
+      rather than claiming safety-by-construction.
+- [ ] Off by default. Measure its effect on *learning* (does the policy explore
+      more freely when it cannot crash?) before turning it on anywhere.
+
 ### Safety filters — two results from 2026-08-31, one of them bad
 
 **The pointwise filters are fine, and their zero is the MPCC improving.**
