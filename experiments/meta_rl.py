@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -105,27 +106,52 @@ def run(seed, meta, n_ep, steps, entropy=0.0, track_name="circuit"):
     return ratios, float(np.mean(covered[-4:]))
 
 
+def _one(task, episodes, steps, track_name):
+    """One (condition, seed) run. Module level so ProcessPoolExecutor can pickle it."""
+    _name, meta, ent, seed = task
+    return run(seed, meta, episodes, steps, ent, track_name)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--track", default="circuit")
+    ap.add_argument("--jobs", type=int, default=6)
     ap.add_argument("--episodes", type=int, default=12)
     ap.add_argument("--steps", type=int, default=260)
     ap.add_argument("--out", default=str(ROOT / "benchmarks" / "results"
                                          / "meta_rl.json"))
     a = ap.parse_args(argv)
 
+    # The (condition, seed) runs are independent, so run them in parallel. Done
+    # sequentially this is 12 runs one after another on a single core, which on
+    # a loaded machine is hours; the work is not CPU-starved, it is serialised.
+    CONDITIONS = (("features only", False, 0.0),
+                  ("+ anti-saturation", False, 0.5),
+                  ("+ meta-RL feedback", True, 0.0),
+                  ("+ meta-RL + anti-sat", True, 0.5))
+    tasks = [(name, meta, ent, seed)
+             for (name, meta, ent) in CONDITIONS for seed in range(a.seeds)]
+    print(f"  {len(tasks)} runs over {a.jobs} workers", flush=True)
+
+    out = {}
+    with ProcessPoolExecutor(max_workers=a.jobs) as ex:
+        futs = {ex.submit(_one, t, a.episodes, a.steps, a.track): t for t in tasks}
+        for fut in futs:
+            pass
+        for fut, t in futs.items():
+            name, _m, _e, seed = t
+            r, c = fut.result()
+            out.setdefault(name, ([], []))
+            out[name][0].append(r); out[name][1].append(c)
+            print(f"    done {name:<24} seed {seed}  covered {c:6.1f}", flush=True)
+
+    print()
     print(f"  {'condition':<26}{'ratio across 4 sectors':>34}{'spread':>9}{'covered':>9}")
     res = {}
-    for name, meta, ent in (("features only", False, 0.0),
-                            ("+ anti-saturation", False, 0.5),
-                            ("+ meta-RL feedback", True, 0.0),
-                            ("+ meta-RL + anti-sat", True, 0.5)):
-        R, C = [], []
-        for seed in range(a.seeds):
-            r, c = run(seed, meta, a.episodes, a.steps, ent, a.track)
-            R.append(r); C.append(c)
+    for name, _m, _e in CONDITIONS:
+        R, C = out[name]
         R = np.nanmean(np.array(R), axis=0); cov = float(np.mean(C))
         spread = float((np.nanmax(R) - np.nanmin(R)) / max(np.nanmean(R), 1e-9))
         res[name] = dict(ratios=R.tolist(), spread=spread, covered=cov)
