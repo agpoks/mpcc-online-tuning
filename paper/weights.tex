@@ -17,6 +17,8 @@
 \usepackage{siunitx}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
 \usepackage[hidelinks]{hyperref}
 \newcommand{\todo}[1]{\textbf{[TODO: #1]}}
 
@@ -185,14 +187,61 @@ same quantity the MPC would already be optimal for it by construction.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{figures/architecture.png}
+  \begin{tikzpicture}[
+      font=\small,
+      box/.style   = {draw, rounded corners=2pt, line width=0.7pt,
+                      minimum height=13mm, text width=27mm, align=center,
+                      inner sep=3pt},
+      sig/.style   = {-{Latex[length=2mm]}, line width=0.7pt},
+      grad/.style  = {-{Latex[length=2mm]}, line width=0.7pt, densely dashed},
+      lbl/.style   = {font=\scriptsize, inner sep=1.5pt},
+      note/.style  = {font=\scriptsize\itshape, text=black!60},
+    ]
+    \node[box] (sit) {\textbf{situation}\\[1pt]
+      \scriptsize curvature preview\\[-1pt]
+      \scriptsize sector $\cdot$ corridor width\\[-1pt]
+      \scriptsize gap $\cdot$ TTC $\cdot$ opponent class};
+    \node[box, right=13mm of sit] (pol) {\textbf{policy} $\phi$\\[1pt]
+      \scriptsize LTC cell, recurrent\\[-1pt]
+      \scriptsize $\theta=\theta_0+\mathrm{span}\cdot\tanh(Gh)$\\[-1pt]
+      \scriptsize bounded to a measured box};
+    \node[box, right=13mm of pol] (mpc) {\textbf{MPCC}\\[1pt]
+      \scriptsize one NLP\\[-1pt]
+      \scriptsize $\theta$ a runtime parameter\\[-1pt]
+      \scriptsize constraints unchanged};
+    \node[box, right=13mm of mpc] (plant) {\textbf{plant}\\[1pt]
+      \scriptsize kinematic bicycle\\[-1pt]
+      \scriptsize $+$ a grip limit the\\[-1pt]
+      \scriptsize controller never sees};
+
+    \draw[sig] (sit) -- node[lbl, above]{features} (pol);
+    \draw[sig] (pol) -- node[lbl, above]{$\theta$} node[lbl, below]{\scriptsize 6 log weights} (mpc);
+    \draw[sig] (mpc) -- node[lbl, above]{$u_0$} (plant);
+
+    \node[box, below=15mm of $(pol)!0.5!(mpc)$, text width=62mm] (td)
+      {\textbf{TD($\lambda$), one update per control tick}\\[2pt]
+       $\delta = r + \gamma V(s') - Q(s,a)$
+       \qquad
+       $\nabla_\phi Q = \nabla_\theta Q \cdot \partial\theta/\partial\phi$};
+
+    \draw[grad] (mpc.south) -- ++(0,-6mm) -| (td.north east)
+      node[note, pos=0.25, above right, align=left]
+      {$\nabla_\theta Q$ free,\\by the envelope theorem};
+    \draw[grad] (td.north west) -- ++(0,6mm) -| (pol.south)
+      node[note, pos=0.75, above left, align=right]
+      {$\partial\theta/\partial\phi$ carried\\forward (RFLO)};
+
+    \coordinate (rb) at ($(plant.south)+(0,-26mm)$);
+    \draw[sig] (plant.south) |- (rb) -| (sit.south)
+      node[lbl, pos=0.25, above]{reward: metres covered, $-5$ off-track};
+  \end{tikzpicture}
   \caption{The method. The controller stays an MPCC and its constraints are
   untouched; what is learned is a map from the situation to its six cost
-  weights. Two gradient paths matter and are drawn dashed:
-  $\nabla_\theta Q$ comes out of the solve for free by the envelope theorem, and
-  $\partial\theta/\partial\phi$ must be carried forward because the policy is
-  recurrent --- that carry is the only approximation in the loop, and
-  Section~\ref{sec:adapt} measures it as negligible.}
+  weights. The two dashed paths are the gradient: $\nabla_\theta Q$ falls out of
+  the solve for free by the envelope theorem, and $\partial\theta/\partial\phi$
+  must be carried forward because the policy is recurrent. That carry is the
+  only approximation in the loop, and Section~\ref{sec:adapt} measures it as
+  negligible (cosine $0.9997$ against exact RTRL).}
   \label{fig:arch}
 \end{figure*}
 
@@ -888,6 +937,23 @@ bound on the output can repair it, because the deficiency is that nothing makes
 stopping preferable to continuing. \textbf{A stopping criterion is a
 prerequisite for this line of work, not an improvement to it}, and we would not
 run another policy comparison without one.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/driving_sectors.png}
+  \caption{One lap of the four-sector circuit after ten episodes of online
+  learning. \textbf{Left:} the driven path coloured by the sector the policy
+  sees. \textbf{Right:} the weights it emitted against arc length, with the
+  sectors as shaded bands, and the resulting speed. If a sector schedule were
+  doing anything the weights would step at the band edges. They do not move at
+  all --- $q_v$ is flat on its ceiling and $q_c$ flat near its floor for the
+  whole lap --- which is Table~\ref{tab:sens} made visible.}
+  \label{fig:driving}
+\end{figure*}
+
+Fig.~\ref{fig:driving} shows the same failure as a lap rather than a table: the
+sector the policy sees changes eleven times round the circuit, and the weights
+it emits do not step once.
 
 \subsection{Two bugs a table could not show}
 Drawing the emitted weights found, in sequence, two faults that twenty runs and

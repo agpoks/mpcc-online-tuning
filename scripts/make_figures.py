@@ -895,7 +895,104 @@ def fig_icra():
     print("  wrote icra_tracks.png")
 
 
-FIGS = {"architecture": fig_architecture, "icra": fig_icra,
+def fig_driving_sectors():
+    """Driving the circuit, with the sector the car is in and the weights it emits.
+
+    The tables say a schedule wins or loses; they cannot show the schedule
+    *happening*. This drives one lap and draws, against arc length: which named
+    sector the car is in, what the policy emitted for q_v and q_c there, and how
+    fast it went. If a sector schedule is doing anything, the weights change at
+    the sector boundaries and nowhere else in particular.
+    """
+    from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
+                                 PolicyTuner, WeightPolicy, features)
+    from mpcc_tuning.model import KinematicBicycle
+    from mpcc_tuning.mpcc import MPCC, MPCCWeights
+    from mpcc_tuning.opponents import ObstacleTracker, Opponent
+    from examples.tune_online import Plant
+
+    track = Track.circuit()
+    th0 = MPCCWeights(q_c=1.0, q_v=2.0, q_l=200.0, r_d=1.0).to_log()
+    m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
+             max_iter=60, max_obstacles=1)
+    pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=0), th0, THETA_LO, THETA_HI,
+                       seed=0)
+    tu = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0, seed=0,
+                     trust_region=0.01, theta_prior=0.5)
+
+    ep_cov = []
+    for ep in range(10):
+        opp = Opponent(track, s0=6.0, speed=(0.0, 1.0, 2.6, 3.4)[ep % 4], radius=0.24)
+        P = Plant(track, dt=0.05, max_steps=400, opponents=[opp])
+        s5 = P.reset(); m.reset(); m.set_obstacles(P.keepouts()); tu.reset()
+        tr = ObstacleTracker(dt=0.05); tr.update(opp.pose()[:2])
+        th, u = tu.act(features(track, s5, [opp], opp_speed_est=tr.speed), s5)
+        rec, cov = [], 0.0
+        for _ in range(400):
+            s5n, r, off, done = P.step(u); cov += r
+            m.set_obstacles(P.keepouts()); tr.update(opp.pose()[:2])
+            rec.append((float(track.project(s5n[0], s5n[1])), s5n[0], s5n[1],
+                        float(s5n[3]), float(np.exp(th[2])), float(np.exp(th[0])),
+                        track.sector(float(track.wrap(s5n[4] + 1.5)))))
+            out = tu.learn(r, s5n, features(track, s5n, [opp],
+                                            opp_speed_est=tr.speed), off)
+            if out[0] is None:
+                break
+            th, u = out; s5 = s5n
+            if off or done:
+                break
+        ep_cov.append(cov)
+        last = np.array(rec)
+        print(f"    ep {ep:2d}  covered {cov:6.1f} m", flush=True)
+
+    fig = plt.figure(figsize=(12.0, 4.6))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 1.55], hspace=0.45, wspace=0.18)
+
+    ax = fig.add_subplot(gs[:, 0])
+    ax.plot(track.center[:, 0], track.center[:, 1], "-", color="0.88", lw=13,
+            solid_capstyle="round", zorder=1)
+    for k in range(4):
+        msk = last[:, 6] == k
+        if msk.any():
+            ax.plot(np.where(msk, last[:, 1], np.nan),
+                    np.where(msk, last[:, 2], np.nan), ".", ms=3.2,
+                    color=CAT[k], zorder=3, label=Track.SECTOR_NAMES[k])
+    ax.set_aspect("equal"); ax.axis("off")
+    ax.legend(fontsize=7.5, frameon=False, loc="center", ncol=2)
+    ax.set_title("the lap, coloured by the sector the policy sees",
+                 fontsize=9, color=INK)
+
+    bx = fig.add_subplot(gs[0, 1])
+    for k in range(4):
+        msk = last[:, 6] == k
+        if msk.any():
+            bx.fill_between(last[:, 0], 0, 1, where=msk, transform=
+                            bx.get_xaxis_transform(), color=CAT[k], alpha=0.13,
+                            linewidth=0)
+    bx.plot(last[:, 0], last[:, 4], "-", color=BLUE, lw=1.7, label="$q_v$")
+    bx.plot(last[:, 0], last[:, 5], "-", color=RED, lw=1.7, label="$q_c$")
+    bx.set_yscale("log"); bx.set_ylabel("weight")
+    bx.legend(fontsize=7.5, frameon=False, ncol=2, loc="upper right")
+    bx.set_title("what the policy emitted, against arc length "
+                 "(bands are the sectors)", fontsize=9, color=INK)
+
+    cx = fig.add_subplot(gs[1, 1], sharex=bx)
+    cx.plot(last[:, 0], last[:, 3], "-", color=GREEN, lw=1.7)
+    cx.set_ylabel("speed [m/s]"); cx.set_xlabel("arc length round the lap [m]")
+    for a_ in (bx, cx):
+        a_.grid(alpha=0.2, lw=0.5)
+        for sp in ("top", "right"):
+            a_.spines[sp].set_visible(False)
+
+    fig.suptitle("If a sector schedule is doing anything, the weights change at the "
+                 "sector boundaries.\nHere they do not: the policy emits nearly the "
+                 "same $\\theta$ everywhere (Sec. \"the policy degenerates\").",
+                 fontsize=9.5, color=INK, y=1.04)
+    fig.savefig(OUT / "driving_sectors.png", dpi=170, bbox_inches="tight")
+    print("  wrote driving_sectors.png")
+
+
+FIGS = {"driving": fig_driving_sectors, "architecture": fig_architecture, "icra": fig_icra,
         "filmstrip": fig_filmstrip, "adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "spielberg": fig_spielberg,

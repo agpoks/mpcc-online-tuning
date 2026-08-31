@@ -231,15 +231,65 @@ value and its gradient carry a negation, $V = -J^\star$. Applying one and not
 the other drives every weight the wrong way while resembling an over-large step
 size; a directional unit test guards it.
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{figures/architecture.png}
-  \caption{The loop this paper measures. The gradient the learner needs,
-  $\nabla_\theta Q$, comes out of the solve for free by the envelope theorem ---
-  which is exact \emph{at a solution}. Section~\ref{sec:rti} asks what happens
-  when the solver does not reach one.}
+  \begin{tikzpicture}[
+      font=\small,
+      box/.style   = {draw, rounded corners=2pt, line width=0.7pt,
+                      minimum height=13mm, text width=27mm, align=center,
+                      inner sep=3pt},
+      sig/.style   = {-{Latex[length=2mm]}, line width=0.7pt},
+      grad/.style  = {-{Latex[length=2mm]}, line width=0.7pt, densely dashed},
+      lbl/.style   = {font=\scriptsize, inner sep=1.5pt},
+      note/.style  = {font=\scriptsize\itshape, text=black!60},
+    ]
+    \node[box] (sit) {\textbf{situation}\\[1pt]
+      \scriptsize curvature preview\\[-1pt]
+      \scriptsize sector $\cdot$ corridor width\\[-1pt]
+      \scriptsize gap $\cdot$ TTC $\cdot$ opponent class};
+    \node[box, right=13mm of sit] (pol) {\textbf{policy} $\phi$\\[1pt]
+      \scriptsize LTC cell, recurrent\\[-1pt]
+      \scriptsize $\theta=\theta_0+\mathrm{span}\cdot\tanh(Gh)$\\[-1pt]
+      \scriptsize bounded to a measured box};
+    \node[box, right=13mm of pol] (mpc) {\textbf{MPCC}\\[1pt]
+      \scriptsize one NLP\\[-1pt]
+      \scriptsize $\theta$ a runtime parameter\\[-1pt]
+      \scriptsize constraints unchanged};
+    \node[box, right=13mm of mpc] (plant) {\textbf{plant}\\[1pt]
+      \scriptsize kinematic bicycle\\[-1pt]
+      \scriptsize $+$ a grip limit the\\[-1pt]
+      \scriptsize controller never sees};
+
+    \draw[sig] (sit) -- node[lbl, above]{features} (pol);
+    \draw[sig] (pol) -- node[lbl, above]{$\theta$} node[lbl, below]{\scriptsize 6 log weights} (mpc);
+    \draw[sig] (mpc) -- node[lbl, above]{$u_0$} (plant);
+
+    \node[box, below=15mm of $(pol)!0.5!(mpc)$, text width=62mm] (td)
+      {\textbf{TD($\lambda$), one update per control tick}\\[2pt]
+       $\delta = r + \gamma V(s') - Q(s,a)$
+       \qquad
+       $\nabla_\phi Q = \nabla_\theta Q \cdot \partial\theta/\partial\phi$};
+
+    \draw[grad] (mpc.south) -- ++(0,-6mm) -| (td.north east)
+      node[note, pos=0.25, above right, align=left]
+      {$\nabla_\theta Q$ free,\\by the envelope theorem};
+    \draw[grad] (td.north west) -- ++(0,6mm) -| (pol.south)
+      node[note, pos=0.75, above left, align=right]
+      {$\partial\theta/\partial\phi$ carried\\forward (RFLO)};
+
+    \coordinate (rb) at ($(plant.south)+(0,-26mm)$);
+    \draw[sig] (plant.south) |- (rb) -| (sit.south)
+      node[lbl, pos=0.25, above]{reward: metres covered, $-5$ off-track};
+  \end{tikzpicture}
+  \caption{The method. The controller stays an MPCC and its constraints are
+  untouched; what is learned is a map from the situation to its six cost
+  weights. The two dashed paths are the gradient: $\nabla_\theta Q$ falls out of
+  the solve for free by the envelope theorem, and $\partial\theta/\partial\phi$
+  must be carried forward because the policy is recurrent. That carry is the
+  only approximation in the loop, and it is measured as negligible in the
+  companion work.}
   \label{fig:arch}
-\end{figure}
+\end{figure*}
 
 Fig.~\ref{fig:arch} shows where the gradient enters.
 
