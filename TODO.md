@@ -155,12 +155,37 @@ cannot separate a 90-degree corner from a 180-degree one (item 1b). Calling it
 ### Overleaf
 
 `https://git.overleaf.com/6a91eb483816017e248781d9` is a **full mirror of this
-repo**, not just `paper/`. One commit, "Update on Overleaf.", identical to
-`aa3f2ba`. Push is a clean fast-forward.
+repo**, not just `paper/`.
 
-- [ ] Nothing has been pushed yet. The session's work is uncommitted locally.
-- [ ] Rotate the Overleaf token — it was pasted in plaintext into a chat
-      transcript and is embedded in a scratch clone's `.git/config`.
+**Its history is UNRELATED to this repo's** — corrected 2026-08-31. An earlier
+push came from a scratch clone, so Overleaf's `main` shares no merge base with
+our branch: `git diff HEAD...FETCH_HEAD` fails with "no merge base", the same
+commit *messages* appear there under different SHAs, and an ordinary push is
+rejected. The previous note here said "push is a clean fast-forward"; it is not.
+
+Do **not** force-push to fix that. Overleaf held one file that existed nowhere
+else — `paper/figures/architecture.png`, generated into `docs/` and pushed from
+the scratch clone but never committed here, so the paper referenced a figure
+this repo did not contain. A force push would have deleted it silently.
+
+The working procedure, used for `54d08a5`:
+
+1. `git fetch <overleaf-url> main`, then `comm -13` the two `ls-tree` listings
+   to find anything that exists only on Overleaf, and commit it here first.
+2. Diff `paper/` both ways and read the Overleaf-only lines — they are usually
+   just the older text, but that is a check, not an assumption.
+3. On a side branch, `git merge -s ours --allow-unrelated-histories FETCH_HEAD`.
+   This keeps our tree byte-for-byte while recording their ancestry, so the
+   push becomes a fast-forward and GitHub's history stays clean.
+4. Push `HEAD:main` (not `master` — Overleaf rejects new branches).
+5. **Verify by fetching back** and diffing, not by trusting the push output.
+6. Pass the token inline in the URL so it is never written to `.git/config`;
+   confirm with `grep -c olp_ .git/config`.
+
+- [x] Pushed and verified 2026-08-31: Overleaf tree identical to
+      `situation-dependent-weights`.
+- [ ] **Rotate the Overleaf token.** It has now been pasted in plaintext into
+      chat transcripts twice and used again on 2026-08-31.
 
 ---
 
