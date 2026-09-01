@@ -61,7 +61,7 @@ def signed_gap(track, s_ego, s_opp):
 
 
 def one(job):
-    posture, aggr, seed, steps, scale, kind = job
+    posture, aggr, seed, steps, scale, kind, ego_pace, track_name = job
     from examples.tune_online import Plant
 
     t0 = time.perf_counter()
@@ -72,7 +72,8 @@ def one(job):
     # be punished. (The Spielberg argument was that our synthetic circuit could
     # not discriminate at all; that was an artefact of a 4 m/s cap and stopped
     # being true when the cap was corrected to 8.)
-    track = Track.icra_t2_raceline(scale=scale)
+    track = getattr(Track, track_name)(scale=scale) \
+        if track_name != "circuit" else Track.circuit()
     theta0 = MPCCWeights(q_l=200.0, r_d=1.0).to_log()
     # horizon 40, not 12. The competition circuits have 0.7 m-radius hairpins,
     # which are 2.2 m of arc, and 0.6 s of lookahead at 3 m/s reaches 1.8 m --
@@ -82,8 +83,28 @@ def one(job):
              max_iter=60, max_obstacles=1)
     # A stopped car is not a slow car, and "stay behind" is only a behaviour
     # against something that is going somewhere.
-    speed = 0.0 if kind == "static" else 1.2 + 0.3 * (seed % 3)
-    opp = Opponent(track, s0=6.0, speed=speed, radius=0.24)
+    # Scaled to the EGO'S OWN PACE on this track, not a fixed number.
+    #
+    # It was 1.2-1.8 m/s, chosen when these ran on a fast open circuit. On ICRA
+    # T2 the ego averages about 1.5 m/s -- the corridor is tight and the car is
+    # slow through it -- so the opponent was as fast as the ego, never caught,
+    # and no pass was ever available. Measured consequence: all THREE postures
+    # returned bit-identical numbers (30.9 / 31.9 / 26.9 m) with passes = 0.00
+    # in all 54 runs. "Stay behind" and "always try" cannot differ when there
+    # is nothing to try. `pass_is_available`'s own docstring records the same
+    # failure being found and fixed once already, for the same reason.
+    speed = 0.0 if kind == "static" else ego_pace * (0.55 + 0.10 * (seed % 3))
+    # 2.0 m ahead, not 6.0.
+    #
+    # The postures differ only when `close` is true, and close is
+    # gap_m = tanh(d/3) < 0.6, i.e. d < 2.08 m. From 6 m ahead, with the ego at
+    # 2.4 m/s against an opponent at 2.0-2.7, the closing rate is at most
+    # 0.4 m/s and it takes 15 s of a 20 s episode just to reach engagement
+    # range. Measured consequence: all nine posture-by-aggression cells came
+    # back identical (48.4 m, 0 passes, 0 posture switches) even on the wide
+    # circuit -- not because the postures do nothing but because the situation
+    # that separates them never arose.
+    opp = Opponent(track, s0=2.0, speed=speed, radius=0.24)
     tracker = ObstacleTracker(dt=0.05)
     P = Plant(track, dt=0.05, max_steps=steps, opponents=[opp])
     s5 = P.reset()
@@ -130,15 +151,44 @@ def main(argv=None):
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--steps", type=int, default=400)
     ap.add_argument("--scale", type=float, default=1.0)
+    ap.add_argument("--track", default="icra_t2_raceline")
     ap.add_argument("--jobs", type=int, default=0)
-    ap.add_argument("--out", default=str(ROOT / "benchmarks" / "results"
-                                         / "behaviour_modes.json"))
+    ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
+    if a.out is None:
+        a.out = str(ROOT / "benchmarks" / "results"
+                    / f"behaviour_modes_{a.track}.json")
 
-    jobs = [(p, g, s, a.steps, a.scale, k) for s in range(a.seeds)
+    # Measure the ego's solo pace on this track before choosing opponent
+    # speeds. A number fixed in advance is how the opponent ended up as fast as
+    # the ego, with no pass available and every posture identical.
+    from examples.tune_online import Plant
+    _track = (Track.circuit() if a.track == "circuit"
+              else getattr(Track, a.track)(scale=a.scale))
+    _m = MPCC(_track, model=KinematicBicycle(dt=0.05), horizon=40, dt=0.05,
+              max_iter=80)
+    _P = Plant(_track, dt=0.05, max_steps=a.steps)
+    _s5 = _P.reset(); _m.reset(); _v = []
+    _th = MPCCWeights(q_c=0.3, q_l=50.0, q_v=2.0, r_d=0.1).to_log()
+    for _ in range(a.steps):
+        _o = _m.value(_s5, _th)
+        _s5, _r, _off, _tr = _P.step(_o["u0"])
+        _v.append(float(_s5[3]))
+        if _off or _tr:
+            break
+    ego_pace = float(np.mean(_v)) if _v else 1.5
+
+    jobs = [(p, g, s, a.steps, a.scale, k, ego_pace, a.track) for s in range(a.seeds)
             for k in ("dynamic", "static") for p in POSTURES for g in AGGRESSION]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
-    print(f"  ICRA 2026 Track 2 (scale {a.scale}), {len(jobs)} runs, "
+    print(f"  ego solo pace {ego_pace:.2f} m/s -- opponents at "
+          f"{0.55 * ego_pace:.2f}-{0.75 * ego_pace:.2f} m/s so a pass exists",
+          flush=True)
+    _w = float(np.median([_track.width(x)[0] + _track.width(x)[1]
+                          for x in np.linspace(0, _track.length, 200)]))
+    print(f"  {a.track}: median corridor {_w:.2f} m wide, "
+          f"car 0.24 m, opponent 0.48 m across", flush=True)
+    print(f"  ({a.track}, scale {a.scale}), {len(jobs)} runs, "
           f"{n_proc} processes\n",
           flush=True)
 
