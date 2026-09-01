@@ -1,4 +1,21 @@
-"""A stable working parameterisation per track, before any adaptation.
+"""SUPERSEDED by experiments/oval_acceptance.py. Kept for its grid, not its verdict.
+
+Two reasons it should not be used to decide anything.
+
+Its selection rule ranks ``(survived, distance)``, so **a car that does not move
+wins**: it reported ICRA T1's best setting as "COMPLETED" at 0.01 laps, because a
+stationary car never leaves the track and therefore never fails. Any acceptance
+rule has to require a MINIMUM DISTANCE before it calls anything a pass, which
+``oval_acceptance.py`` does and this does not.
+
+And every number it produced predates the soft-constraint repair, so it was
+ranking weight settings on a controller whose optimisation problem was
+infeasible on a third of ticks. Its verdicts -- no stable baseline on the oval,
+T1 or T2 -- are all false: one fixed setting now drives all three.
+
+Original description follows.
+
+A stable working parameterisation per track, before any adaptation.
 
     python3 experiments/stable_baseline.py --jobs 6
 
