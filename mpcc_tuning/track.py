@@ -408,7 +408,8 @@ class Track:
         return Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds)
 
     @staticmethod
-    def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1) -> "Track":
+    def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1,
+                  smooth_m: float = 0.6) -> "Track":
         """Build a variable-width Track from one of the vendored raceline CSVs.
 
         Semicolon separated, the optimiser's own column names, with the
@@ -422,7 +423,54 @@ class Track:
         xy = d[:, [col["x"], col["y"]]] * float(scale)
         wl = d[:, col["w_left_m"]] * float(scale)
         wr = d[:, col["w_right_m"]] * float(scale)
-        t = Track(xy[:, 0], xy[:, 1], ds=ds, w_left=wl, w_right=wr)
+
+        # Drive the corridor CENTRE, not the raceline.
+        #
+        # The optimiser's line is the fastest way round, so it touches the
+        # boundary at every apex: w_left or w_right is 0 there (and a shade
+        # negative at a few points, from its own tolerance). Used directly as an
+        # MPCC reference that is unusable -- the corridor rows pin the
+        # contouring error to zero exactly where the car most needs room, and
+        # the solver fails: measured at 1% of solves succeeding, -4.9 m covered,
+        # and every run leaving the track.
+        #
+        # The raceline plus its margins is still a full description of the
+        # corridor, so recover the centre from it: shift by (w_left - w_right)/2
+        # along the normal and keep (w_left + w_right)/2 as the half-width. The
+        # car then has symmetric room, which is what an MPCC is for, and the
+        # optimiser's line is kept on the side as `raceline` for comparison.
+        tang = np.gradient(xy, axis=0)
+        tang /= np.maximum(np.linalg.norm(tang, axis=1, keepdims=True), 1e-12)
+        nrm = np.column_stack([-tang[:, 1], tang[:, 0]])      # left normal
+        half = 0.5 * (wl + wr)
+        centre = xy + ((0.5 * (wl - wr))[:, None]) * nrm
+
+        # Smooth the reconstructed centre, and smooth it in METRES.
+        #
+        # The offset (w_left - w_right)/2 carries the optimiser's own
+        # point-to-point noise, and differentiating a noisy offset twice is what
+        # curvature does. Unsmoothed, the reconstructed centre reached
+        # |kappa| = 2.59 on T2 -- a 0.39 m radius, where the raceline's own
+        # tightest is 0.93 m -- and the grip-limited speed constraint then
+        # brakes the car to a standstill: measured at 0.095 m/s after 25 steps.
+        # Curvature that is not in the track is still curvature to the solver.
+        #
+        # Boxcar over a window fixed in metres, wrapped, after the pattern in
+        # MPCC's sibling project event-driven-rtrl (bridges/mapimport.py,
+        # _smooth); copied and adapted rather than imported, since this repo
+        # must not depend on that one.
+        step = float(np.median(np.linalg.norm(np.diff(xy, axis=0), axis=1)))
+        w = max(int(round(smooth_m / max(step, 1e-9))) | 1, 3)
+        k = np.ones(w) / w
+        pad = np.vstack([centre[-(w // 2):], centre, centre[:w // 2]])
+        centre = np.stack([np.convolve(pad[:, 0], k, "valid"),
+                           np.convolve(pad[:, 1], k, "valid")], axis=1)
+        t = Track(centre[:, 0], centre[:, 1], ds=ds,
+                  w_left=half, w_right=half)
+        # The vehicle is already out of these margins -- the optimiser reports
+        # room for the car's CENTRE. See tracks/PROVENANCE.md.
+        t.width_vehicle_adjusted = True
+        t.raceline = xy
         # The optimiser's reference speed, for comparison rather than for use.
         t.v_ref = d[:, col["vx_mps"]]
         return t

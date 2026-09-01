@@ -13,7 +13,20 @@ import casadi as ca
 import numpy as np
 
 WHEELBASE = 0.33
-STEER_MAX = 0.40
+# 0.50, not 0.40. The minimum turn radius is wheelbase/tan(delta), so 0.40 rad
+# gives 0.78 m -- and the ICRA competition tracks' corridor centreline drops to
+# 0.69 m at its tightest hairpins, which the car then physically cannot follow.
+# Measured before the change: no weight setting completed a lap of either track,
+# the best reaching 47 m of T1's 80 m, because no cost weight can substitute for
+# a turn the vehicle cannot make. 0.50 rad gives 0.60 m and clears it.
+#
+# For scale, the competition team's own car_params.json has delta_f = 0.34 rad
+# on a 0.323 m wheelbase, i.e. 0.91 m -- a WIDER circle than ours at either
+# value. Their optimiser handles the same hairpins by using the corridor to open
+# the radius, which is why their raceline bottoms out at 0.93 m rather than at
+# the 0.69 m of the geometric centre. Raising the limit here buys margin for a
+# controller that plans over a shorter horizon than an offline optimiser.
+STEER_MAX = 0.50
 ACCEL_MAX = 4.0
 # 8.0, not 4.0. A flat cap does not describe a vehicle, it describes an
 # assumption -- and at 4 m/s the cap binds on 45-66% of every track here, so the

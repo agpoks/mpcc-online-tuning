@@ -203,6 +203,20 @@ class MPCC:
     def _build(self, max_iter: int) -> None:
         N = self.N
         car_half_width = self.car_half_width
+        # Some corridors already have the vehicle taken out of them.
+        #
+        # A raceline optimiser reports w_left/w_right as the room remaining for
+        # the car's CENTRE, not the geometric distance to the wall -- they
+        # bottom out at exactly -0.000 at every apex, which is the signature of
+        # its own w >= 0 constraint. Subtracting car_half_width from those again
+        # double-counts, and on ICRA T2 it makes 24% of the lap infeasible: the
+        # car cannot stay inside its own corridor, covers -4.9 m and leaves the
+        # track on every run of every configuration.
+        #
+        # Map-derived corridors are the other case: those widths are distances
+        # to the wall and the vehicle must still be subtracted.
+        chw = 0.0 if getattr(self.track, "width_vehicle_adjusted", False) \
+            else car_half_width
         terminal_speed, terminal_grip = self.terminal_speed, self.terminal_grip
         speed_from_grip, assumed_grip = self.speed_from_grip, self.assumed_grip
         from mpcc_tuning.model import A_LAT_MAX as a_lat_max
@@ -283,9 +297,9 @@ class MPCC:
 
             if getattr(self.track, "variable_width", False):
                 wl, wr = self.track.width(X[4, k])
-                g.append(wl - car_half_width - e_c)      # room to the left
+                g.append(wl - chw - e_c)                 # room to the left
                 lbg.append(0.0); ubg.append(ca.inf)
-                g.append(e_c + wr - car_half_width)      # room to the right
+                g.append(e_c + wr - chw)                 # room to the right
                 lbg.append(0.0); ubg.append(ca.inf)
             else:
                 g.append(e_c)
