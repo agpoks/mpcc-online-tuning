@@ -39,6 +39,28 @@ AMBER, SURF = "#e8a33d", "#fcfcfb"
 CAT = (BLUE, RED, GREEN, AMBER)
 
 
+
+def corridor_edges(t):
+    """The two track BOUNDARIES, as (left, right) point arrays.
+
+    Every track figure here drew the centreline and left the walls implicit,
+    which is wrong for the competition maps in particular: their corridor
+    varies by a factor of 4.5 (T1) and 6.4 (T2) round a lap, so where the track
+    is wide or tight is most of what a reader wants to see, and a bare
+    centreline hides it entirely.
+
+    Built from the centreline gradient rather than a stored normal, since Track
+    has none. Safe to draw now: on the raceline tracks the reconstructed centre
+    is smoothed, so the offset edges reverse on 0.1-2.8% of segments rather
+    than tangling as they did against the raw optimiser line.
+    """
+    g = np.gradient(t.center, axis=0)
+    n = np.stack([g[:, 1], -g[:, 0]], axis=1) / np.linalg.norm(g, axis=1)[:, None]
+    wl = np.array([float(t.width(v)[0]) for v in t.s])[:, None]
+    wr = np.array([float(t.width(v)[1]) for v in t.s])[:, None]
+    return t.center + n * wl, t.center - n * wr
+
+
 def fig_geometry():
     """What the two errors in the cost function actually are.
 
@@ -564,6 +586,10 @@ def fig_strategy(track_name="circuit"):
         if m.any():
             axt.add_collection(LineCollection(segs[m], colors=[CAT[j]],
                                               linewidth=5.0, capstyle="round"))
+    el, er = corridor_edges(tr)
+    for edge in (el, er):
+        axt.plot(edge[:, 0], edge[:, 1], "-", color=INK, lw=1.0, alpha=0.75,
+                 zorder=3)
     axt.set_aspect("equal"); axt.autoscale_view(); axt.axis("off")
     axt.set_title(f"{d['track']} - {tr.length:.0f} m", fontsize=9.5, color=INK)
     axt.legend(handles=[plt.Line2D([], [], color=CAT[j], lw=5,
@@ -672,8 +698,9 @@ def fig_icra_grip():
     tracks = [("ICRA 2026 T1", Track.icra_t1_raceline()),
               ("ICRA 2026 T2", Track.icra_t2_raceline()),
               ("circuit (synthetic)", Track.circuit())]
-    fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.6))
+    fig, axes = plt.subplots(1, 3, figsize=(14.0, 4.8))
     lc = None
+    slowest = []
     for ax, (name, tr) in zip(axes, tracks):
         k = np.abs([tr.curvature(v) for v in tr.s])
         vmax = np.minimum(np.sqrt(A_LAT_MAX / np.maximum(k, 1e-6)), SPEED_MAX)
@@ -683,6 +710,11 @@ def fig_icra_grip():
                             norm=plt.Normalize(2.0, SPEED_MAX),
                             linewidth=4.0, capstyle="round")
         lc.set_array(vmax[:-1])
+        # The track BOUNDARIES, so the corridor is visible and not implied.
+        el, er = corridor_edges(tr)
+        for edge in (el, er):
+            ax.plot(edge[:, 0], edge[:, 1], "-", color=INK, lw=1.1, alpha=0.75,
+                    zorder=3)
         ax.add_collection(lc)
         # The named sector at each point, as a ring outside the line: this is
         # what the policy receives, not a post-hoc annotation.
@@ -695,6 +727,7 @@ def fig_icra_grip():
                                   alpha=0.30, capstyle="round", zorder=0)
             ax.add_collection(ring)
         ax.set_aspect("equal"); ax.autoscale_view(); ax.axis("off")
+        slowest.append(float(vmax.min()))
         frac = float((vmax >= SPEED_MAX - 1e-9).mean())
         # y fixed, so the three titles sit on one line rather than following
         # each track's bounding box.
@@ -707,16 +740,20 @@ def fig_icra_grip():
     # Below the axes, not on top of a track.
     fig.legend(handles=handles, fontsize=8.5, frameon=False, ncol=4,
                loc="lower center", bbox_to_anchor=(0.45, -0.02))
-    cb = fig.colorbar(lc, ax=axes, fraction=0.02, pad=0.04)
+    cb = fig.colorbar(lc, ax=axes, fraction=0.02, pad=0.06)
     cb.set_label(f"grip-limited corner speed [m/s]   (cap {SPEED_MAX:.1f})",
                  fontsize=8.5)
     cb.ax.tick_params(labelsize=8)
+    # Computed, not typed. These numbers moved when the corridor centre was
+    # reconstructed from the raceline, and a hardcoded caption then disagreed
+    # with the titles directly beneath it.
+    pcts = ", ".join(f"{100 * v / SPEED_MAX:.0f}%" for v in slowest[:2])
     fig.suptitle("A track measures a weight policy only where it is grip-limited. "
-                 "The ICRA circuits are hardest --- their slowest corners are 32% "
-                 "and 29% of the\nspeed cap --- and they are the tracks these cars "
-                 "race on. Shading is the NAMED SECTOR, which the policy receives "
-                 "as a one-hot input.",
-                 fontsize=9.5, color=INK, y=1.02)
+                 f"The ICRA circuits are hardest --- their slowest corners are "
+                 f"{pcts} of the\nspeed cap --- and they are the tracks these cars "
+                 "race on. The thin outline is the TRACK BOUNDARY; the shading is "
+                 "the NAMED SECTOR,\nwhich the policy receives as a one-hot input.",
+                 fontsize=9.5, color=INK, y=1.04)
     fig.subplots_adjust(top=0.74, bottom=0.10, wspace=0.02)
     fig.savefig(OUT / "icra_grip.png", dpi=170, bbox_inches="tight")
     print("  wrote icra_grip.png")

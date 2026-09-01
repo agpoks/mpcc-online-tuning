@@ -110,6 +110,15 @@ def render(track, R, path, title, fps=25, stride=2):
     # maze. The sector colouring also earns its place here: it is the one-hot
     # the policy receives, so the viewer sees what the network is told.
     from matplotlib.collections import LineCollection
+    # The BOUNDARIES, drawn on top of the sector ribbon: on the competition
+    # maps the corridor varies by a factor of 4.5-6.4 round a lap, and a bare
+    # centreline hides where the track is tight.
+    g = np.gradient(track.center, axis=0)
+    nn = np.stack([g[:, 1], -g[:, 0]], axis=1) / np.linalg.norm(g, axis=1)[:, None]
+    _wl = np.array([float(track.width(v)[0]) for v in track.s])[:, None]
+    _wr = np.array([float(track.width(v)[1]) for v in track.s])[:, None]
+    for _e in (track.center + nn * _wl, track.center - nn * _wr):
+        axt.plot(_e[:, 0], _e[:, 1], "-", color=INK, lw=1.0, alpha=0.75, zorder=2)
     pts = track.center.reshape(-1, 1, 2)
     segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
     sec_at = np.array([int(track.sector(track.wrap(v))) for v in track.s])
