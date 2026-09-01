@@ -50,7 +50,8 @@ from mpcc_tuning.opponents import ObstacleTracker, Opponent  # noqa: E402
 from mpcc_tuning.track import Track  # noqa: E402
 
 
-def run(seed, meta, n_ep, steps, entropy=0.0, track_name="circuit"):
+def run(seed, meta, n_ep, steps, entropy=0.0, track_name="circuit",
+        gauge_fix=False, theta_prior=0.5):
     """Train one policy; return (per-sector mean ratio, distance covered)."""
     from examples.tune_online import Plant
     # The circuit, not the oval: an oval has only two distinct named sectors,
@@ -62,9 +63,9 @@ def run(seed, meta, n_ep, steps, entropy=0.0, track_name="circuit"):
              max_iter=60, max_obstacles=1)
     n_in = N_FEATURES + (N_META if meta else 0)
     pol = WeightPolicy(LTCCell(n_in, 12, seed=seed), th0, THETA_LO, THETA_HI,
-                       seed=seed)
+                       seed=seed, gauge_fix=gauge_fix)
     tu = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0, seed=seed,
-                     trust_region=0.01, theta_prior=0.5, entropy=entropy)
+                     trust_region=0.01, theta_prior=theta_prior, entropy=entropy)
 
     # Reward scale for the tanh squash, tracked online: a fixed scale either
     # saturates the input or wastes its range, and we do not know the magnitude
@@ -108,8 +109,8 @@ def run(seed, meta, n_ep, steps, entropy=0.0, track_name="circuit"):
 
 def _one(task, episodes, steps, track_name):
     """One (condition, seed) run. Module level so ProcessPoolExecutor can pickle it."""
-    _name, meta, ent, seed = task
-    return run(seed, meta, episodes, steps, ent, track_name)
+    _name, meta, ent, seed, gauge_fix, prior = task
+    return run(seed, meta, episodes, steps, ent, track_name, gauge_fix, prior)
 
 
 def main(argv=None):
@@ -127,12 +128,12 @@ def main(argv=None):
     # The (condition, seed) runs are independent, so run them in parallel. Done
     # sequentially this is 12 runs one after another on a single core, which on
     # a loaded machine is hours; the work is not CPU-starved, it is serialised.
-    CONDITIONS = (("features only", False, 0.0),
-                  ("+ anti-saturation", False, 0.5),
-                  ("+ meta-RL feedback", True, 0.0),
-                  ("+ meta-RL + anti-sat", True, 0.5))
-    tasks = [(name, meta, ent, seed)
-             for (name, meta, ent) in CONDITIONS for seed in range(a.seeds)]
+    CONDITIONS = (("default (prior 0.5)", False, 0.0, False, 0.5),
+                  ("gauge fixed, no decay", False, 0.0, True, 0.0),
+                  ("gauge fixed, decay .05", False, 0.0, True, 0.05),
+                  ("no gauge, no decay", False, 0.0, False, 0.0))
+    tasks = [(name, meta, ent, seed, gf, pr)
+             for (name, meta, ent, gf, pr) in CONDITIONS for seed in range(a.seeds)]
     print(f"  {len(tasks)} runs over {a.jobs} workers", flush=True)
 
     out = {}
@@ -141,7 +142,7 @@ def main(argv=None):
         for fut in futs:
             pass
         for fut, t in futs.items():
-            name, _m, _e, seed = t
+            name, _m, _e, seed, _g, _p = t
             r, c = fut.result()
             out.setdefault(name, ([], []))
             out[name][0].append(r); out[name][1].append(c)
@@ -151,7 +152,7 @@ def main(argv=None):
     print(f"  {'condition':<24}{'ratio across 4 sectors':>32}"
           f"{'spread +- SE':>16}{'covered +- SE':>16}")
     res = {}
-    for name, _m, _e in CONDITIONS:
+    for name, _m, _e, _g, _p in CONDITIONS:
         Rs, C = out[name]
         A = np.array(Rs)                      # (seeds, 4)
         # Spread PER SEED, then averaged -- not the spread of the seed-averaged
