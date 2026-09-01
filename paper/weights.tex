@@ -585,6 +585,81 @@ occurred.
   \label{fig:overtake}
 \end{figure}
 
+\section{A constraint that made a third of the solves
+infeasible}\label{sec:infeasible}
+
+Every result in this paper was measured on a controller that could not complete
+a lap of its easiest track, for a reason that has nothing to do with cost
+weights. We report it before the results it undermines.
+
+The grip-limited speed constraint,
+$a_{\text{lat}}\hat\mu - v_k^2|\kappa(s_k)|/k_v^2 \ge 0$, bounds the speed the
+car may carry into a corner. It was imposed as a \emph{hard} inequality. The
+consequence is structural: the moment the vehicle is already travelling faster
+than the upcoming curvature allows --- which is a state the plant can reach,
+because the plant is not the model --- \emph{no feasible trajectory exists}, and
+the solver is right to say so. An MPC cannot carry hard state constraints that
+its current state already violates.
+
+Measured on the oval, the least demanding track here at a constant
+\SI{0.75}{\meter} half-width and a \SI{2.46}{\meter} minimum radius, IPOPT's own
+return status over 312 control ticks:
+
+\begin{center}
+\begin{tabular}{lrr}
+  \toprule
+  return status & ticks & share \\
+  \midrule
+  \texttt{Solve\_Succeeded}             & 203 & $65\%$ \\
+  \texttt{Infeasible\_Problem\_Detected} & 106 & $34\%$ \\
+  \texttt{Restoration\_Failed}           &   3 & $1\%$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+A third of the commands were read off a problem with no solution. Raising the
+iteration budget from $80$ to $300$ changed nothing, because this was never an
+iteration limit; disabling the row gave $100\%$ success and $0\%$ infeasible,
+and disabling the terminal-speed row alone gave neither.
+
+\textbf{The failure was being masked by the solver giving up.} Sweeping the
+budget on the oval, solve success \emph{falls} as it rises --- $92\%$ at 30
+iterations, $70\%$ at 80, $63\%$ at 200, $57\%$ at 500 --- because a small
+budget makes the solver stop at a usable half-converged iterate while a large
+one lets it correctly prove infeasibility and return nothing usable. A
+controller was being rescued by an iteration cap.
+
+The row cannot simply be removed: with it the car covers $1.84$ laps of the
+oval and without it $0.47$, since it is what keeps entry speed sane. Softened
+with a slack per stage and a quadratic penalty --- the treatment the obstacle
+keep-out always had --- the same eighteen weight settings that previously all
+left the track now \emph{all} complete:
+
+\begin{center}
+\begin{tabular}{lrrr}
+  \toprule
+  grip constraint & solve ok & infeasible & laps completed \\
+  \midrule
+  hard   & $65\%$  & $34\%$ & $1.84$, off track \\
+  \textbf{soft} & $\mathbf{100\%}$ & $\mathbf{0\%}$ & $\mathbf{7.5}$--$\mathbf{7.8}$, clean \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{What this costs the rest of the paper.} Every experiment run with the
+grip constraint enabled --- the situation-demands search of
+Section~\ref{sec:demands}, the behaviour tables, the multi-opponent runs ---
+took roughly a third of its control actions from a failed solve. The
+degeneracy result of Section~\ref{sec:degenerate} in particular has never been
+measured on a controller that reliably completes a lap. We do not claim the
+policy conditions on its situation once this is repaired; we claim that the
+question is open again, and that it was not being asked fairly before.
+
+The general lesson is the one this line of work keeps relearning: a component
+that fails \emph{quietly} is worse than one that fails loudly. Nothing in the
+controller's outputs announced that a third of its decisions were arbitrary ---
+the car drove, the weights moved, the tables filled in.
+
 \section{What the situation demands}\label{sec:demands}
 
 Every measurement so far asks what the learner \emph{emits}. This one asks what
