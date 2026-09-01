@@ -450,6 +450,54 @@ was valid, with nothing to stop it" — inherited whole.
       *present* passes happily while the policy ignores it. Sensitivity of a
       *trained* policy is the only test that separates them.
 
+### Resolved mechanism, unresolved result — 2026-09-01
+
+Two defects were masking each other, and neither alone explains anything.
+
+1. **The critic has a gauge freedom.** `V = -J*` is linear in the six cost
+   weights, so scaling all six by `c` scales `V` by exactly `c` while the plan
+   changes by micrometres (`V/c` constant to four decimals). TD(λ) climbs it
+   until θ hits a bound.
+2. **The readout is decayed to zero.** `theta_prior=0.5` applies
+   `G *= (1 - alpha*prior)` every step, which exists to contain (1) and does so
+   by parking the policy at θ₀.
+
+Remove one → runaway. Remove the other → constant. Both look identical in the
+sensitivity table, which is why three output parameterisations, the dead-span
+repair, anti-saturation, meta-RL feedback and the gauge fix alone all failed
+the same way — every one ran with `prior=0.5`.
+
+**Fixing both restores responsiveness and costs half the distance:**
+
+    condition                 sector spread   covered
+    default (prior 0.5)        1.9% -> decor.  46.3 +-1.3
+    gauge fixed, no decay     20.5% -> USED    24.3 +-4.6
+    gauge fixed, decay .05    18.6% -> USED    28.7 +-8.5
+    no gauge, no decay        14.2% (runaway)  24.9 +-9.9
+
+4.6 SE apart on distance. Four of five feature groups become USED, and the car
+goes half as far.
+
+**The finding that matters more.** The default's collapsed constant covers the
+most ground of anything tested. `q_v` weights progress and the metric *is*
+progress, so the runaway is aligned with the objective: a constant is a correct
+answer to "go far on a known track". Part of what we have been calling a
+degenerate policy is a correct policy for a task that does not require
+situation-dependence.
+
+- [ ] **Do not "fix" this by trading distance for spread.** That is the trade
+      the entropy term lost, made twice in one day.
+- [ ] **Build a task a constant cannot win** before any further work on the
+      learner: several opponents demanding different behaviour per sector, or
+      varying grip. Then ask whether the responsive configuration beats the
+      constant. Until such a task exists, sector spread is not evidence of
+      anything and neither is its absence.
+- [ ] Gauge fixing restricts the reachable *ratios*: pinned mean, bounded box,
+      so `q_v/q_c` tops out near 6 against 21 for the default. Uniform scaling
+      cannot change behaviour, but the pin plus the box can. Re-centre or widen
+      the box so the same ratios stay reachable with the gauge fixed.
+- [ ] Everything above is n=3.
+
 ### A structural cause, found 2026-08-31 — supersedes the hypotheses above
 
 θ0 is the offline-tuned weight vector, and the box was drawn with two of its
