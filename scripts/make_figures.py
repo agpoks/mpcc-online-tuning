@@ -433,6 +433,112 @@ def fig_overtake():
     print("  wrote overtake_grid.png")
 
 
+def fig_strategy(track_name="circuit"):
+    """The track, and what each racing situation asks the weights to be.
+
+    The figure this paper was missing. Everything else measures what the
+    learner emits; this shows what the situation *demands*, found by driving a
+    grid of fixed weight vectors in each cell and keeping the one that wins.
+
+    Left: the circuit, shaded by the named sector -- the four-way one-hot the
+    policy receives as an input.
+
+    Right: the best q_v/q_c per (sector x opponent) and per (sector x corridor).
+    The scale DIVERGES about 1.0 because that is a real boundary rather than a
+    convenient midpoint: below it the ego weights path-following over progress
+    and falls in behind, above it the reverse and it attacks. The hue therefore
+    answers the strategic question directly -- where does this situation want us
+    to follow, and where to overtake.
+
+    Reads benchmarks/results/situation_demands_<track>.json.
+    """
+    import json
+    from matplotlib.collections import LineCollection
+    import matplotlib.colors as mc
+
+    path = ROOT / "benchmarks" / "results" / f"situation_demands_{track_name}.json"
+    if not path.exists():
+        print(f"  no {path.name}; run experiments/situation_demands.py first")
+        return
+    d = json.loads(path.read_text())
+    tr = getattr(Track, d["track"])()
+    cells = {tuple(k.split("|")): v for k, v in d["cells"].items()}
+    OPPS = ("none", "slower", "equal", "faster")
+    secs = sorted({int(k[0]) for k in cells})
+
+    fig = plt.figure(figsize=(13.4, 5.4))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.25, 0.62], wspace=0.28)
+    axt, axm, axw = (fig.add_subplot(gs[0, i]) for i in range(3))
+
+    pts = tr.center.reshape(-1, 1, 2)
+    segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
+    sec_at = np.array([int(tr.sector(tr.wrap(v))) for v in tr.s])
+    for j in range(4):
+        m = sec_at[:-1] == j
+        if m.any():
+            axt.add_collection(LineCollection(segs[m], colors=[CAT[j]],
+                                              linewidth=5.0, capstyle="round"))
+    axt.set_aspect("equal"); axt.autoscale_view(); axt.axis("off")
+    axt.set_title(f"{d['track']} - {tr.length:.0f} m", fontsize=9.5, color=INK)
+    axt.legend(handles=[plt.Line2D([], [], color=CAT[j], lw=5,
+                                   label=Track.SECTOR_NAMES[j])
+                        for j in range(4) if (sec_at == j).any()],
+               fontsize=8, frameon=False, loc="lower center", ncol=2,
+               bbox_to_anchor=(0.5, -0.12))
+
+    def grid_of(keyfn, cols):
+        M = np.full((len(secs), len(cols)), np.nan)
+        for i, k in enumerate(secs):
+            for j, c in enumerate(cols):
+                v = [b for kk, b in cells.items() if keyfn(kk, k, c)]
+                if v:
+                    M[i, j] = float(np.mean([x["ratio"] for x in v]))
+        return M
+
+    M1 = grid_of(lambda kk, k, c: int(kk[0]) == k and kk[1] == c, OPPS)
+    WIDE = ("narrow", "wide")
+    M2 = grid_of(lambda kk, k, c: int(kk[0]) == k
+                 and kk[2] == ("1" if c == "wide" else "0"), WIDE)
+
+    allv = np.concatenate([M1[np.isfinite(M1)], M2[np.isfinite(M2)]])
+    lim = float(max(abs(np.log10(allv)).max(), 0.35)) if len(allv) else 1.0
+    norm = mc.Normalize(-lim, lim)
+    im = None
+    for ax, M, cols, title in ((axm, M1, OPPS, "opponent"),
+                               (axw, M2, WIDE, "corridor")):
+        im = ax.imshow(np.log10(M), cmap="coolwarm", norm=norm, aspect="auto")
+        ax.set_xticks(range(len(cols))); ax.set_xticklabels(cols, fontsize=8.5)
+        ax.set_yticks(range(len(secs)))
+        ax.set_yticklabels([Track.SECTOR_NAMES[k] for k in secs], fontsize=8.5)
+        ax.set_xlabel(title, fontsize=9)
+        for i in range(M.shape[0]):
+            for j in range(M.shape[1]):
+                if np.isfinite(M[i, j]):
+                    ax.text(j, i, f"{M[i, j]:.1f}", ha="center", va="center",
+                            fontsize=8.5, color=INK)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+        ax.set_xticks(np.arange(-.5, len(cols), 1), minor=True)
+        ax.set_yticks(np.arange(-.5, len(secs), 1), minor=True)
+        ax.grid(which="minor", color="white", lw=2.0)
+        ax.tick_params(which="minor", length=0)
+    cb = fig.colorbar(im, ax=[axm, axw], fraction=0.03, pad=0.02)
+    cb.set_label("best $q_v/q_c$  (blue: follow, red: attack)", fontsize=8.5)
+    cb.set_ticks([-lim, 0, lim])
+    cb.set_ticklabels([f"{10**-lim:.2f}", "1.0", f"{10**lim:.1f}"])
+    cb.ax.tick_params(labelsize=8)
+
+    head = d.get("headroom_pct", float("nan"))
+    fig.suptitle("What each racing situation asks of the cost weights, by direct "
+                 "search. The boundary at $q_v/q_c=1$ separates falling in "
+                 "behind from attacking.\nBest weight per situation beats the "
+                 f"best single constant by {head:+.1f}% -- the headroom an "
+                 "adaptive policy competes for, and an upper bound on it.",
+                 fontsize=9.5, color=INK, y=1.04)
+    fig.savefig(OUT / "strategy.png", dpi=170, bbox_inches="tight")
+    print("  wrote strategy.png")
+
+
 def fig_icra_grip():
     """The competition tracks, coloured by the speed each corner allows.
 
@@ -1109,6 +1215,7 @@ FIGS = {"online": fig_online_curve, "driving": fig_driving_sectors, "architectur
         "filmstrip": fig_filmstrip, "adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "icra_grip": fig_icra_grip,
+        "strategy": fig_strategy,
         "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}
 
 if __name__ == "__main__":

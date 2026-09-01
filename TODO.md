@@ -450,6 +450,55 @@ was valid, with nothing to stop it" — inherited whole.
       *present* passes happily while the policy ignores it. Sensitivity of a
       *trained* policy is the only test that separates them.
 
+### The benchmark cannot reward adaptation — 2026-09-01, and this outranks the rest
+
+`experiments/situation_demands.py`. Instead of asking what the learner emits,
+drive a grid of fixed weight vectors in each cell of (sector × opponent ×
+corridor) and keep the winner. 144 runs, 400 steps, circuit, no crashes:
+
+    sector      opponent                    best q_v/q_c   covered
+    straight    none/slower/equal/faster           16.67   79.0-79.9m
+    long curve  none/slower/equal/faster           16.67   74.4-78.9m
+    90-deg      none/slower/equal/faster           16.67   74.6-79.0m
+    180-deg     none/slower/equal/faster           16.67   76.9-78.9m
+
+    best single constant:       q_v/q_c = 16.67, 77.9 m mean
+    best weight PER SITUATION:                    77.9 m mean
+    headroom for an adaptive policy:              +0.0%
+
+**Every cell wants the same weights, and they are the largest ratio in the
+grid.** Per-situation tuning wins exactly nothing.
+
+Two reasons, both properties of the experiment rather than of the learner:
+
+1. **The metric is pure progress.** `q_v` weights progress and the score IS
+   progress, so more `q_v` is always better and the search runs to the top of
+   the grid everywhere. Nothing is traded against anything. This is the same
+   degenerate optimum as the "runaway" and the "collapse to a constant" — the
+   policy was not broken, it was answering correctly a question with one answer.
+2. **The opponent never blocks.** Distance is 74-80 m whether the opponent is
+   absent, slower, equal or faster. A faster one drives away; a slower one is
+   passed on a corridor wide enough that passing is free. That is why
+   `opponent class` reads decorative in every sensitivity table we have run.
+
+- [ ] **Do not run another policy experiment until the benchmark can
+      discriminate.** Every negative result about the learner is confounded by
+      this. Five mechanisms were investigated (output parameterisation, dead
+      span, entropy, meta-RL feedback, gauge freedom + readout decay) against a
+      task where a constant is provably optimal.
+- [ ] **A racing metric.** Price position and contact, not only metres, or
+      "attack always" is optimal by construction. Lap time under a
+      contact/off-track penalty, or position against a defending opponent.
+- [ ] **An opponent that defends** — matched speed, holding the racing line, so
+      a pass needs commitment and carries risk.
+- [ ] **Narrow corridors where a pass does not fit.** ICRA T1 vs T2 is the
+      instrument: the SAME geometry at two widths (curvature cross-correlation
+      0.874; median half-width 0.72 m vs 0.66 m, ranges 0.35-1.56 and
+      0.30-1.88).
+- [ ] Re-run `situation_demands.py` after each change. It is the cheapest
+      possible check on whether an experiment can show what we want to claim,
+      and it should have existed before any of the learner work.
+
 ### Resolved mechanism, unresolved result — 2026-09-01
 
 Two defects were masking each other, and neither alone explains anything.
