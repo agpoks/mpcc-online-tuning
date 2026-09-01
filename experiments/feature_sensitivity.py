@@ -47,7 +47,12 @@ GROUPS = {"sector": (9, 13), "opponent class": (14, 18),
 def train(seed, n_ep, steps, gauge_fix=False, theta_prior=0.5):
     from examples.tune_online import Plant
     track = Track.oval()
-    th0 = MPCCWeights(q_c=1.0, q_v=2.0, q_l=200.0, r_d=1.0).to_log()
+    # The anchor is the parameterisation that PASSES the oval acceptance gate
+    # (7.72 laps, 100% solve), not the historical q_c=1.0/q_l=200/r_d=1.0,
+    # which covers 0.5-0.6 m on the competition tracks. A policy that emits
+    # deviations from an operating point that crashes is being asked the wrong
+    # question. See TODO item 0.
+    th0 = MPCCWeights(q_c=0.3, q_v=2.0, q_l=200.0, r_d=0.1).to_log()
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
     pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0, THETA_LO,

@@ -45,10 +45,14 @@ from mpcc_tuning.model import KinematicBicycle  # noqa: E402
 from mpcc_tuning.mpcc import MPCC, MPCCWeights  # noqa: E402
 from mpcc_tuning.track import Track  # noqa: E402
 
-GRID = [(qc, ql, rd)
-        for qc in (0.3, 1.0, 3.0)
-        for ql in (10.0, 50.0, 200.0)
-        for rd in (0.1, 1.0)]
+#: --quick uses the settings that pass on the oval, which is enough to answer
+#: "does ANY fixed setting drive this track" without paying for the full grid.
+GRID_FULL = [(qc, ql, rd)
+             for qc in (0.3, 1.0, 3.0)
+             for ql in (10.0, 50.0, 200.0)
+             for rd in (0.1, 1.0)]
+GRID_QUICK = [(0.3, 200.0, 0.1), (0.3, 50.0, 1.0), (1.0, 50.0, 0.1)]
+GRID = GRID_FULL
 
 
 def one(job):
@@ -88,14 +92,18 @@ def main(argv=None):
     ap.add_argument("--horizon", type=int, default=12)
     ap.add_argument("--iters", type=int, nargs="*", default=[80, 300])
     ap.add_argument("--jobs", type=int, default=6)
+    ap.add_argument("--quick", action="store_true",
+                    help="only the settings that pass on the oval -- enough to "
+                         "answer whether ANY fixed setting drives this track")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     if a.out is None:
         a.out = str(ROOT / "benchmarks" / "results"
                     / f"acceptance_{a.track}.json")
 
+    grid = GRID_QUICK if a.quick else GRID_FULL
     jobs = [(qc, ql, rd, mi, a.horizon, a.laps, a.track)
-            for qc, ql, rd in GRID for mi in a.iters]
+            for qc, ql, rd in grid for mi in a.iters]
     t = getattr(Track, a.track)()
     print(f"  {a.track}: {t.length:.1f} m lap, target {a.laps:g} laps, "
           f"{len(jobs)} runs over {a.jobs} workers", flush=True)

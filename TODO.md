@@ -10,6 +10,38 @@ with a comment saying where it came from. The one exception is
 `scuderia_gym_jax`, which is a *plant* and stays an optional extra — the bridge
 is `mpcc_tuning/plant_scuderia.py` and it already works.
 
+### The gauge fix is harmful — measured 2026-09-02
+
+On the parameterisation that PASSES the oval gate (`q_c=0.3, q_l=200, r_d=0.1`,
+7.72 laps, 100% solve), both tuner configurations, three seeds:
+
+    feature group      gauge fixed + no decay      default tuner
+    sector                    0.0%                  4.1% +-1.1%
+    opponent class            0.0%                  3.7% +-0.7%
+    curvature preview         0.0%                  0.9% +-0.1%
+    gap                       0.0%                  2.7% +-1.5%
+    corridor width            0.0%                  0.9% +-0.3%
+
+Absolute spread of `q_v/q_c` across sectors: **1.19 with the default tuner
+against 0.0013 with the gauge fix** — a factor of about a thousand.
+
+**The gauge fix suppresses the variation it was meant to enable.** Pinning the
+mean of the six log cost weights INSIDE the existing per-weight box collapses
+the reachable ratio range: raising `q_v` requires lowering `q_c` in lockstep and
+the per-component bounds cut that short, leaving a reachable `q_v/q_c` span of
+about ×2. The gauge freedom is real — `V/c` is constant to four decimals — but
+this remedy removes the unidentifiable direction *and most of the useful one*.
+
+- [ ] **Do not ship `gauge_fix=True` as it stands.** It is worse than the
+      default on every feature group.
+- [ ] Redesign it if it is wanted: project the gauge out in a basis whose
+      coordinates are the RATIOS, and bound those, rather than pinning the mean
+      and clipping into a box drawn for the original coordinates.
+- [ ] Note that neither arm passes the 5% bar. 4.1% +-1.1% is still decorative,
+      which is consistent with the direct search: the whole prize for perfect
+      per-situation tuning is +3.5% to +8.9%, so the advantage signal for
+      deviating sits near the noise floor and a constant is close to correct.
+
 ## 0. The design this project is supposed to follow — and does not
 
 Stated repeatedly and never written down here, which is why it keeps being
