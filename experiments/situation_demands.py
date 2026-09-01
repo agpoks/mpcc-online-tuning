@@ -56,8 +56,16 @@ from mpcc_tuning.track import Track  # noqa: E402
 GRID = [(1.0, 0.2), (1.0, 0.5), (1.0, 1.0), (1.0, 2.0), (1.0, 5.0),
         (0.3, 2.0), (0.3, 5.0), (3.0, 2.0), (3.0, 5.0)]
 
-#: Opponent speeds, as a fraction of the ego's typical pace, per class.
-OPP_SPEED = {"none": None, "slower": 0.45, "equal": 1.0, "faster": 1.45}
+#: Opponent speeds, as a fraction of the ego's MEASURED pace, per class.
+#:
+#: Measured, not assumed. The first version of this fixed the reference at
+#: 2.5 m/s while the ego actually drove at about 4, so "equal" was 60% of the
+#: ego's pace and "faster" barely matched it: no opponent could block, and the
+#: four opponent columns came back within 1 m of each other -- 74-80 m whether
+#: the opponent was absent, slower, equal or faster. An opponent that cannot
+#: block cannot make behaviour matter, which is most of why `opponent class`
+#: reads as decorative in every sensitivity table here.
+OPP_SPEED = {"none": None, "slower": 0.70, "equal": 0.95, "faster": 1.15}
 
 
 def _sector_starts(track, n_probe=1500):
@@ -113,6 +121,7 @@ def one(job):
     th = MPCCWeights(q_c=q_c, q_l=50.0, q_v=q_v, r_d=0.1).to_log()
     covered, off, passes = 0.0, False, 0
     behind0 = None
+    contact = 0
     for _ in range(steps):
         out = m.value(s5, th)
         s5n, r, off, done = P.step(out["u0"])
@@ -128,8 +137,10 @@ def one(job):
         covered += float(r)
         s5 = s5n
         if off or done:
+            if getattr(P, "failure", None) == "collision":
+                contact = 1
             break
-    return (sector, opp_cls, wide, q_c, q_v), covered, bool(off), passes
+    return (sector, opp_cls, wide, q_c, q_v), covered, bool(off), passes, contact
 
 
 def main(argv=None):
@@ -139,12 +150,37 @@ def main(argv=None):
     ap.add_argument("--horizon", type=int, default=40)
     ap.add_argument("--steps", type=int, default=220)
     ap.add_argument("--jobs", type=int, default=6)
-    ap.add_argument("--base-speed", type=float, default=2.5)
+    ap.add_argument("--base-speed", type=float, default=0.0,
+                    help="0 = measure the ego's solo pace and scale "
+                         "the opponents to it, which is the only way "
+                         "an opponent can be made to block")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
 
     track = getattr(Track, a.track)()
     starts = _sector_starts(track)
+
+    base_v = a.base_speed
+    if base_v <= 0.0:
+        # Drive the ego alone and take its own pace as the reference, so
+        # "equal" means equal to this car on this track rather than to a
+        # number chosen in advance.
+        from examples.tune_online import Plant
+        m0 = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=a.horizon,
+                  dt=0.05, max_iter=80)
+        P0 = Plant(track, dt=0.05, max_steps=a.steps)
+        s5 = P0.reset(); m0.reset(); vs = []
+        th0 = MPCCWeights(q_c=1.0, q_l=50.0, q_v=2.0, r_d=0.1).to_log()
+        for _ in range(a.steps):
+            o = m0.value(s5, th0)
+            s5, _r, off, tr = P0.step(o["u0"])
+            vs.append(float(s5[3]))
+            if off or tr:
+                break
+        base_v = float(np.mean(vs)) if vs else 2.5
+        print(f"  ego solo pace {base_v:.2f} m/s -- opponents scaled to it "
+              f"(slower {0.70 * base_v:.2f}, equal {0.95 * base_v:.2f}, "
+              f"faster {1.15 * base_v:.2f})", flush=True)
     med = float(np.median([track.width(x)[0] + track.width(x)[1]
                            for x in np.linspace(0, track.length, 400)]))
     wide_of = {}
@@ -158,31 +194,47 @@ def main(argv=None):
                                                        "equal", "faster"):
             for q_c, q_v in GRID:
                 jobs.append((a.track, a.horizon, q_c, q_v, k, opp_cls,
-                             wide_of[k], s0, a.steps, a.base_speed))
+                             wide_of[k], s0, a.steps, base_v))
     print(f"  {a.track}: {len(starts)} sectors present, {len(jobs)} runs "
           f"over {a.jobs} workers", flush=True)
 
     res = {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
-        for key, cov, off, passes in ex.map(one, jobs):
-            res[key] = dict(covered=cov, off=off, passes=passes)
+        for key, cov, off, passes, contact in ex.map(one, jobs):
+            res[key] = dict(covered=cov, off=off, passes=passes, contact=contact)
 
     # Best (q_c, q_v) per situation, and the best single constant over all.
     cells, per_cell_best = {}, {}
     for (k, opp_cls, wide, q_c, q_v), v in res.items():
         cells.setdefault((k, opp_cls, wide), {})[(q_c, q_v)] = v
+    def score(v):
+        """Metres, minus what a race actually charges for.
+
+        Distance alone makes "attack always" optimal by construction: q_v
+        weights progress and the score IS progress, so the search runs to the
+        top of the grid in every cell and per-situation tuning wins nothing.
+        Measured that way the headroom was +0.0%. A racing score has to price
+        the things a driver trades progress against.
+        """
+        return (v["covered"]
+                - 25.0 * float(v.get("contact", 0))
+                - 10.0 * float(v["off"])
+                + 5.0 * float(v.get("passes", 0)))
+
     for cell, d in cells.items():
-        best = max(d.items(), key=lambda kv: (not kv[1]["off"], kv[1]["covered"]))
+        best = max(d.items(), key=lambda kv: score(kv[1]))
         per_cell_best[cell] = dict(q_c=best[0][0], q_v=best[0][1],
                                    ratio=best[0][1] / best[0][0],
                                    covered=best[1]["covered"],
                                    off=best[1]["off"], passes=best[1]["passes"])
     totals = {}
     for w in GRID:
-        totals[w] = float(np.mean([cells[c][w]["covered"] for c in cells]))
+        totals[w] = float(np.mean([score(cells[c][w]) for c in cells]))
     best_const = max(totals, key=totals.get)
 
-    adaptive = float(np.mean([per_cell_best[c]["covered"] for c in cells]))
+    adaptive = float(np.mean([score(cells[c][(per_cell_best[c]["q_c"],
+                                              per_cell_best[c]["q_v"])])
+                              for c in cells]))
     constant = totals[best_const]
 
     print()

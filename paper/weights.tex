@@ -277,20 +277,7 @@ change $\Delta\psi = \int \kappa\,\mathrm{d}s$ into straight, long curve
 \SI{180}{\degree}. The label belongs to the corner, not to the point, so it
 cannot change part-way through a manoeuvre.
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{figures/tracks.png}
-  \caption{The three tracks, coloured by named sector, drawn to a common scale.
-  The oval has straights and two \SI{180}{\degree} corners; \texttt{mixed} adds
-  \SI{90}{\degree} corners but no long curve; only \texttt{circuit} has all
-  four. The circuit's \SI{90}{\degree} and \SI{180}{\degree} corners are built
-  at the \emph{same radius} --- both labelled \SI{2.6}{\meter} --- which is
-  exactly why curvature at a point cannot separate them.
-  Reproduced by \texttt{scripts/make\_figures.py}.}
-  \label{fig:tracks}
-\end{figure*}
-
-Fig.~\ref{fig:tracks} draws the three tracks under this labelling, and makes
+The labelling makes
 the argument visible: the circuit's \SI{90}{\degree} and \SI{180}{\degree}
 corners are built at the same radius, so nothing reading curvature at a point
 can separate them.
@@ -484,22 +471,8 @@ leaving the track at episode 3, 3, 4, 5, 5, 5. Per-bin weights reach the same
 better policy; it removes the path by which a bad update in a corner reaches
 the straight's weights.
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{figures/reversal.png}
-  \caption{The result reverses between tracks. \textbf{Left:} on the oval a
-  single $\theta$ collapses on every seed while three curvature bins do not.
-  \textbf{Right:} on the circuit nothing collapses, and the single $\theta$ is
-  the \emph{best} of the three --- the inset resolves an ordering that spans
-  less than \SI{1}{\meter} and would otherwise be invisible at the shared axis
-  the comparison requires. Mean of six seeds; band is the seed range.
-  Reproduced by \texttt{experiments/per\_segment\_seeds.py} and
-  \texttt{experiments/per\_sector\_weights.py}.}
-  \label{fig:reversal}
-\end{figure*}
-
 \subsection{And when it is not}\label{sec:circuit}
-Fig.~\ref{fig:reversal} puts both tracks side by side; the panels are the same
+Both tracks measured the same way; the runs are the same
 measurement and land in different places. The same comparison on a
 \SI{47.2}{\meter} circuit --- straights, a chicane of
 two \SI{90}{\degree} corners, two \SI{180}{\degree} hairpins, a pair of
@@ -611,6 +584,58 @@ occurred.
   Reproduced by \texttt{experiments/overtake\_or\_follow.py}.}
   \label{fig:overtake}
 \end{figure}
+
+\section{What the situation demands}\label{sec:demands}
+
+Every measurement so far asks what the learner \emph{emits}. This one asks what
+the situation \emph{wants}, and it is the premise the rest of the work rests on:
+if one weight vector wins everywhere, a constant is the right answer and a
+policy that collapses to one was correct.
+
+We answer it by direct search. For each cell of a grid a racing driver would
+recognise --- sector $\times$ opponent $\times$ corridor --- we drive a grid of
+fixed weight vectors and keep the one that wins, then compare the best
+\emph{per-situation} choice against the best single constant over the whole
+grid. The difference is the headroom an adaptive policy is competing for, and an
+upper bound on it, since this search is shown each cell's answer and no online
+learner is.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/strategy.png}
+  \caption{What each racing situation asks of the cost weights. Every cell
+  attacks ($q_v/q_c > 1$); what differs is by how much, and the two that back
+  off are those facing an \emph{equally fast} opponent --- the only one that can
+  block, since a slower car is passed and a faster one is gone. Per-situation
+  weights beat the best single constant by $3.5\%$. The corridor panel is empty
+  on its narrow side because every sector of this track is above its own median
+  width, which is what the two ICRA circuits are for: the same geometry at two
+  widths.}
+  \label{fig:strategy}
+\end{figure*}
+
+\textbf{The first version of this measurement returned $+0.0\%$, and the reason
+is worth more than the number.} Scored on distance alone, every cell chose the
+largest ratio in the grid: $q_v$ weights progress and the score \emph{was}
+progress, so more $q_v$ is better everywhere and nothing is traded against
+anything. The opponents could not block either --- their speeds had been fixed
+at \SI{2.5}{\meter\per\second} while the ego drove at about \SI{4}{}, so
+``equal'' was $60\%$ of our pace --- and distance came back at
+\SIrange{74}{80}{\meter} whether the opponent was absent, slower, equal or
+faster.
+
+Both are properties of the experiment rather than of the controller. With
+opponents scaled to the ego's \emph{measured} pace and a score that charges for
+contact and leaving the track, the same search finds $+3.5\%$
+(Fig.~\ref{fig:strategy}), and the cells that disagree are exactly the ones
+where a pass is contested.
+
+We report this because it changes how every other result here should be read.
+The degeneracy described in Section~\ref{sec:degenerate} was measured against a
+task on which a constant is provably optimal, and a policy is not wrong to find
+the optimum of the problem it was given. $3.5\%$ is also a small prize, and an
+upper bound: whether an online learner can win any part of it against a
+benchmark that only just distinguishes the cells is not something we have shown.
 
 \section{Safety, when the weights themselves are learned}\label{sec:safety}
 
@@ -1085,8 +1110,8 @@ safety, through its magnitude. The most consequential parameter in the policy
 was the half-dead one. This also accounts for the signature every
 hypothesis we tested shared and none explained --- the output pinned at
 \emph{a bound}, at $0.006$, $0.100$, $19.8$ and $39.97$ across configurations
---- and for Fig.~\ref{fig:driving}, where $q_v$ sits flat on the ceiling it
-could not be pushed off.
+--- and for the lap traces, where $q_v$ sat flat on the ceiling it could not
+be pushed off.
 
 We therefore mark as \textbf{provisional} every result in this section, the
 gate comparisons of Section~\ref{sec:gate}, and our adaptation of RTRRL's
@@ -1129,22 +1154,9 @@ sector the car happened to occupy; the frozen sweep holds the input and
 isolates the response. The two are not interchangeable, and the more flattering
 one is the less trustworthy.
 
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{figures/driving_sectors.png}
-  \caption{One lap of the four-sector circuit after ten episodes of online
-  learning. \textbf{Left:} the driven path coloured by the sector the policy
-  sees. \textbf{Right:} the weights it emitted against arc length, with the
-  sectors as shaded bands, and the resulting speed. If a sector schedule were
-  doing anything the weights would step at the band edges. They do not move at
-  all --- $q_v$ is flat on its ceiling and $q_c$ flat near its floor for the
-  whole lap --- which is Table~\ref{tab:sens} made visible.}
-  \label{fig:driving}
-\end{figure*}
-
-Fig.~\ref{fig:driving} shows the same failure as a lap rather than a table: the
-sector the policy sees changes eleven times round the circuit, and the weights
-it emits do not step once.
+The same failure is visible as a lap rather than a table: the sector the
+policy sees changes eleven times round the circuit, and the weights it emits do
+not step once.
 
 \begin{figure*}[t]
   \centering

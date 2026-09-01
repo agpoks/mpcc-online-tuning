@@ -501,12 +501,21 @@ def fig_strategy(track_name="circuit"):
                  and kk[2] == ("1" if c == "wide" else "0"), WIDE)
 
     allv = np.concatenate([M1[np.isfinite(M1)], M2[np.isfinite(M2)]])
-    lim = float(max(abs(np.log10(allv)).max(), 0.35)) if len(allv) else 1.0
-    norm = mc.Normalize(-lim, lim)
+    lo, hi = float(np.log10(allv.min())), float(np.log10(allv.max()))
+    # Sequential, not diverging.
+    #
+    # A diverging ramp centred on the behaviour boundary q_v/q_c = 1 is the
+    # right encoding only if the data falls on both sides of it. Here every
+    # cell is between 5 and 17 -- all on the attack side -- so half the ramp
+    # went unused and the contrast that matters (5.0 against 16.7) came out as
+    # two shades of the same red. One hue over the data's own range shows it.
+    # That every cell exceeds the boundary is said in the caption instead,
+    # which is where a fact that is constant across the figure belongs.
+    norm = mc.Normalize(lo, hi)
     im = None
     for ax, M, cols, title in ((axm, M1, OPPS, "opponent"),
                                (axw, M2, WIDE, "corridor")):
-        im = ax.imshow(np.log10(M), cmap="coolwarm", norm=norm, aspect="auto")
+        im = ax.imshow(np.log10(M), cmap="YlOrRd", norm=norm, aspect="auto")
         ax.set_xticks(range(len(cols))); ax.set_xticklabels(cols, fontsize=8.5)
         ax.set_yticks(range(len(secs)))
         ax.set_yticklabels([Track.SECTOR_NAMES[k] for k in secs], fontsize=8.5)
@@ -514,8 +523,15 @@ def fig_strategy(track_name="circuit"):
         for i in range(M.shape[0]):
             for j in range(M.shape[1]):
                 if np.isfinite(M[i, j]):
+                    # White on the dark end of the ramp, ink on the light --
+                    # a fixed colour is unreadable at one end or the other.
+                    frac = (np.log10(M[i, j]) - lo) / max(hi - lo, 1e-9)
                     ax.text(j, i, f"{M[i, j]:.1f}", ha="center", va="center",
-                            fontsize=8.5, color=INK)
+                            fontsize=9.5, fontweight="bold",
+                            color="white" if frac > 0.55 else INK)
+                else:
+                    ax.text(j, i, "n/a", ha="center", va="center",
+                            fontsize=8, color="0.55", style="italic")
         for sp in ax.spines.values():
             sp.set_visible(False)
         ax.set_xticks(np.arange(-.5, len(cols), 1), minor=True)
@@ -523,18 +539,24 @@ def fig_strategy(track_name="circuit"):
         ax.grid(which="minor", color="white", lw=2.0)
         ax.tick_params(which="minor", length=0)
     cb = fig.colorbar(im, ax=[axm, axw], fraction=0.03, pad=0.02)
-    cb.set_label("best $q_v/q_c$  (blue: follow, red: attack)", fontsize=8.5)
-    cb.set_ticks([-lim, 0, lim])
-    cb.set_ticklabels([f"{10**-lim:.2f}", "1.0", f"{10**lim:.1f}"])
+    cb.set_label("best $q_v/q_c$   (higher = attack harder)", fontsize=8.5)
+    cb.set_ticks([lo, 0.5 * (lo + hi), hi])
+    cb.set_ticklabels([f"{10**lo:.1f}", f"{10**(0.5*(lo+hi)):.1f}", f"{10**hi:.1f}"])
     cb.ax.tick_params(labelsize=8)
 
     head = d.get("headroom_pct", float("nan"))
-    fig.suptitle("What each racing situation asks of the cost weights, by direct "
-                 "search. The boundary at $q_v/q_c=1$ separates falling in "
-                 "behind from attacking.\nBest weight per situation beats the "
-                 f"best single constant by {head:+.1f}% -- the headroom an "
-                 "adaptive policy competes for, and an upper bound on it.",
-                 fontsize=9.5, color=INK, y=1.04)
+    nnarrow = int(np.isfinite(M2[:, 0]).sum())
+    fig.suptitle("What each racing situation asks of the cost weights. Every "
+                 "cell attacks ($q_v/q_c>1$); what differs is by how much, and "
+                 "the cells that back off\nare those facing an EQUALLY FAST "
+                 "opponent -- the only one that can block. Per-situation weights "
+                 f"beat the best single constant by {head:+.1f}%.",
+                 fontsize=9.5, color=INK, y=1.02)
+    if not nnarrow:
+        fig.text(0.5, -0.04, "The narrow column is empty: every sector of this "
+                 "track is above its own median width. ICRA Tracks 1 and 2 are "
+                 "the instrument for that axis -- the same geometry at two "
+                 "widths.", ha="center", fontsize=8.5, color="0.35")
     fig.savefig(OUT / "strategy.png", dpi=170, bbox_inches="tight")
     print("  wrote strategy.png")
 
