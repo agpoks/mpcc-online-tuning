@@ -52,7 +52,9 @@ def train(seed, n_ep, steps, theta_explore, trace=None):
     conditioning, which is a different failure from one that never moved.
     """
     from examples.tune_online import Plant
-    track = Track.oval()
+    # The circuit, not the oval: an oval has two named sectors, so a figure of
+    # weights against sector can only ever show two bands there.
+    track = Track.circuit()
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
     pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), TH0, THETA_LO,

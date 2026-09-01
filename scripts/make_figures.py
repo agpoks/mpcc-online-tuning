@@ -623,8 +623,7 @@ def fig_adaptation():
     # own PolicyTuner without the trust region and prior, so it kept drawing
     # the runaway after the experiment had stopped exhibiting it.
     tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
-                        theta_prior=0.0,
-                        seed=0, trust_region=0.01, theta_prior=0.5)
+                        seed=0, trust_region=0.01, theta_prior=0.0)
 
     ep_ratio, ep_cov, last = [], [], None
     for ep in range(12):
@@ -1033,34 +1032,53 @@ def fig_online_curve():
     ep, sec, wts = T[:, 0], T[:, 3], T[:, 5:]
     t = np.arange(len(T))
 
-    fig, axes = plt.subplots(2, 1, figsize=(11.0, 5.6), sharex=True,
-                             gridspec_kw=dict(height_ratios=[2.3, 1.0]))
-    ax = axes[0]
-    for k, n in enumerate(names):
-        ax.plot(t, wts[:, k], "-", lw=1.3, color=CAT[k % len(CAT)]
-                if k < len(CAT) else None, label=n, alpha=0.9)
-    for b in np.flatnonzero(np.diff(ep)) + 1:
-        ax.axvline(b, color="0.85", lw=0.8, zorder=0)
-    ax.set_yscale("log")
-    ax.set_ylabel("weight (log)")
-    ax.legend(fontsize=7.5, frameon=False, ncol=4, loc="upper left")
-    ax.set_title("every parameter, every control tick, while the car drives "
-                 "(grey lines are episode boundaries)", fontsize=9.5, color=INK)
-    bx = axes[1]
+    # Grouped by what the weight DOES, three per panel at most. Eight series
+    # through a four-colour palette means q_c and r_a are both blue and the
+    # legend stops identifying anything; splitting by role keeps every hue
+    # unique within the axes a reader compares across, and lets each series be
+    # labelled directly at its own line instead of in a key.
+    GROUPS = (("path costs", ("q_c", "q_l", "q_v")),
+              ("input costs", ("r_d", "r_a", "r_dv")),
+              ("constraints", ("d_obs", "k_v")))
+    idx = {n: i for i, n in enumerate(names)}
+
+    fig, axes = plt.subplots(4, 1, figsize=(11.5, 7.6), sharex=True,
+                             gridspec_kw=dict(height_ratios=[2, 2, 2, 0.62]))
+    for ax, (title, group) in zip(axes, GROUPS):
+        for c, n in enumerate(group):
+            if n not in idx:
+                continue
+            y = wts[:, idx[n]]
+            ax.plot(t, y, "-", lw=1.4, color=CAT[c], alpha=0.95)
+            ax.annotate(f" {n}", (t[-1], y[-1]), color=CAT[c], fontsize=8.5,
+                        va="center", ha="left", annotation_clip=False)
+        for b in np.flatnonzero(np.diff(ep)) + 1:
+            ax.axvline(b, color="0.88", lw=0.8, zorder=0)
+        ax.set_yscale("log")
+        ax.set_ylabel(title, fontsize=9)
+        ax.margins(x=0.02)
+
+    bx = axes[-1]
+    seen = []
     for k in range(4):
         m = sec == k
         if m.any():
             bx.fill_between(t, 0, 1, where=m, transform=bx.get_xaxis_transform(),
-                            color=CAT[k], alpha=0.16, linewidth=0,
-                            label=Track.SECTOR_NAMES[k])
+                            color=CAT[k], alpha=0.18, linewidth=0)
+            seen.append((Track.SECTOR_NAMES[k], CAT[k]))
+    for j, (nm, col) in enumerate(seen):
+        bx.annotate(nm, (0.005 + 0.13 * j, 0.5), xycoords="axes fraction",
+                    fontsize=8, color=INK, va="center",
+                    bbox=dict(fc=col, ec="none", alpha=0.25, pad=2.0))
     bx.set_xlabel("control tick (continuous across episodes)")
-    bx.set_yticks([]); bx.set_ylabel("sector")
-    bx.legend(fontsize=7.5, frameon=False, ncol=4, loc="upper left")
+    bx.set_yticks([]); bx.set_ylabel("sector", fontsize=9)
     for a_ in axes:
         for sp in ("top", "right"):
             a_.spines[sp].set_visible(False)
-    fig.suptitle("Real-time online learning: all eight MPCC weights as they are "
-                 "adapted during driving.", fontsize=9.5, color=INK, y=1.01)
+    fig.suptitle("Every MPCC weight, every control tick, while the car drives. The "
+                 "weights DO adapt online --- and they do not\ntrack the sector "
+                 "bands below, which is the open result, not a defect of the plot.",
+                 fontsize=9.5, color=INK, y=1.005)
     fig.tight_layout()
     fig.savefig(OUT / "online_curve.png", dpi=170, bbox_inches="tight")
     print("  wrote online_curve.png")
