@@ -704,8 +704,16 @@ def fig_icra_grip():
     from matplotlib.collections import LineCollection
     from mpcc_tuning.model import A_LAT_MAX, SPEED_MAX
 
-    tracks = [("ICRA 2026 T1", Track.icra_t1_raceline()),
-              ("ICRA 2026 T2", Track.icra_t2_raceline()),
+    # ICRA 2025 and ONE of the 2026 circuits, not both.
+    #
+    # T1 and T2 are the same map: their curvature profiles cross-correlate at
+    # 0.874 once phase is allowed for, and what differs between them is the
+    # corridor (median half-width 0.72 m against 0.66 m). Showing both spends a
+    # panel on a track the reader has already seen. 2025 is a genuinely
+    # different circuit -- 204 m against 80, a serpentine rather than a
+    # hairpin-heavy layout -- and belongs here instead.
+    tracks = [("ICRA 2025", Track.icra2025()),
+              ("ICRA 2026 T1", Track.icra_t1_raceline()),
               ("circuit (synthetic)", Track.circuit())]
     fig, axes = plt.subplots(1, 3, figsize=(14.0, 4.8))
     lc = None

@@ -10,6 +10,43 @@ with a comment saying where it came from. The one exception is
 `scuderia_gym_jax`, which is a *plant* and stays an optional extra — the bridge
 is `mpcc_tuning/plant_scuderia.py` and it already works.
 
+## 0. The design this project is supposed to follow — and does not
+
+Stated repeatedly and never written down here, which is why it keeps being
+lost:
+
+> **Start from a stable working parameterisation.** It need not be perfect or
+> the fastest. **Then adapt from there** — by track, sector, opponent, surface,
+> grip.
+
+The *shape* of that is implemented: the policy anchors at θ₀ and emits
+deviations, and the squash spans are measured from θ₀. **The baseline is
+wrong.** θ₀ is `q_c=1.0, q_l=200, q_v=2.0, r_d=1.0`, used in 7 places across
+the experiments, and it does not drive the competition tracks — measured at
+0.5–0.6 m covered on ICRA T1. What works there is `q_c=0.1, q_l=50, r_d=0.1`
+at horizon 40, which reaches 125.3 m.
+
+So the learner has been asked to adapt **around an operating point that
+crashes on the tracks we care about**, with its output range measured from that
+same point. Every adaptation result is a deviation from a bad baseline, and
+that is a more likely explanation for weak adaptation than any of the five
+mechanisms investigated on 2026-08-31/09-01.
+
+- [ ] **Establish a stable θ₀ per track, verified to complete laps**, before any
+      further learner work. Not the fastest — the one that finishes.
+      Candidates measured so far: circuit `q_c=1.0` horizon 12 (92 m, clean);
+      ICRA T1 `q_c=0.1, q_l=50, r_d=0.1` horizon 40 (125 m, 1.6 laps);
+      ICRA 2025 same weights horizon 50 (148 m, clean).
+- [ ] **Re-anchor the policy on it**, and re-derive `THETA_LO`/`THETA_HI` around
+      the new θ₀ so the spans mean something. The current box was drawn around
+      the old anchor and put two weights on their own ceilings (§ dead span).
+- [ ] **Only then** re-run the adaptation experiments. Everything measured
+      before this is a deviation from a baseline that does not drive.
+- [ ] The horizon belongs in the baseline too: 12 on the synthetic tracks, 40–50
+      on the competition ones. It is a structural parameter of the OCP, not
+      something the weight policy can adapt, and 0.6 s of lookahead cannot see
+      through a 0.7 m-radius hairpin (2.2 m of arc against 1.8 m of plan).
+
 ## Where things stand
 
 Oval, 26 episodes, same seed, last 8 episodes:
