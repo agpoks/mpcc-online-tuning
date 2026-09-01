@@ -56,7 +56,7 @@ def train(seed, n_ep, steps, theta_explore, trace=None):
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
     pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), TH0, THETA_LO,
-                       THETA_HI, seed=seed)
+                       THETA_HI, seed=seed, gauge_fix=True)
     tu = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0, seed=seed,
                      theta_explore=theta_explore)
     for ep in range(n_ep):

@@ -388,7 +388,33 @@ class Track:
         the question "should the weights depend on the corridor width" cannot
         be asked at all. See ``mpcc_tuning/tracks/PROVENANCE.md``.
         """
-        here = Path(__file__).resolve().parent / "tracks" / "icra_t1_raceline.csv"
+        return Track._raceline("icra_t1_raceline.csv", scale=scale, ds=ds)
+
+    @staticmethod
+    def icra_t2_raceline(scale: float = 1.0, ds: float = 0.1) -> "Track":
+        """ICRA 2026 Track 2 from the team's optimised raceline, variable width.
+
+        \SI{73.8}{\meter}, corridor \SI{0.59}{}--\SI{3.76}{\meter} -- a factor
+        of 6.4 round one lap, wider still than Track 1's 4.5 -- and the
+        optimiser's own speed profile peaking at \SI{8.80}{\meter\per\second}.
+
+        That peak is **above** this repo's ``SPEED_MAX`` of 8.0, so the cap is
+        currently below what the team's own optimiser asks for on this track.
+        Track 2 has no occupancy grid in the archive, but it needs none: the
+        raceline carries ``x, y, w_left_m, w_right_m``, which is a corridor.
+
+        Newest of 41 T2 runs in the archive. See ``tracks/PROVENANCE.md``.
+        """
+        return Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds)
+
+    @staticmethod
+    def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1) -> "Track":
+        """Build a variable-width Track from one of the vendored raceline CSVs.
+
+        Semicolon separated, the optimiser's own column names, with the
+        corridor carried alongside the line as ``w_left_m``/``w_right_m``.
+        """
+        here = Path(__file__).resolve().parent / "tracks" / fname
         rows = [ln for ln in open(here) if not ln.startswith("#") and ln.strip()]
         hdr = rows[0].strip().split(";")
         col = {n: i for i, n in enumerate(hdr)}

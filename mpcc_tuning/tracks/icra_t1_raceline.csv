@@ -1,3 +1,7 @@
+# ICRA 2026 Track 1, optimal raceline, from the team's own optimiser.
+# Copied from racelines-20260830T165029Z-1-001.zip (T1, car_21).
+# lap 71.83 m, 2760 points, peak 6.09 m/s.
+# Vendored, not referenced: this repo must not depend on another.
 #:standard,name,true
 x;y;vx_mps;vy_mps;dpsi_rad;psi_rad;kappa_radpm;ax_mps2;s_m;w_left_m;w_right_m
 6.54774878232108;15.2397565609015;2.75119602448423;0.172872268350593;2.27459543840157;-1.76201781660576;0.899479456982444;-0.869422795479388;0;0.0163868081939618;1.28042080233291

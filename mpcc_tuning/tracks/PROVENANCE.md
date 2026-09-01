@@ -62,3 +62,45 @@ by curvature alone --- which is the case for the feature set in
 And `blend_dist: 1.0` exists because hard sector switching **causes wobble**:
 "Kills the single-cycle weight steps that cause wobble." `Track.sector()`
 switches hard. That is a defect this repo has and the team has already fixed.
+
+## ICRA 2026 racelines and the team's own car parameters — 2026-09-01
+
+`icra_t1_raceline.csv` and `icra_t2_raceline.csv` are copied from
+`racelines-20260830T165029Z-1-001.zip` (car_21): T1 is the newest of 12 runs,
+T2 the newest of 41. Vendored rather than referenced, per the no-cross-repo
+rule. There are **no ICRA 2025 racelines in that archive** — 2025 remains
+map-derived, from its occupancy grid.
+
+| | lap | corridor | optimiser's peak speed |
+|---|---|---|---|
+| T1 | 71.8 m | 0.69–3.13 m (×4.5) | 6.09 m/s |
+| T2 | 73.8 m | 0.59–3.76 m (×6.4) | **8.80 m/s** |
+
+T2 needs no occupancy grid: the raceline carries `x, y, w_left_m, w_right_m`,
+which is a corridor.
+
+### The width columns are already vehicle-adjusted — do not subtract the car twice
+
+`w_left_m`/`w_right_m` bottom out at exactly `-0.000`, on 21% (T1) and 24% (T2)
+of points below one car half-width. That is not corrupt data and not a line
+leaving the track: it is the signature of an optimiser constraint `w >= 0`, and
+an optimal raceline touches the boundary at every apex. These are the margins
+remaining **for the car's centre**, not geometric distances to the wall.
+
+Subtracting `car_half_width` from them again — which the corridor constraint
+does for map-derived tracks, where it is correct — double-counts and makes
+about a fifth of the lap infeasible.
+
+### Their car (`v1_car_params.json`, `par`), against ours
+
+| quantity | theirs | ours | note |
+|---|---|---|---|
+| vehicle width | 0.235 m | 0.240 m | agrees |
+| wheelbase | 0.323 m | 0.330 m | agrees |
+| **friction `mu`** | **0.835** | `A_LAT_MAX` 6.0 implies ~0.61 | we are conservative by a third; `mu*g` = 8.19 m/s² |
+| `a_x_max` | 12 m/s² | | |
+| `delta_f` | 0.34 rad | | |
+| mass | 4.885 kg | | |
+
+`SPEED_MAX` is 8.0 and T2's optimal peak is 8.80 m/s, so the cap is now below
+what the team's own optimiser asks for on that track.

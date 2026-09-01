@@ -617,11 +617,13 @@ def fig_adaptation():
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
     cell = LTCCell(N_FEATURES, 12, seed=0)
-    pol = WeightPolicy(cell, theta0, THETA_LO, THETA_HI, seed=0)
+    pol = WeightPolicy(cell, theta0, THETA_LO, THETA_HI, seed=0,
+                       gauge_fix=True)
     # Same configuration as experiments/ltc_behaviour.py. The figure had its
     # own PolicyTuner without the trust region and prior, so it kept drawing
     # the runaway after the experiment had stopped exhibiting it.
     tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
+                        theta_prior=0.0,
                         seed=0, trust_region=0.01, theta_prior=0.5)
 
     ep_ratio, ep_cov, last = [], [], None
@@ -931,10 +933,14 @@ def fig_driving_sectors():
     th0 = MPCCWeights(q_c=1.0, q_v=2.0, q_l=200.0, r_d=1.0).to_log()
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
+    # The configuration in which the policy is actually a policy: the critic's
+    # gauge freedom projected out, and NO readout decay. With the default
+    # (theta_prior=0.5) the weights are flat for the whole lap -- not because
+    # the figure is wrong but because the policy emits one vector everywhere.
     pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=0), th0, THETA_LO, THETA_HI,
-                       seed=0)
+                       seed=0, gauge_fix=True)
     tu = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0, seed=0,
-                     trust_region=0.01, theta_prior=0.5)
+                     trust_region=0.01, theta_prior=0.0)
 
     ep_cov = []
     for ep in range(10):
