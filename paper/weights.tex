@@ -612,6 +612,103 @@ occurred.
   \label{fig:overtake}
 \end{figure}
 
+\section{Safety, when the weights themselves are learned}\label{sec:safety}
+
+Everything above tunes the weights of a controller that must not crash. Two
+results bear on that directly, and both were found while chasing something
+else.
+
+\subsection{A barrier the learner cannot turn down}\label{sec:cbf-ocp}
+A safety filter is not the end of the argument once the weights are learned.
+The filter absorbs the consequence of a bad weight, so that consequence never
+reaches the return, and the tuner goes on pushing $q_c$ down because nothing
+tells it not to. A filter changes what \emph{happens}; it does not change what
+is being \emph{optimised}.
+
+There is a sharper version of the same point once the weights themselves are
+learned. Anything expressed as a cost term is negotiable: a safety term with a
+learnable weight can simply be given a small weight. A \emph{constraint} cannot.
+So we add the discrete barrier condition
+$h(x_{k+1}) \ge (1-\alpha)h(x_k)$ as a soft constraint of the OCP, with the same
+$h$ the filter uses, so that the two enforce one criterion and differ only in
+where it is enforced.
+
+Two design points decide whether this is free. First, $\theta$ is deliberately
+\emph{absent} from the barrier: the margin is a constant, so the envelope
+theorem still applies and the gradient costs nothing --- measured at
+$\cos = 1.000000$, unchanged from no barrier at all. A learnable margin would
+put $\theta$ into $g$, which is precisely where our gradient is least
+trustworthy (the active-constraint case, which we do not claim). Second, the barrier must be
+\emph{smoothed}. Its two absolute values, $|d|$ and $|v\sin e_\psi|$, are
+functions of decision variables rather than of the track, and with a hard
+$|\cdot|$ the solver succeeded on only $16\%$ of steps against badly-tuned
+weights: the barrier was not making the car safe, it was making the problem
+intractable, and an infeasible solve is no safety at all. With
+$\sqrt{z^2+\epsilon^2}$, $\epsilon = \SI{1}{\centi\meter}$, that recovers to
+$46\%$.
+
+\begin{table}[t]
+  \centering
+  \caption{200 steps on the oval with \emph{no} external filter. The barrier is
+  free with sensible weights --- same distance, and on the track instead of off
+  it --- and does not rescue bad ones.}
+  \label{tab:cbfocp}
+  \begin{tabular}{llrrr}
+    \toprule
+    barrier & weights & covered & off track & solve ok \\
+    \midrule
+    off & default & \SI{28.7}{\meter} & yes & $74\%$ \\
+    on  & default & \SI{28.7}{\meter} & \textbf{no} & $72\%$ \\
+    off & bad     & \SI{12.9}{\meter} & yes & $56\%$ \\
+    on  & bad     & \SI{10.9}{\meter} & yes & $46\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{And a limit we would rather state than discover later.} ``A constraint
+cannot be learned away'' is too strong. The barrier reads the lateral offset at
+the solver's own progress variable $s$, and what keeps $s$ near the true
+projection is the lag weight $q_l$ --- which is one of the weights being
+learned. Evaluated at the same arc length the two barriers agree to under a
+millimetre; evaluated at a drifting $s$ they differ by up to \SI{3}{\centi\meter}
+on a curve. The learner cannot delete the constraint, but it can distort the
+coordinate the constraint is read in. Safety as a constraint resists being
+traded away only to the extent that $s$ stays honest, and the filter --- which
+works in projected coordinates and needs no $s$ --- is therefore not redundant.
+
+\subsection{One of our safety filters is wrong, and its outputs do not say so}\label{sec:viability}
+The viability filter grids speed as $\texttt{linspace}(0, v_{\max}, n_v)$ with
+$n_v = 21$. Raising $v_{\max}$ from $4$ to \SI{8}{\meter\per\second} on the
+grip analysis therefore halved its resolution without altering a line of the
+filter, and it stopped saving a controller that crashes unfiltered. The obvious
+reading --- coarser grid, worse kernel --- is wrong:
+
+\begin{center}
+\begin{tabular}{rrrl}
+  \toprule
+  $n_v$ & $\Delta v$ (m/s) & overrides & off track \\
+  \midrule
+  21 & 0.400 & $8.1\%$  & yes \\
+  41 & 0.200 & $66.0\%$ & no  \\
+  81 & 0.100 & $10.0\%$ & yes \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+Non-monotonic, and $\Delta v = 0.200$ is exactly the spacing in force before
+$v_{\max}$ changed. The only grid that works is the one the filter was
+implicitly validated on, and a \emph{finer} grid fails as well. The kernel is
+not converged with respect to its own discretisation, so its guarantee is
+currently a property of $n_v$ rather than of the dynamics.
+
+We report this because it is the failure mode this paper is about. The filter
+reports plausible override rates throughout; nothing in its outputs indicates
+that it is wrong about which states are recoverable. A safety component that
+fails silently is worse than one that fails loudly, and the only reason we
+found it is that a constant elsewhere in the repository moved and a test that
+had nothing to do with grids started failing.
+
+
 \section{The behaviours, on a circuit we did not design}\label{sec:behaviour}
 
 Every track above is synthetic and built here, and Section~\ref{sec:circuit} is
