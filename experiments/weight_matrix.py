@@ -143,9 +143,9 @@ def main(argv=None):
     summary = {}
     for k, n in enumerate(WEIGHT_NAMES):
         base = max(float(mean[..., k].mean()), 1e-9)
-        s_sp = float(mean[..., k].mean((1, 2)).ptp()) / base
-        o_sp = float(mean[..., k].mean((0, 2)).ptp()) / base
-        w_sp = float(mean[..., k].mean((0, 1)).ptp()) / base
+        s_sp = float(np.ptp(mean[..., k].mean((1, 2)))) / base
+        o_sp = float(np.ptp(mean[..., k].mean((0, 2)))) / base
+        w_sp = float(np.ptp(mean[..., k].mean((0, 1)))) / base
         used = max(s_sp, o_sp, w_sp) > 0.05
         summary[n] = dict(sector=s_sp, opponent=o_sp, width=w_sp, used=bool(used))
         print(f"  {n:<8}{s_sp:9.1%}{o_sp:10.1%}{w_sp:8.1%}   "

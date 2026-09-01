@@ -294,13 +294,38 @@ class WeightPolicy:
         self._sq = (1.0 - t ** 2) * span           # d(theta)/dz, for the chain
         theta = self.theta0 + span * t
         if self.gauge_fix:
-            # Hold the mean of the six log cost weights at its reference value.
-            # This removes exactly the direction along which the critic can be
-            # raised without the car driving any differently, and leaves every
-            # ratio -- which is what behaviour actually depends on -- untouched.
+            # Hold the mean of the six log cost weights at its reference value,
+            # removing the direction along which the critic can be raised
+            # without the car driving any differently.
+            #
+            # Subtracting the mean must not push theta back OUT of the box the
+            # squash just put it in. The first version of this did exactly
+            # that, and emitted q_v = 51 against a ceiling of 3 and r_d = 36
+            # against 10 -- the gauge was fixed and the bounds were gone.
+            #
+            # So: project the deviation to be mean-zero over the cost weights,
+            # then take the largest step along it that still fits the box. The
+            # DIRECTION is preserved exactly, and with it every ratio, which is
+            # the thing that carries behaviour; only the magnitude shrinks, and
+            # only when it would otherwise leave the box.
             idx = list(self.COST_IDX)
             theta = theta.copy()
-            theta[idx] -= float(np.mean(theta[idx])) - self._gauge0
+            dev = theta[idx] - self.theta0[idx]
+            dev = dev - float(np.mean(dev)) + (self._gauge0 - float(np.mean(self.theta0[idx])))
+            room_hi = self.hi[idx] - self.theta0[idx]
+            room_lo = self.theta0[idx] - self.lo[idx]
+            t = 1.0
+            for d, rh, rl in zip(dev, room_hi, room_lo):
+                if d > 1e-12:
+                    t = min(t, float(rh / d))
+                elif d < -1e-12:
+                    t = min(t, float(rl / -d))
+            self._gauge_t = max(0.0, min(1.0, t))
+            theta[idx] = self.theta0[idx] + self._gauge_t * dev
+            # The chain rule must see the same shrink, or the gradient is for a
+            # policy other than the one that acted.
+            self._sq = self._sq.copy()
+            self._sq[idx] *= self._gauge_t
         self._h = h
         return theta
 
