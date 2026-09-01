@@ -130,7 +130,7 @@ class MPCC:
                  terminal_grip: float = 0.85, speed_from_grip: bool = True,
                  cbf: bool = False, cbf_alpha: float = 0.35,
                  cbf_margin: float = 0.18, cbf_lookahead: float = 0.45,
-                 cbf_penalty: float = 1e3,
+                 cbf_penalty: float = 1e3, grip_penalty: float = 1e3,
                  assumed_grip: float = 1.0):
         self.track = track
         self.model = model or KinematicBicycle(dt=dt)
@@ -193,6 +193,7 @@ class MPCC:
         self.cbf_margin = float(cbf_margin)
         self.cbf_lookahead = float(cbf_lookahead)
         self.cbf_penalty = float(cbf_penalty)
+        self.grip_penalty = float(grip_penalty)
         if not 0.0 < self.cbf_alpha <= 1.0:
             raise ValueError("cbf_alpha must be in (0, 1]")
         self.assumed_grip = float(assumed_grip)
@@ -230,12 +231,18 @@ class MPCC:
         obs = ca.MX.sym("obs", self.obs_stride * M)
         S = ca.MX.sym("S", M, N)
         Sc = ca.MX.sym("Sc", N)          # barrier slacks, one per stage
+        Sg = ca.MX.sym("Sg", N)          # grip slacks, one per stage
+        St = ca.MX.sym("St", 1)          # terminal-speed slack
         p = ca.vertcat(x0, theta, obs) if M else ca.vertcat(x0, theta)
         w = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
         if M:
             w = ca.vertcat(w, ca.reshape(S, -1, 1))
         if self.cbf:
             w = ca.vertcat(w, Sc)
+        if speed_from_grip:
+            w = ca.vertcat(w, Sg)
+        if terminal_speed:
+            w = ca.vertcat(w, St)
 
         (q_c, q_l, q_v, r_d, r_a, r_dv,
          d_obs, k_v) = (ca.exp(theta[i]) for i in range(self.n_theta))
@@ -289,9 +296,29 @@ class MPCC:
             # says the lambda term "is the whole point" the moment that
             # happens, and it is implemented; tests/test_gradient.py checks it.
             if speed_from_grip:
+                # SOFT, with an explicit slack. Hard, this is the single
+                # largest source of solver failure in the repo: measured on the
+                # oval, 34% of ticks returned Infeasible_Problem_Detected, and
+                # turning the row off drops that to 0%. The reason is
+                # structural rather than numerical -- raising max_iter from 80
+                # to 300 changed nothing. The constraint bounds the speed the
+                # car may carry into a corner, so the moment it is already
+                # travelling faster than the upcoming curvature allows, no
+                # feasible trajectory exists and IPOPT is right to say so. An
+                # MPC cannot have hard state constraints that the CURRENT state
+                # already violates.
+                #
+                # It cannot simply be dropped either: with it the car covers
+                # 1.84 laps of the oval and without it 0.47, because it is what
+                # keeps the entry speed sane. Softening keeps the physics and
+                # returns a best-effort trajectory when the car is already over
+                # the limit, which is what the obstacle keep-out has always
+                # done.
                 kap_k = self.track.curvature_sym(X[4, k])
                 g.append(a_lat_max * assumed_grip
-                         - X[3, k] ** 2 * ca.fabs(kap_k) / (k_v ** 2 + 1e-9))
+                         - X[3, k] ** 2 * ca.fabs(kap_k) / (k_v ** 2 + 1e-9)
+                         + Sg[k])
+                J += self.grip_penalty * Sg[k] ** 2
                 lbg.append(0.0)
                 ubg.append(ca.inf)
 
@@ -369,7 +396,9 @@ class MPCC:
         # promise about what happens after it ends.
         if terminal_speed:
             kap = self.track.curvature_sym(X[4, N])
-            g.append(a_lat_max * terminal_grip - X[3, N] ** 2 * ca.fabs(kap))
+            g.append(a_lat_max * terminal_grip - X[3, N] ** 2 * ca.fabs(kap)
+                     + St[0])
+            J += self.grip_penalty * St[0] ** 2
             lbg.append(0.0)
             ubg.append(ca.inf)
 
@@ -378,7 +407,9 @@ class MPCC:
         self._nw = self._nx + 3 * N
         # Slacks live at the end of w, after the states and controls, so _nx and
         # the u0 slice keep their meaning and rti.py needs no change.
-        self._ns = M * N + (N if self.cbf else 0)
+        self._ns = (M * N + (N if self.cbf else 0)
+                    + (N if self.speed_from_grip else 0)
+                    + (1 if self.terminal_speed else 0))
         self._nw += self._ns
         lbw = np.concatenate([np.tile([-ca.inf, -ca.inf, -ca.inf, 0.0, -ca.inf], N + 1),
                               np.tile([-STEER_MAX, -ACCEL_MAX, 0.0], N),
