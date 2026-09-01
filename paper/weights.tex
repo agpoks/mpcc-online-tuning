@@ -1036,6 +1036,25 @@ Fig.~\ref{fig:driving} shows the same failure as a lap rather than a table: the
 sector the policy sees changes eleven times round the circuit, and the weights
 it emits do not step once.
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/online_curve.png}
+  \caption{Every weight, every control tick, continuous across episode
+  boundaries, with the named sector shaded beneath. The weights \emph{do} adapt
+  online and by large factors: $q_v$ collapses to $0.03$ within the first
+  episode and recovers to $\approx 3$; $q_l$ swings between $8$ and $100$;
+  $r_\delta$ reaches its ceiling near tick $1450$ and returns; $k_v$, the grip
+  utilisation, climbs steadily from $0.4$ to $1.0$ through the last third. What
+  they do not do is step at the sector boundaries.}
+  \label{fig:online}
+\end{figure*}
+
+Fig.~\ref{fig:online} separates two claims that are easily run together. The
+weights are not frozen --- they move by more than an order of magnitude while
+the car drives, and they keep moving after the return has stopped improving.
+They are simply not a \emph{function of the situation}: the movement is
+adaptation over time, not conditioning on where the car is.
+
 \subsection{Two bugs a table could not show}
 Drawing the emitted weights found, in sequence, two faults that twenty runs and
 four summary rows had not.
