@@ -173,7 +173,7 @@ question unaskable. Equation~\eqref{eq:grip} is also what makes a track able to
 \emph{measure} a weight policy: where $v_{\max}=\sqrt{a_{\text{lat,max}}\mu/
 \kappa}$ exceeds the vehicle's speed cap the corner is not grip-limited, no
 weight setting is penalised there, and the track is silent about the policy
-(Section~\ref{sec:behaviour}, Fig.~\ref{fig:spielberg}).
+(Section~\ref{sec:behaviour}, Fig.~\ref{fig:icragrip}).
 
 The controller is solved with IPOPT to convergence throughout this paper; a
 real-time iteration and its consequences for the gradient are the subject
@@ -616,31 +616,44 @@ occurred.
 
 Every track above is synthetic and built here, and Section~\ref{sec:circuit} is
 itself a demonstration that a conclusion can reverse between two such tracks. We
-therefore repeat the behaviour measurement on the Red Bull Ring at
-F1TENTH's 1:10 scaling, from the public \texttt{f1tenth\_racetracks} data.
+therefore repeat the behaviour measurement on the \textbf{ICRA competition
+circuits}: the maps and optimised racelines the entrants actually ran, Track~1
+at \SI{71.8}{\meter} and Track~2 at \SI{73.8}{\meter}, with the corridor width
+carried alongside the line so it varies by a factor of $4.5$ and $6.4$ round a
+lap.
 
-The choice is not only about provenance. On our synthetic circuit the tightest
-corner admits \SI{3.9}{\meter\per\second} against the vehicle's
-\SI{4}{\meter\per\second} cap, so the car sits flat out for the whole lap and
-every weight setting lands within \SI{1}{\meter} of every other: the task cannot
-discriminate. Spielberg's tightest corner admits
-\SI{2.5}{\meter\per\second}, so the controller must modulate speed and the
-weights have something to do --- three settings gave $45.9$, $54.3$ and
-\SI{57.6}{\meter}.
+An earlier version of this section used the Red Bull Ring at F1TENTH's 1:10
+scaling. We report why it was dropped, because the reasoning is a small lesson
+in benchmark design. The argument for it was that a track measures a weight
+policy only where it is \emph{grip-limited}, and that our synthetic circuit was
+not: its tightest corner admitted \SI{3.9}{\meter\per\second} against a
+\SI{4}{\meter\per\second} cap, so every weight setting landed within
+\SI{1}{\meter} of every other. That was true, and it stopped being true when the
+speed cap was raised to \SI{8}{\meter\per\second} on the friction-ellipse
+analysis: at the corrected cap the circuit's hardest corner is $49\%$ of it and
+the circuit discriminates perfectly well. The benchmark had been chosen to
+compensate for a limit that was itself wrong.
 
-\begin{figure}[t]
+What survives is the underlying criterion, and by it the competition tracks are
+the better choice on their own merits rather than only on provenance: their
+slowest corners are $32\%$ and $29\%$ of the cap against the circuit's $49\%$
+(Fig.~\ref{fig:icragrip}). An F1 circuit scaled $1{:}10$ is in any case not the
+kind of track these cars race on.
+
+\begin{figure*}[t]
   \centering
-  \includegraphics[width=\columnwidth]{figures/spielberg.png}
-  \caption{A track measures a weight policy only where it is grip-limited.
-  Colour is $\sqrt{a_{\text{lat,max}}\mu/\kappa}$ against the vehicle's
-  \SI{4}{\meter\per\second} cap; the thin line is the section driven in one
-  episode. The synthetic circuit's \emph{hardest} corner still allows
-  \SI{3.94}{\meter\per\second}, so no weight setting is ever punished. Note the
-  naive metric points the wrong way --- Spielberg is at the cap for $97\%$ of
-  its lap and the circuit for $58\%$ --- because what matters is the minimum
-  reached, not the fraction.}
-  \label{fig:spielberg}
-\end{figure}
+  \includegraphics[width=\textwidth]{figures/icra_grip.png}
+  \caption{The competition circuits and our synthetic one, coloured by the speed
+  each corner allows, $\sqrt{a_{\text{lat,max}}/\kappa}$ against the
+  \SI{8}{\meter\per\second} cap. A track can punish a bad weight only where it
+  is grip-limited, and the ICRA circuits are hardest by that measure. The halo
+  is the \emph{named sector}, which is not an annotation for the reader: it is a
+  four-way one-hot the policy receives as input (features 9--12). Note that
+  neither competition track contains a \emph{long curve} --- real circuits do
+  not supply all four sector types, which bounds what a sector schedule can be
+  asked to discriminate on them.}
+  \label{fig:icragrip}
+\end{figure*}
 
 Two weights carry behaviour. Following is a ratio $q_v/q_c$ below one and
 overtaking a ratio above it; \emph{aggression} scales how hard the behaviour is

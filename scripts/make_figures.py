@@ -433,58 +433,79 @@ def fig_overtake():
     print("  wrote overtake_grid.png")
 
 
-def fig_spielberg():
-    """The published circuit, and why it is the one that can measure behaviour.
+def fig_icra_grip():
+    """The competition tracks, coloured by the speed each corner allows.
 
-    The point is the speed limit each corner imposes, so the centreline is
-    coloured by ``sqrt(a_lat_max / kappa)`` -- a sequential ramp, because the
-    quantity is a magnitude with an order. The synthetic circuit is shown beside
-    it at the same scale and on the same ramp, where it is almost uniformly at
-    the cap and therefore cannot discriminate between weight settings.
+    Replaces an earlier figure built on Spielberg. Two reasons, and the second
+    matters more than the first. Spielberg is an F1 circuit scaled 1:10, which
+    is not the kind of track these cars race on; and the argument it was there
+    to make -- that the synthetic circuit cannot discriminate between weight
+    settings because its hardest corner still allows 3.94 m/s against a
+    4.0 m/s cap -- stopped being true when SPEED_MAX was raised to 8.0 on the
+    g-g analysis. At the corrected cap the circuit's hardest corner is 49% of
+    it, so the circuit discriminates too.
+
+    What survives is the underlying point: a track measures a weight policy
+    only where it is grip-limited. The ICRA tracks simply do it hardest, at
+    32% and 29% of the cap, and they are the tracks the cars actually run on.
+
+    Sectors are drawn because the sector one-hot is an INPUT to the policy
+    (features[9:13]), so the figure shows what the network is told.
     """
     from matplotlib.collections import LineCollection
     from mpcc_tuning.model import A_LAT_MAX, SPEED_MAX
 
-    fig, axes = plt.subplots(1, 2, figsize=(10.0, 4.4))
-    tracks = [("circuit (synthetic)", Track.circuit()),
-              ("Spielberg (F1TENTH 1:10)", Track.spielberg())]
+    tracks = [("ICRA 2026 T1", Track.icra_t1_raceline()),
+              ("ICRA 2026 T2", Track.icra_t2_raceline()),
+              ("circuit (synthetic)", Track.circuit())]
+    fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.6))
+    lc = None
     for ax, (name, tr) in zip(axes, tracks):
         k = np.abs([tr.curvature(v) for v in tr.s])
         vmax = np.minimum(np.sqrt(A_LAT_MAX / np.maximum(k, 1e-6)), SPEED_MAX)
         pts = tr.center.reshape(-1, 1, 2)
         segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
-        lc = LineCollection(segs, cmap="viridis", norm=plt.Normalize(1.5, SPEED_MAX),
+        lc = LineCollection(segs, cmap="viridis",
+                            norm=plt.Normalize(2.0, SPEED_MAX),
                             linewidth=4.0, capstyle="round")
         lc.set_array(vmax[:-1])
         ax.add_collection(lc)
-        ax.set_aspect("equal")
-        ax.autoscale_view()
-        ax.axis("off")
-        # What matters is the *slowest corner the car actually reaches*, not
-        # the fraction of the lap at the cap. Measured, that fraction points
-        # the wrong way: Spielberg is at the cap for 97% of its lap and the
-        # synthetic circuit for 58%, yet it is Spielberg that discriminates
-        # between weight settings. A track punishes a bad weight only where it
-        # is grip-limited at all, and the circuit's *hardest* corner still
-        # allows 3.94 m/s against a 4.0 cap.
-        driven = 80.0                       # ~400 steps at the speeds reached
-        m = tr.s <= driven
-        ax.plot(*tr.center[m].T, "-", color=INK, linewidth=0.9, alpha=0.55,
-                zorder=4)
-        ax.set_title(f"{name}\n{tr.length:.0f} m · "
-                     f"{driven / tr.length:.2f} laps in an episode · "
-                     f"slowest corner driven {vmax[m].min():.2f} m/s",
-                     fontsize=9, color=INK)
-    cb = fig.colorbar(lc, ax=axes, fraction=0.03, pad=0.02)
-    cb.set_label("grip-limited corner speed [m/s]   (vehicle cap 4.0)", fontsize=8.5)
+        # The named sector at each point, as a ring outside the line: this is
+        # what the policy receives, not a post-hoc annotation.
+        sec = np.array([tr.sector(tr.wrap(v)) for v in tr.s])
+        for j in range(4):
+            m = sec[:-1] == j
+            if not m.any():
+                continue
+            ring = LineCollection(segs[m], colors=[CAT[j]], linewidth=9.0,
+                                  alpha=0.30, capstyle="round", zorder=0)
+            ax.add_collection(ring)
+        ax.set_aspect("equal"); ax.autoscale_view(); ax.axis("off")
+        frac = float((vmax >= SPEED_MAX - 1e-9).mean())
+        # y fixed, so the three titles sit on one line rather than following
+        # each track's bounding box.
+        ax.set_title(f"{name}\n{tr.length:.0f} m · slowest corner "
+                     f"{vmax.min():.2f} m/s = {100*vmax.min()/SPEED_MAX:.0f}% of cap"
+                     f"\n{100*frac:.0f}% of the lap at the cap",
+                     fontsize=9, color=INK, y=1.0)
+    handles = [plt.Line2D([], [], color=CAT[j], lw=6, alpha=0.45,
+                          label=Track.SECTOR_NAMES[j]) for j in range(4)]
+    # Below the axes, not on top of a track.
+    fig.legend(handles=handles, fontsize=8.5, frameon=False, ncol=4,
+               loc="lower center", bbox_to_anchor=(0.45, -0.02))
+    cb = fig.colorbar(lc, ax=axes, fraction=0.02, pad=0.04)
+    cb.set_label(f"grip-limited corner speed [m/s]   (cap {SPEED_MAX:.1f})",
+                 fontsize=8.5)
     cb.ax.tick_params(labelsize=8)
     fig.suptitle("A track measures a weight policy only where it is grip-limited. "
-                 "The synthetic circuit's\n*hardest* corner still allows 3.94 m/s "
-                 "against a 4.0 cap, so nothing is ever punished; the thin line "
-                 "marks the section actually driven.",
-                 fontsize=9.5, color=INK, y=1.03)
-    fig.savefig(OUT / "spielberg.png", dpi=170, bbox_inches="tight")
-    print("  wrote spielberg.png")
+                 "The ICRA circuits are hardest --- their slowest corners are 32% "
+                 "and 29% of the\nspeed cap --- and they are the tracks these cars "
+                 "race on. Shading is the NAMED SECTOR, which the policy receives "
+                 "as a one-hot input.",
+                 fontsize=9.5, color=INK, y=1.02)
+    fig.subplots_adjust(top=0.74, bottom=0.10, wspace=0.02)
+    fig.savefig(OUT / "icra_grip.png", dpi=170, bbox_inches="tight")
+    print("  wrote icra_grip.png")
 
 
 def fig_behaviour():
@@ -1087,7 +1108,7 @@ def fig_online_curve():
 FIGS = {"online": fig_online_curve, "driving": fig_driving_sectors, "architecture": fig_architecture, "icra": fig_icra,
         "filmstrip": fig_filmstrip, "adaptation": fig_adaptation, "geometry": fig_geometry, "gradient_check": fig_gradient_check,
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
-        "overtake": fig_overtake, "spielberg": fig_spielberg,
+        "overtake": fig_overtake, "icra_grip": fig_icra_grip,
         "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}
 
 if __name__ == "__main__":

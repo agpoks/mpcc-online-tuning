@@ -9,11 +9,19 @@ with the MPCC still enforcing the constraints. This measures that claim on a
 **published circuit nobody here designed** -- the Red Bull Ring at F1TENTH's
 1:10 scaling -- rather than on a track built to suit it.
 
-Why Spielberg and not ``circuit``: on the synthetic circuit every weight
-setting lands within 1 m of every other, because the car sits at its 4 m/s
-speed cap the whole lap (its tightest corner allows 3.9 m/s). It cannot
-discriminate. Spielberg's tightest corner allows 2.5 m/s, so the controller
-*must* modulate speed and the weights have something to do.
+Why ICRA Track 2 and not ``circuit``: a track can punish a bad weight only
+where it is grip-limited, and T2 is the hardest available by that measure --
+its slowest corner is 2.32 m/s, 29% of the 8 m/s cap, against the synthetic
+circuit's 3.94 m/s, or 49%.
+
+This previously read "why Spielberg", on the stronger claim that the synthetic
+circuit could not discriminate *at all* because every weight setting landed
+within 1 m of every other. That was true under a 4 m/s speed cap, and it
+stopped being true when the cap was corrected to 8 m/s on the friction-ellipse
+analysis: the circuit discriminates perfectly well now. The benchmark had been
+chosen to compensate for a limit that was itself wrong, which is worth
+recording -- and an F1 circuit at 1:10 was never the kind of track these cars
+race on.
 
 Three postures crossed with three aggression levels, one slower opponent.
 Reported: distance, passes, and crashes -- **never distance alone**, because a
@@ -57,7 +65,14 @@ def one(job):
     from examples.tune_online import Plant
 
     t0 = time.perf_counter()
-    track = Track.spielberg(scale=scale)
+    # ICRA 2026 Track 2, not the Red Bull Ring: the competition circuit these
+    # cars actually race, and the harder test by the criterion that matters --
+    # its slowest corner is 29% of the speed cap against the synthetic
+    # circuit's 49%, so there is more of the lap on which a weight setting can
+    # be punished. (The Spielberg argument was that our synthetic circuit could
+    # not discriminate at all; that was an artefact of a 4 m/s cap and stopped
+    # being true when the cap was corrected to 8.)
+    track = Track.icra_t2_raceline(scale=scale)
     theta0 = MPCCWeights(q_l=200.0, r_d=1.0).to_log()
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
