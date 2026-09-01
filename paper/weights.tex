@@ -646,6 +646,36 @@ left the track now \emph{all} complete:
 \end{tabular}
 \end{center}
 
+The repair carries to the competition circuits, and with the \emph{same} fixed
+weights, which is what a baseline is supposed to mean:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+  \toprule
+  & \multicolumn{2}{c}{hard constraint} & \multicolumn{2}{c}{soft} \\
+  \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+  track & laps & outcome & laps & solve ok \\
+  \midrule
+  oval        & $1.84$ & off & $\mathbf{7.72}$ & $100\%$ \\
+  ICRA T1     & $1.69$ & off & $\mathbf{3.64}$ & $100\%$ \\
+  ICRA T2     & $0.84$ & off & $\mathbf{2.44}$ & $96\%$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+$q_c = 0.3$, $q_l = 200$, $q_v = 2$, $r_\delta = 0.1$ throughout, horizon 12 on
+the oval and 40 on the competition tracks. Before the repair not one of the
+three completed a single clean lap under any of the eighteen weight settings
+tried; after it, one setting drives all three.
+
+\textbf{This is the acceptance test the project should have had first.} Can a
+\emph{fixed} parameterisation drive the easiest track for several laps? Until
+that passes, a learned schedule has nothing to be measured against, and every
+comparison is between two ways of failing. We record it as
+\texttt{experiments/oval\_acceptance.py} so that the question is asked before
+any learning result is believed again.
+
 \textbf{What this costs the rest of the paper.} Every experiment run with the
 grip constraint enabled --- the situation-demands search of
 Section~\ref{sec:demands}, the behaviour tables, the multi-opponent runs ---

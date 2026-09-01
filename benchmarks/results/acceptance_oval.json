@@ -8,19 +8,9 @@
       "q_l": 10.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 1.3274461792817893,
-      "off": true,
-      "solve_ok": 66.66666666666667,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 0.3,
-      "q_l": 10.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.5300653279457445,
-      "off": true,
-      "solve_ok": 64.28571428571429,
+      "laps": 7.663018201607591,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     },
     {
@@ -28,19 +18,9 @@
       "q_l": 10.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.8347111768110401,
-      "off": true,
-      "solve_ok": 71.22302158273381,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 0.3,
-      "q_l": 10.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 1.8416341177877764,
-      "off": true,
-      "solve_ok": 65.06410256410257,
+      "laps": 7.706953356848478,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -48,19 +28,9 @@
       "q_l": 50.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.4890261501220605,
-      "off": true,
-      "solve_ok": 69.23076923076923,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 0.3,
-      "q_l": 50.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.3967897811876012,
-      "off": true,
-      "solve_ok": 68.4931506849315,
+      "laps": 7.716538719092745,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     },
     {
@@ -68,19 +38,9 @@
       "q_l": 50.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.8277708605260713,
-      "off": true,
-      "solve_ok": 62.06896551724138,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 0.3,
-      "q_l": 50.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.3765972494956747,
-      "off": true,
-      "solve_ok": 67.6056338028169,
+      "laps": 7.764587140200404,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -88,19 +48,9 @@
       "q_l": 200.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.41426165220774075,
-      "off": true,
-      "solve_ok": 64.47368421052632,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 0.3,
-      "q_l": 200.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.3295992704624748,
-      "off": true,
-      "solve_ok": 67.1875,
+      "laps": 7.719661812601676,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     },
     {
@@ -108,19 +58,9 @@
       "q_l": 200.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.32653973982687196,
-      "off": true,
-      "solve_ok": 69.49152542372882,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 0.3,
-      "q_l": 200.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.32653973982687196,
-      "off": true,
-      "solve_ok": 69.49152542372882,
+      "laps": 7.758338084575764,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -128,19 +68,9 @@
       "q_l": 10.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.8791372239465942,
-      "off": true,
-      "solve_ok": 70.46979865771812,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 1.0,
-      "q_l": 10.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.3440329878906839,
-      "off": true,
-      "solve_ok": 69.23076923076923,
+      "laps": 7.517568467164596,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -148,19 +78,9 @@
       "q_l": 10.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.44454240117325966,
-      "off": true,
-      "solve_ok": 67.46987951807229,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 1.0,
-      "q_l": 10.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.813862795071566,
-      "off": true,
-      "solve_ok": 65.21739130434783,
+      "laps": 7.61190388866056,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -168,19 +88,9 @@
       "q_l": 50.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.3575260336999574,
-      "off": true,
-      "solve_ok": 69.6969696969697,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 1.0,
-      "q_l": 50.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 1.1397880831843987,
-      "off": true,
-      "solve_ok": 55.0,
+      "laps": 7.544643853890258,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -188,19 +98,9 @@
       "q_l": 50.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.34153186935197105,
-      "off": true,
-      "solve_ok": 70.76923076923077,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 1.0,
-      "q_l": 50.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.3266143988706344,
-      "off": true,
-      "solve_ok": 73.4375,
+      "laps": 7.608147420747825,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     },
     {
@@ -208,19 +108,9 @@
       "q_l": 200.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.836275530474079,
-      "off": true,
-      "solve_ok": 76.7605633802817,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 1.0,
-      "q_l": 200.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.3675170695540212,
-      "off": true,
-      "solve_ok": 71.01449275362319,
+      "laps": 7.604148616095976,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -228,19 +118,9 @@
       "q_l": 200.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 1.039641010202764,
-      "off": true,
-      "solve_ok": 75.14450867052022,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 1.0,
-      "q_l": 200.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.4350326063724048,
-      "off": true,
-      "solve_ok": 70.73170731707317,
+      "laps": 7.670315966212144,
+      "off": false,
+      "solve_ok": 99.75020815986677,
       "status": "Solve_Succeeded"
     },
     {
@@ -248,19 +128,9 @@
       "q_l": 10.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.31376735457201327,
-      "off": true,
-      "solve_ok": 71.9298245614035,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 3.0,
-      "q_l": 10.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.31376735457201327,
-      "off": true,
-      "solve_ok": 71.9298245614035,
+      "laps": 7.5380602607742135,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     },
     {
@@ -268,19 +138,9 @@
       "q_l": 10.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.3458787052161242,
-      "off": true,
-      "solve_ok": 68.18181818181819,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 3.0,
-      "q_l": 10.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.36679126280542734,
-      "off": true,
-      "solve_ok": 69.44444444444444,
+      "laps": 7.530550920681517,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -288,19 +148,9 @@
       "q_l": 50.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.34899196812942085,
-      "off": true,
-      "solve_ok": 70.14925373134328,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 3.0,
-      "q_l": 50.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.3934608012255793,
-      "off": true,
-      "solve_ok": 67.56756756756756,
+      "laps": 7.545872838986464,
+      "off": false,
+      "solve_ok": 99.91673605328893,
       "status": "Solve_Succeeded"
     },
     {
@@ -308,19 +158,9 @@
       "q_l": 50.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.3474912147094439,
-      "off": true,
-      "solve_ok": 71.875,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 3.0,
-      "q_l": 50.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.34018258305343174,
-      "off": true,
-      "solve_ok": 70.96774193548387,
+      "laps": 7.553824711038969,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     },
     {
@@ -328,19 +168,9 @@
       "q_l": 200.0,
       "r_d": 0.1,
       "max_iter": 80,
-      "laps": 0.4696871981922713,
-      "off": true,
-      "solve_ok": 65.51724137931035,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 3.0,
-      "q_l": 200.0,
-      "r_d": 0.1,
-      "max_iter": 300,
-      "laps": 0.31862267736671934,
-      "off": true,
-      "solve_ok": 71.9298245614035,
+      "laps": 7.531006592542551,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     },
     {
@@ -348,19 +178,9 @@
       "q_l": 200.0,
       "r_d": 1.0,
       "max_iter": 80,
-      "laps": 0.31253438725295973,
-      "off": true,
-      "solve_ok": 73.21428571428571,
-      "status": "Solve_Succeeded"
-    },
-    {
-      "q_c": 3.0,
-      "q_l": 200.0,
-      "r_d": 1.0,
-      "max_iter": 300,
-      "laps": 0.31253438725295973,
-      "off": true,
-      "solve_ok": 73.21428571428571,
+      "laps": 7.535073197712514,
+      "off": false,
+      "solve_ok": 100.0,
       "status": "Solve_Succeeded"
     }
   ]
