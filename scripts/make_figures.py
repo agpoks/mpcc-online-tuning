@@ -433,6 +433,92 @@ def fig_overtake():
     print("  wrote overtake_grid.png")
 
 
+def fig_behaviour_matrix(track_name="circuit"):
+    """Behaviour as a matrix, not a table: posture x aggression, per obstacle.
+
+    Asked for as a figure and delivered as a text table first, which was the
+    wrong artefact -- a 18-row table of three numbers is a matrix pretending
+    not to be one.
+
+    Two panels because the obstacle KIND is the axis that changes the answer:
+    a stopped car and a slow one look identical in one frame, and "stay behind"
+    is a behaviour against something going somewhere and a livelock against
+    something that is not. Colour is distance covered; the annotation carries
+    passes and posture switches, which are what separate cells that cover the
+    same ground for different reasons.
+    """
+    import json
+    import matplotlib.colors as mc
+
+    path = ROOT / "benchmarks" / "results" / f"behaviour_modes_{track_name}.json"
+    if not path.exists():
+        path = ROOT / "benchmarks" / "results" / "behaviour_modes.json"
+    if not path.exists():
+        print("  no behaviour_modes results; run experiments/behaviour_modes.py")
+        return
+    runs = json.loads(path.read_text())["runs"]
+
+    POST = ("stay_behind", "overtake_when_safe", "always_try")
+    AGG = ("cautious", "neutral", "aggressive")
+    KIND = ("dynamic", "static")
+
+    def cell(kind, post, agg):
+        r = [x for x in runs if x["kind"] == kind and x["posture"] == post
+             and x["aggression"] == agg]
+        if not r:
+            return None
+        return (float(np.mean([x["covered"] for x in r])),
+                float(np.mean([x["passes"] for x in r])),
+                float(np.mean([x["switches"] for x in r])),
+                float(np.mean([bool(x["off"]) for x in r])))
+
+    M = {k: np.array([[(cell(k, p, a) or (np.nan,) * 4)[0] for a in AGG]
+                      for p in POST]) for k in KIND}
+    allv = np.concatenate([M[k][np.isfinite(M[k])] for k in KIND])
+    norm = mc.Normalize(float(allv.min()), float(allv.max()))
+
+    fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.2))
+    im = None
+    for ax, kind in zip(axes, KIND):
+        im = ax.imshow(M[kind], cmap="YlGnBu", norm=norm, aspect="auto")
+        ax.set_xticks(range(len(AGG))); ax.set_xticklabels(AGG, fontsize=9)
+        ax.set_yticks(range(len(POST)))
+        ax.set_yticklabels([p.replace("_", " ") for p in POST], fontsize=9)
+        ax.set_title(f"{kind} obstacle", fontsize=10, color=INK)
+        for i, post in enumerate(POST):
+            for j, agg in enumerate(AGG):
+                c = cell(kind, post, agg)
+                if c is None:
+                    continue
+                cov, pas, sw, off = c
+                frac = (cov - allv.min()) / max(allv.ptp() if hasattr(allv, "ptp")
+                                                else np.ptp(allv), 1e-9)
+                col = "white" if frac > 0.55 else INK
+                ax.text(j, i, f"{cov:.1f} m", ha="center", va="center",
+                        fontsize=11, fontweight="bold", color=col)
+                ax.text(j, i + 0.28, f"{pas:.2f} pass · {sw:.1f} switch",
+                        ha="center", va="center", fontsize=7.5, color=col)
+                if off > 0:
+                    ax.text(j, i - 0.30, f"{100*off:.0f}% off",
+                            ha="center", va="center", fontsize=7.5, color=RED)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+        ax.set_xticks(np.arange(-.5, len(AGG), 1), minor=True)
+        ax.set_yticks(np.arange(-.5, len(POST), 1), minor=True)
+        ax.grid(which="minor", color="white", lw=2.5)
+        ax.tick_params(which="minor", length=0)
+    cb = fig.colorbar(im, ax=axes, fraction=0.025, pad=0.02)
+    cb.set_label("distance covered [m]", fontsize=8.5)
+    cb.ax.tick_params(labelsize=8)
+    fig.suptitle("Behaviour as posture $\\times$ aggression. Aggression moves the "
+                 "car; posture, on this track, moves only the switch count --\n"
+                 "the three postures agree on where to go and disagree only about "
+                 "when they considered going there.",
+                 fontsize=9.5, color=INK, y=1.03)
+    fig.savefig(OUT / "behaviour_matrix.png", dpi=170, bbox_inches="tight")
+    print("  wrote behaviour_matrix.png")
+
+
 def fig_strategy(track_name="circuit"):
     """The track, and what each racing situation asks the weights to be.
 
@@ -1238,6 +1324,7 @@ FIGS = {"online": fig_online_curve, "driving": fig_driving_sectors, "architectur
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "icra_grip": fig_icra_grip,
         "strategy": fig_strategy,
+        "behaviour_matrix": fig_behaviour_matrix,
         "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}
 
 if __name__ == "__main__":

@@ -168,3 +168,29 @@ The tenfold learning rate does not change *what* happens, only how many
 episodes it takes to get there — which is the signature of a divergence rather
 than a tuning artefact, and the reason the fix has to be a bound on where
 $\theta$ may go rather than a smaller step.
+
+
+## The weights being learned, on a competition track
+
+![learning on ICRA Track 1](_static/anim/learning_icra_t1_raceline.gif)
+
+The car on ICRA 2026 Track 1, shaded by the **named sector** -- which is not an
+annotation for the reader but the four-way one-hot the policy receives as
+input -- beside every learned weight on a log axis with a marker at the current
+tick.
+
+Two things are only visible with both in one frame: *which* weights move, and
+*where on the track* they move. `q_l` climbs from about 2 to 13 over three
+episodes and `q_c` falls, while `q_v` sits flat on its ceiling; `k_v` and
+`d_obs`, the two parameters that enter the constraints rather than the cost,
+spike at each episode boundary where the cost weights carry through smoothly.
+
+Regenerate with:
+
+```bash
+python scripts/anim_learning.py --track icra_t1_raceline --episodes 3 --steps 500
+```
+
+It takes `--track` (any `Track` factory), `--opponents`, and the weight
+arguments; horizon 40 is what these circuits need, since 0.6 s of lookahead
+cannot see through a 0.7 m-radius hairpin.
