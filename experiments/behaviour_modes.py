@@ -74,7 +74,11 @@ def one(job):
     # being true when the cap was corrected to 8.)
     track = Track.icra_t2_raceline(scale=scale)
     theta0 = MPCCWeights(q_l=200.0, r_d=1.0).to_log()
-    m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
+    # horizon 40, not 12. The competition circuits have 0.7 m-radius hairpins,
+    # which are 2.2 m of arc, and 0.6 s of lookahead at 3 m/s reaches 1.8 m --
+    # the plan ends inside the corner. Measured on T1: 22.8 m covered at
+    # horizon 12 against 125.3 m at horizon 40, same weights.
+    m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=40, dt=0.05,
              max_iter=60, max_obstacles=1)
     # A stopped car is not a slow car, and "stay behind" is only a behaviour
     # against something that is going somewhere.
@@ -134,7 +138,8 @@ def main(argv=None):
     jobs = [(p, g, s, a.steps, a.scale, k) for s in range(a.seeds)
             for k in ("dynamic", "static") for p in POSTURES for g in AGGRESSION]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
-    print(f"  Spielberg (scale {a.scale}), {len(jobs)} runs, {n_proc} processes\n",
+    print(f"  ICRA 2026 Track 2 (scale {a.scale}), {len(jobs)} runs, "
+          f"{n_proc} processes\n",
           flush=True)
 
     import multiprocessing as mp

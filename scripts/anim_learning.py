@@ -103,13 +103,28 @@ def render(track, R, path, title, fps=25, stride=2):
     axt = fig.add_subplot(gs[:, 0])
     axw = [fig.add_subplot(gs[i, 1]) for i in range(3)]
 
-    axt.plot(*track.center.T, "-", color="0.82", lw=1.0)
-    left = track.center + track.normal * np.array([track.width(s)[0] for s in track.s])[:, None]
-    right = track.center - track.normal * np.array([track.width(s)[1] for s in track.s])[:, None]
-    axt.plot(*left.T, "-", color="0.65", lw=0.9)
-    axt.plot(*right.T, "-", color="0.65", lw=0.9)
+    # One thick ribbon coloured by sector, not centreline-plus-two-edges.
+    #
+    # T1's half-width runs 0.35-1.56 m, so edges offset from the centreline
+    # self-intersect at the hairpins and the track came out looking like a
+    # maze. The sector colouring also earns its place here: it is the one-hot
+    # the policy receives, so the viewer sees what the network is told.
+    from matplotlib.collections import LineCollection
+    pts = track.center.reshape(-1, 1, 2)
+    segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
+    sec_at = np.array([int(track.sector(track.wrap(v))) for v in track.s])
+    for j in range(4):
+        msk = sec_at[:-1] == j
+        if msk.any():
+            axt.add_collection(LineCollection(segs[msk], colors=[CAT[j]],
+                                              linewidth=7.0, alpha=0.30,
+                                              capstyle="round", zorder=0))
+    axt.legend(handles=[plt.Line2D([], [], color=CAT[j], lw=6, alpha=0.45,
+                                   label=Track.SECTOR_NAMES[j])
+                        for j in range(4) if (sec_at == j).any()],
+               fontsize=7.5, frameon=False, loc="lower left", ncol=2)
     axt.set_aspect("equal"); axt.axis("off")
-    (trail,) = axt.plot([], [], "-", color=BLUE, lw=1.8, alpha=0.85)
+    (trail,) = axt.plot([], [], "-", color=INK, lw=2.0, alpha=0.9)
     (car,) = axt.plot([], [], "o", ms=9, color=RED, mec="white", mew=1.3, zorder=5)
     (opp_m,) = axt.plot([], [], "o", ms=9, color=INK, mec="white", mew=1.3, zorder=5)
     hud = axt.text(0.02, 0.98, "", transform=axt.transAxes, va="top", fontsize=10,
