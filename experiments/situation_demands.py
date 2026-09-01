@@ -88,7 +88,7 @@ def _sector_starts(track, n_probe=1500):
 
 def one(job):
     (track_name, horizon, q_c, q_v, sector, opp_cls, wide, s0, steps,
-     base_v) = job
+     base_v, v0) = job
     track = getattr(Track, track_name)()
     from examples.tune_online import Plant
 
@@ -111,7 +111,10 @@ def one(job):
     # backwards, and every sector's four opponent cells identical because they
     # were all in fact the same opening stretch.
     pos = np.asarray(track.pos(s0)).ravel()
-    P.x = np.array([pos[0], pos[1], float(track.tangent_angle(s0)), 1.0])
+    # Our OWN SPEED is a situation too, and one the network already receives
+    # (feature 3, v/v_max). Entering a corner slow and entering it fast are
+    # different problems and may want different weights; the grid never asked.
+    P.x = np.array([pos[0], pos[1], float(track.tangent_angle(s0)), float(v0)])
     P.s = float(s0)
     P.trace = [P.x.copy()]
     s5 = P.state5()
@@ -140,7 +143,7 @@ def one(job):
             if getattr(P, "failure", None) == "collision":
                 contact = 1
             break
-    return (sector, opp_cls, wide, q_c, q_v), covered, bool(off), passes, contact
+    return (sector, opp_cls, wide, v0, q_c, q_v), covered, bool(off), passes, contact
 
 
 def main(argv=None):
@@ -150,6 +153,9 @@ def main(argv=None):
     ap.add_argument("--horizon", type=int, default=40)
     ap.add_argument("--steps", type=int, default=220)
     ap.add_argument("--jobs", type=int, default=6)
+    ap.add_argument("--speeds", type=float, nargs="*", default=[1.0, 3.0],
+                    help="entry speeds to test, m/s -- our own speed is a "
+                         "situation the network already sees (feature 3)")
     ap.add_argument("--base-speed", type=float, default=0.0,
                     help="0 = measure the ego's solo pace and scale "
                          "the opponents to it, which is the only way "
@@ -192,9 +198,10 @@ def main(argv=None):
     for k, s0 in starts.items():
         for opp_cls in OPPONENT_CLASSES if False else ("none", "slower",
                                                        "equal", "faster"):
-            for q_c, q_v in GRID:
-                jobs.append((a.track, a.horizon, q_c, q_v, k, opp_cls,
-                             wide_of[k], s0, a.steps, base_v))
+            for v0 in a.speeds:
+                for q_c, q_v in GRID:
+                    jobs.append((a.track, a.horizon, q_c, q_v, k, opp_cls,
+                                 wide_of[k], s0, a.steps, base_v, v0))
     print(f"  {a.track}: {len(starts)} sectors present, {len(jobs)} runs "
           f"over {a.jobs} workers", flush=True)
 
@@ -205,8 +212,8 @@ def main(argv=None):
 
     # Best (q_c, q_v) per situation, and the best single constant over all.
     cells, per_cell_best = {}, {}
-    for (k, opp_cls, wide, q_c, q_v), v in res.items():
-        cells.setdefault((k, opp_cls, wide), {})[(q_c, q_v)] = v
+    for (k, opp_cls, wide, v0, q_c, q_v), v in res.items():
+        cells.setdefault((k, opp_cls, wide, v0), {})[(q_c, q_v)] = v
     def score(v):
         """Metres, minus what a race actually charges for.
 
@@ -238,12 +245,12 @@ def main(argv=None):
     constant = totals[best_const]
 
     print()
-    print(f"  {'sector':<12}{'opponent':<10}{'corridor':<10}"
-          f"{'best q_v/q_c':>13}{'covered':>10}")
-    for (k, opp_cls, wide), b in sorted(per_cell_best.items()):
-        print(f"  {Track.SECTOR_NAMES[k]:<12}{opp_cls:<10}"
-              f"{'wide' if wide else 'narrow':<10}"
-              f"{b['ratio']:>13.2f}{b['covered']:>9.1f}m"
+    print(f"  {'sector':<12}{'opponent':<9}{'corridor':<9}{'entry v':>8}"
+          f"{'best q_v/q_c':>14}{'covered':>10}")
+    for (k, opp_cls, wide, v0), b in sorted(per_cell_best.items()):
+        print(f"  {Track.SECTOR_NAMES[k]:<12}{opp_cls:<9}"
+              f"{'wide' if wide else 'narrow':<9}{v0:>7.1f}"
+              f"{b['ratio']:>14.2f}{b['covered']:>9.1f}m"
               f"{'  OFF' if b['off'] else ''}")
     print()
     print(f"  best single constant over the whole grid: "
@@ -264,9 +271,10 @@ def main(argv=None):
     out.write_text(json.dumps(
         dict(track=a.track, horizon=a.horizon, steps=a.steps,
              grid=[list(g) for g in GRID],
-             cells={f"{k}|{o}|{int(w)}": v for (k, o, w), v in per_cell_best.items()},
-             raw={f"{k}|{o}|{int(w)}|{qc}|{qv}": v
-                  for (k, o, w, qc, qv), v in res.items()},
+             cells={f"{k}|{o}|{int(w)}|{v0}": v
+                    for (k, o, w, v0), v in per_cell_best.items()},
+             raw={f"{k}|{o}|{int(w)}|{v0}|{qc}|{qv}": v
+                  for (k, o, w, v0, qc, qv), v in res.items()},
              best_constant=list(best_const), constant_mean=constant,
              adaptive_mean=adaptive, headroom_pct=gain), indent=2) + "\n")
     print(f"  wrote {out}")
