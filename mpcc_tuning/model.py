@@ -13,20 +13,29 @@ import casadi as ca
 import numpy as np
 
 WHEELBASE = 0.33
-# 0.50, not 0.40. The minimum turn radius is wheelbase/tan(delta), so 0.40 rad
-# gives 0.78 m -- and the ICRA competition tracks' corridor centreline drops to
-# 0.69 m at its tightest hairpins, which the car then physically cannot follow.
-# Measured before the change: no weight setting completed a lap of either track,
-# the best reaching 47 m of T1's 80 m, because no cost weight can substitute for
-# a turn the vehicle cannot make. 0.50 rad gives 0.60 m and clears it.
+# 0.40. Raising it to 0.50 was tried and REVERTED -- it made things worse.
 #
-# For scale, the competition team's own car_params.json has delta_f = 0.34 rad
-# on a 0.323 m wheelbase, i.e. 0.91 m -- a WIDER circle than ours at either
-# value. Their optimiser handles the same hairpins by using the corridor to open
-# the radius, which is why their raceline bottoms out at 0.93 m rather than at
-# the 0.69 m of the geometric centre. Raising the limit here buys margin for a
-# controller that plans over a shorter horizon than an offline optimiser.
-STEER_MAX = 0.50
+# The geometric argument for raising it is sound as far as it goes: the minimum
+# turn radius is wheelbase/tan(delta), so 0.40 gives 0.78 m against an ICRA
+# corridor centre that drops to 0.69 m at its hairpins, and 1% of both laps was
+# tighter than the car could turn. At 0.50 that figure is 0%.
+#
+# It is also not what was stopping the car. Measured on both tracks at two
+# horizons, same weights, distance covered before leaving the track:
+#
+#     track   horizon   steer 0.40   steer 0.50
+#     T1        12        22.8 m       22.9 m
+#     T1        40       125.3 m       31.8 m     <-- 4x worse
+#     T2        12        26.6 m       27.1 m
+#     T2        40        17.4 m       11.8 m
+#
+# At the short horizon the two are indistinguishable, which is the tell: extra
+# steering authority is worth nothing when the plan is wrong. At the long
+# horizon it is actively harmful, because it lets the controller commit harder
+# to a line it will not be able to hold. What actually fixed T1 was the horizon
+# -- 0.6 s of lookahead cannot see through a 0.7 m-radius hairpin, which is
+# 2.2 m of arc against 1.8 m of plan.
+STEER_MAX = 0.40
 ACCEL_MAX = 4.0
 # 8.0, not 4.0. A flat cap does not describe a vehicle, it describes an
 # assumption -- and at 4 m/s the cap binds on 45-66% of every track here, so the
