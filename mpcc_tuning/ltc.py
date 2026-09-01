@@ -194,8 +194,15 @@ class WeightPolicy:
     behaviour is set by the ratio q_v/q_c and safety by q_v alone.
     """
 
+    #: Indices of the weights that appear LINEARLY in the MPCC cost. Scaling all
+    #: of them by c scales J* by exactly c and leaves the optimal trajectory
+    #: unchanged -- measured: V/c constant to four decimals, plans identical to
+    #: 8e-6 m. d_obs and k_v are excluded because they enter the CONSTRAINTS,
+    #: not the cost, and are therefore not part of the gauge.
+    COST_IDX = (0, 1, 2, 3, 4, 5)
+
     def __init__(self, cell, theta0, lo, hi, out_scale: float = 0.5, seed: int = 0,
-                 influence: str = "rflo"):
+                 influence: str = "rflo", gauge_fix: bool = False):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
@@ -218,6 +225,24 @@ class WeightPolicy:
         if influence not in ("rflo", "exact"):
             raise ValueError("influence must be 'rflo' or 'exact'")
         self.influence = influence
+        # Fix the gauge.
+        #
+        # V = -J* is the MPC's own optimal cost, and J is linear in the six cost
+        # weights, so multiplying all six by c multiplies V by c while changing
+        # the plan by nothing. That is an unbounded direction of "improvement"
+        # with zero effect on driving, and TD(lambda) climbs it: theta runs until
+        # it reaches whatever bound exists, which is what every configuration
+        # tried here has done. Because the direction is identical in every
+        # situation, it also swamps any situation-dependent signal, which is why
+        # the policy learns a constant.
+        #
+        # In log space the gauge is a translation along (1,1,1,1,1,1,0,0), so
+        # projecting it out is a subtraction: hold the mean of the six log cost
+        # weights at its reference value and let the policy move only the
+        # RATIOS -- which is all that behaviour depends on anyway (the behaviour
+        # boundary in this repo is q_v/q_c, not the magnitude of either).
+        self.gauge_fix = bool(gauge_fix)
+        self._gauge0 = float(np.mean(self.theta0[list(self.COST_IDX)]))
         self.P = np.zeros_like(cell.p)      # dh/d(cell params)
         self.reset()
 
@@ -268,6 +293,14 @@ class WeightPolicy:
         span = np.where(t >= 0.0, self.hi - self.theta0, self.theta0 - self.lo)
         self._sq = (1.0 - t ** 2) * span           # d(theta)/dz, for the chain
         theta = self.theta0 + span * t
+        if self.gauge_fix:
+            # Hold the mean of the six log cost weights at its reference value.
+            # This removes exactly the direction along which the critic can be
+            # raised without the car driving any differently, and leaves every
+            # ratio -- which is what behaviour actually depends on -- untouched.
+            idx = list(self.COST_IDX)
+            theta = theta.copy()
+            theta[idx] -= float(np.mean(theta[idx])) - self._gauge0
         self._h = h
         return theta
 

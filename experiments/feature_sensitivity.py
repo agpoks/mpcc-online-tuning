@@ -44,14 +44,14 @@ GROUPS = {"sector": (9, 13), "opponent class": (14, 18),
           "curvature preview": (0, 3), "gap": (5, 9), "track width": (13, 14)}
 
 
-def train(seed, n_ep, steps):
+def train(seed, n_ep, steps, gauge_fix=False):
     from examples.tune_online import Plant
     track = Track.oval()
     th0 = MPCCWeights(q_c=1.0, q_v=2.0, q_l=200.0, r_d=1.0).to_log()
     m = MPCC(track, model=KinematicBicycle(dt=0.05), horizon=12, dt=0.05,
              max_iter=60, max_obstacles=1)
     pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0, THETA_LO,
-                       THETA_HI, seed=seed)
+                       THETA_HI, seed=seed, gauge_fix=gauge_fix)
     tu = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0, seed=seed,
                      trust_region=0.01, theta_prior=0.5)
     for ep in range(n_ep):
@@ -82,9 +82,9 @@ def ratio_for(pol, feat, settle=12):
     return float(np.exp(th[2]) / np.exp(th[0]))
 
 
-def _sweep_one(seed, episodes, steps, base):
+def _sweep_one(seed, episodes, steps, base, gauge_fix=False):
     """Train one seed and sweep every feature group. Module level so it pickles."""
-    pol = train(seed, episodes, steps)
+    pol = train(seed, episodes, steps, gauge_fix)
     per_group = {}
     for g, (lo, hi) in GROUPS.items():
         rs = []
@@ -105,6 +105,10 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--jobs", type=int, default=3)
+    ap.add_argument("--gauge-fix", action="store_true",
+                    help="hold the mean log cost weight fixed, removing the "
+                         "direction along which V = -J* can be raised without "
+                         "driving any differently")
     ap.add_argument("--episodes", type=int, default=12)
     ap.add_argument("--steps", type=int, default=260)
     ap.add_argument("--out", default=str(ROOT / "benchmarks" / "results"
@@ -119,7 +123,7 @@ def main(argv=None):
     # Seeds are independent; training them one after another on one core is
     # hours of wall clock for no reason.
     with ProcessPoolExecutor(max_workers=min(a.jobs, a.seeds)) as ex:
-        futs = [ex.submit(_sweep_one, seed, a.episodes, a.steps, base)
+        futs = [ex.submit(_sweep_one, seed, a.episodes, a.steps, base, a.gauge_fix)
                 for seed in range(a.seeds)]
         for seed, fut in enumerate(futs):
             per_group = fut.result()
