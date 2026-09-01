@@ -47,6 +47,31 @@ mechanisms investigated on 2026-08-31/09-01.
       something the weight policy can adapt, and 0.6 s of lookahead cannot see
       through a 0.7 m-radius hairpin (2.2 m of arc against 1.8 m of plan).
 
+### Two figures assert what their own data denies — 2026-09-01
+
+`adaptation.png` and `ltc_gate.png` were regenerated with the current
+configuration and are WORSE, not stale. Neither is synced into `paper/figures/`
+and neither should be until item 0 is done.
+
+* **`adaptation.png`** is titled "the ratio crosses the behaviour boundary
+  where it passes". In the figure `q_v` is flat at 3.0 and `q_c` runs
+  1.9 → 2.4, so the ratio goes 1.58 → 1.25 and **never crosses 1.0**. The
+  episode panel shows 0–3 m covered: the car barely moves.
+* **`ltc_gate.png`** is titled "the hand-written schedule wins" and **does not
+  plot the schedule**. The three arms it does plot crash 47–55% of episodes
+  with error bars that overlap entirely.
+
+Both run on the oval with the θ₀ anchor that item 0 shows crashes on the
+competition tracks. The titles are inherited from an older result and the data
+underneath has moved.
+
+- [ ] Regenerate both **after** a stable θ₀ exists, on a track that drives.
+- [ ] Rewrite both titles from the figure that is actually produced. A title
+      that states a conclusion the axes do not show is worse than no figure.
+- [ ] If the LTC gate still fails to separate at that point, cut the figure:
+      the paper already calls those numbers void, and a plot of three
+      indistinguishable arms is not evidence of anything.
+
 ## Where things stand
 
 Oval, 26 episodes, same seed, last 8 episodes:
