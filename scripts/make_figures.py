@@ -58,7 +58,16 @@ def corridor_edges(t):
     n = np.stack([g[:, 1], -g[:, 0]], axis=1) / np.linalg.norm(g, axis=1)[:, None]
     wl = np.array([float(t.width(v)[0]) for v in t.s])[:, None]
     wr = np.array([float(t.width(v)[1]) for v in t.s])[:, None]
-    return t.center + n * wl, t.center - n * wr
+    # Draw the WALL, not the limit on the car's centre.
+    #
+    # A raceline optimiser reports w_left/w_right as the room remaining for the
+    # car's CENTRE -- the vehicle is already subtracted, which is why they
+    # bottom out at exactly -0.000 at every apex. Plotting them directly draws
+    # a corridor one car narrower than the track, on both sides, which is what
+    # made the boundaries look tighter than the real map.
+    hw = getattr(t, "car_half_width", 0.12)
+    pad = hw if getattr(t, "width_vehicle_adjusted", False) else 0.0
+    return t.center + n * (wl + pad), t.center - n * (wr + pad)
 
 
 def fig_geometry():
