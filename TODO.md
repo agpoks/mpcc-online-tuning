@@ -3,6 +3,47 @@
 Ordered by what unblocks a result. Everything already measured lives in
 `docs/source/`; this file is only what is **not** done.
 
+## MUST HAVE — acados, because this has to run on the car
+
+**The target is a real-time MPCC on the physical car, via acados code
+generation.** This is a requirement, not a preference, and it constrains
+choices being made now rather than being a port to do at the end.
+
+IPOPT is the development solver. It is not what ships: `nlpsol` re-solves from
+scratch every tick and there is no C to flash. acados gives an SQP-RTI solver
+generated to C, which is the only version of this that closes a loop at 20-50 Hz
+on the vehicle.
+
+- [ ] **Generate the OCP through acados**, copying the pattern from
+      `MPCC_planner_acados/scripts/generate_acados_solver.py` per the standing
+      rule below. `tools/`/`mpcc_tuning/rti.py` already hand-rolls an RTI; that
+      was always a stand-in for this.
+- [ ] **Keep every model expression acados-generatable.** Practical
+      consequences for what is being written *today*:
+      - `DynamicBicycle.f_sym` must stay pure CasADi `SX`/`MX` with no Python
+        branching on values. It currently does — keep it that way.
+      - The sub-stepped Euler integrator is fine (acados has ERK/IRK too), but
+        the *choice* must stay explicit rather than implied by a Python loop
+        that cannot be exported.
+      - Anything non-smooth (`fabs`, `fmin`/`fmax` in the friction-ellipse and
+        slip penalties, the smoothed `abs` in the barrier) is acceptable to
+        IPOPT and **must be checked against acados' Hessian approximation**,
+        which is Gauss-Newton by default. A cost acados cannot linearise is a
+        cost that does not ship.
+- [ ] **Soft constraints must map onto acados' own slack machinery**
+      (`Z`/`z`/`Zl`/`zl`) rather than this repo's hand-added slack variables.
+      The grip, CBF and obstacle rows all currently carry explicit slacks in
+      `w`; acados expects them declared as soft constraints instead.
+- [ ] **The envelope gradient has to survive the port.** `grad_theta` reads
+      `lam_g` out of the IPOPT solution; acados exposes multipliers differently.
+      Until that is written and checked against finite differences on the same
+      problem, none of the online tuning runs on the car.
+- [ ] **Decide where the tuner lives** — on-vehicle beside the solver, or
+      off-board. TD(lambda) with an LTC is small, but it has to be honest about
+      the tick budget it takes from the solver.
+- [ ] Verify timing: report solve time per tick at the horizon actually used
+      (12 on the synthetic tracks, 40-50 on ICRA), not a best case.
+
 **Standing rule for this repo: no dependency on another of my repos.** Where an
 existing repo has a good pattern (`MPCC_planner_acados` for the acados OCP,
 `MPCC_controller_ipopt` for the dynamic tyre model), **copy it in and adapt**,
@@ -86,6 +127,448 @@ with real physics under it for the first time.
       lost, and the configuration fast enough to notice spins. **That gap is
       the result**: on this plant there is no fixed weight vector that is both
       fast enough for the wet corner to matter and slow enough to survive.
+
+### Softening the grip constraint broke the envelope gradient — 2026-09-02
+
+`k_v` is `theta[7]` and it sits in the grip row, so **theta is in `g`**. That was
+already known and commented at `mpcc.py:182`: the analytic gradient goes wrong
+when that row is ACTIVE, with an xfail recorded against it.
+
+What the note did not anticipate is that **softening the row made it active
+almost everywhere**. Hard, the row was either strictly satisfied (inactive,
+lambda = 0, gradient fine) or infeasible (no solve at all). Soft, it is active
+whenever grip binds even slightly, because that is exactly when `Sg > 0`. The
+fix for the 34% infeasibility converted "no solve" into "a solve whose gradient
+is wrong", which is the more dangerous failure of the two.
+
+Measured on `Track.circuit()`, cosine between analytic and finite-difference
+`dQ/dtheta`, all 16 perturbed solves converging in every row:
+
+    grip slacks   CBF     cosine
+    soft          off     +1.0000
+    soft          ON      +0.0811     <-- broken
+    hard          off     +1.0000
+    hard          ON      +1.0000
+
+Neither alone does it; it is the interaction. The CBF holds the car nearer the
+boundary and slower, which is precisely the regime where the grip row binds.
+
+- [ ] **This does not explain the tuner regression.** `cbf` defaults to False
+      and no tuning experiment turns it on, so those runs are in row 1. Do not
+      reach for this as the cause without measuring first.
+- [ ] **Measure how often the grip row is active during a tuning run** once
+      step 1 gives a baseline that drives. If `Sg > 0` on a large fraction of
+      ticks, the gradient is wrong that often and this becomes the leading
+      explanation for step 2 -- ahead of the discount horizon, which was tested
+      and did nothing (gamma 0.98 -> 0.19 laps, 0.995 -> 0.21).
+- [ ] Either take `k_v` out of theta, or add the `lambda^T dg/dtheta` term the
+      envelope formula needs when theta is genuinely in `g`. The second is
+      correct and is not hard; the current `grad_theta` returns `dJ/dtheta`
+      alone.
+- [ ] The paper's CBF section claims "gradient unaffected -- theta stays out of
+      `g`". That is **false as written** and must be corrected before this
+      constraint appears in any result.
+
+### acados solver options, measured — 2026-09-02
+
+Suggested settings from a working acados setup, all tested on the dynamic model
+at N=12, r_a=0.05, with the RTI shift and true-projection s:
+
+    configuration                          laps   solve   ms/tick (worst)
+    nonlinear corridor, soft, SQP it=8     3.40    77%     6.7  (45.2)   <- best
+    linear half-space corridor, it=8       1.12    91%     5.0  (21.4)
+    linear corridor, soft, it=16           1.20    83%     5.8  (51.4)
+    hpipm ROBUST + qp_warm_start=2         0.04     5%     2.2  ( 5.3)
+    ROBUST + hard corridor                 0.28    13%     2.4  ( 5.4)
+    linear corridor + HARD, it=8/16        0.27    25%     2.3  ( 7.2)
+    SQP max_iter 1 / 2 / 3 (any options)   0.04-0.06  0-5%
+
+- [ ] **`SQP_WITH_FEASIBLE_QP` is not in acados v0.1.9** -- the installed build
+      accepts only `('SQP', 'SQP_RTI')`. It is exactly the feature this problem
+      wants (a QP that stays feasible when a nonlinear constraint is violated
+      at the linearisation point), and its absence is why the hard corridor
+      cannot work here. **Upgrading acados is the highest-value next step**,
+      ahead of any further option tuning.
+- [x] **`hpipm_mode = ROBUST` and `qp_solver_warm_start = 2` are HARMFUL here**,
+      not neutral: 3.40 -> 0.04 laps. Do not carry them over from another
+      setup without measuring.
+- [x] **The linear half-space corridor does what it should to the QP** --
+      solve 77% -> 91%, worst tick 45 -> 21 ms -- and still loses laps. The
+      geometry is re-linearised once per tick, so during the 8 SQP iterations
+      the half-spaces are fixed at the previous tick's prediction. Worth
+      revisiting if acados ever exposes per-iteration re-linearisation.
+- [x] The hard corridor fails whether the row is nonlinear OR linear (25%
+      solve, car does not move), so its failure is not about linearisation.
+      `timeout_max_time` / `timeout_heuristic` / `nlp_solver_warm_start_first_qp`
+      are also absent from v0.1.9.
+
+### The ICRA circuits work: 2-3 laps, clean, in real time — 2026-09-02
+
+    track   originally   now            what did it
+    T1        0.18       2.05 clean     horizon 40 -> 25, q_v 1.0 -> 0.2
+    T2        0.37       3.08 clean     r_d -> 0.02, corridor widened, N=25
+
+9-11 ms/tick, 99% usable steps. Both are STEP-LIMITED, not crashing.
+
+Four things had to be right, and three of my own assumptions were backwards:
+
+- **r_d wanted to go DOWN, not up.** Every sweep went 0.5 -> 3 -> 10, which is
+  backwards for a track that needs MORE steering. At r_d = 0.02, T2 went 1.15
+  -> 1.93 laps. Twenty-five times lower than anything previously tried.
+- **A SHORTER horizon fixed T1.** N=60 gave 0.47, N=40 gave 0.59, N=25 gives
+  2.05 -- and costs 10.8 ms against 18.1. The standing note in this repo said
+  T1 needed the horizon RAISED to 40 because "0.6 s of lookahead cannot see
+  through a 0.7 m hairpin". That was measured on the kinematic controller and
+  is now wrong: more lookahead on an un-turnable corner does not help, it just
+  makes the NLP harder.
+- **Less progress weight, not more.** q_v 1.0 -> 0.2 on T1.
+- **r_a is the single biggest lever** and wants to be LARGE: 0.05 -> 6.0 took
+  T1 from 0.18 to 1.20 before any of the above.
+
+Geometry, measured:
+
+    track   min corner radius   half-width      un-turnable fraction
+    oval          2.46 m        0.75 const           0.0%
+    T1            0.69 m        0.55-2.18            1.2%
+    T2            0.71 m        0.30-1.88            1.3%
+
+The car's minimum turn radius is wheelbase/tan(STEER_MAX) = 0.78 m, so ~1.2%
+of both ICRA laps is TIGHTER THAN THE CAR CAN TURN. Raising STEER_MAX to 0.50
+takes that to 0% and helped T2 (1.93 laps at r_d=0.02); T1 was insensitive.
+
+- [x] **T2's corridor widened 1.35x.** T1 has an occupancy grid and T2 does
+      not, so the map-vs-raceline ratio was MEASURED on T1 (1.58x at the
+      tightest point, 1.17x median) and applied to T2 by proportion.
+- [ ] **That widening is an assumption, not a measurement.** It presumes the
+      optimiser was equally conservative on both tracks. If a T2 occupancy grid
+      exists anywhere in the archive, raycast it instead -- the 3.08-lap figure
+      moves if the real corridor is narrower.
+- [ ] `k_v` is a DEAD WEIGHT for dynamic models: the grip row auto-disables and
+      q_vref defaults to 0, so it has no path to the cost. A tuner given eight
+      weights will waste capacity on it. Same failure as the q_v/q_l dead span.
+
+### RESOLVED: globalization was the gap. The controller drives, and overtakes — 2026-09-02
+
+**acados defaults to `FIXED_STEP`: the full SQP step, no line search, no
+acceptance test.** IPOPT runs a filter line search and rejects steps that do
+not improve. That was the whole difference. Measured on the oval, dynamic
+model, everything else held fixed (3 repeats, perturbed starts):
+
+    configuration        FIXED_STEP   MERIT_BACKTRACKING   FUNNEL_L1PEN
+    soft SQP                2.27          4.79                5.52
+    feasible-QP soft        2.17          5.46                7.12   <-- best
+    feasible-QP hard        0.97          1.53                2.95
+    feasible-QP hard+lin    1.94          1.90                3.22
+
+**7.12 laps beats IPOPT's 5.12, at 7.6 ms/tick against 126 ms.**
+
+The negative control is what makes this readable: raising iterations 8 -> 50 ->
+300 gave 3.16 / 3.06 / 2.43 laps. More iterations of an uncritically accepted
+direction cannot help, which is why that sweep was flat.
+
+**Overtaking works** -- first time on a controller that can drive. acados
+`fqp_soft_funnel`, opponents scaled to the ego's MEASURED solo pace (2.20 m/s):
+
+    opponent   laps   passes   min gap   p99 ms
+    0.55x      4.79     3       0.320     25.3
+    0.85x      3.11     1       0.313     27.5   <-- left the track
+    1.10x      4.70     1       0.254     24.1
+
+Every pass cleared the 0.24 m keep-out, so none was a disguised collision. The
+1.10x pass is genuine: the opponent holds CONSTANT speed while the ego varies
+around its mean, so it is quicker on the straights.
+
+- [ ] **0.85x is the weak case** -- one pass then off the track. That is the
+      "commit or don't" condition and the one worth understanding.
+- [ ] **Three of five tracks still fail.** oval 8.00 and circuit 2.22 clear the
+      two-lap bar; ICRA T1 0.18, T2 0.37, 2025 0.06. Usable steps fall to
+      46-67% and p99 reaches 85-190 ms against a 50 ms budget. The signature is
+      horizon cost and oval-tuned weights, NOT the car losing control --
+      sideslip stays low. **This is a weight-tuning problem, which is what the
+      online tuner is for.**
+- [x] Figures: paper/figures/acados_globalization.png, acados_tracks.png,
+      overtaking_results.png, overtaking.gif.
+
+Harness safeguards added after two full runs were silently voided:
+
+- [x] `sanitize_name` in `build_ocp` -- CasADi rejects consecutive underscores
+      and non-letter leading characters, and the failure message says only
+      "SXFunction", never "naming".
+- [x] A sweep where nothing ran now **exits non-zero** and says so. Twice a run
+      skipped every variant, exited 0, and read as success.
+- [x] Repeats must perturb something PHYSICAL. Seeding the plant RNG changes
+      nothing here, so "3 repeats" was one run three times and every std was
+      0.00.
+
+### RESOLVED: acados needed iterations, not fixes — 2026-09-02
+
+The dynamic MPCC drives. IPOPT: **5.12 laps**, 99% solve, mean |e| = 0.024 m,
+peak sideslip 3.3 deg. acados with a converging solver: **4.77 laps**
+(kinematic) and 2.16 (dynamic).
+
+**The whole acados difference was SQP_RTI's single iteration.** Matched
+model, constraints, cost, weights, horizon and integration step:
+
+    iterations      dynamic laps    ms/tick (worst)
+    1 (RTI)             0.31          2.8  (32)
+    2                   0.27          5.0  (38)
+    4                   1.42          6.0  (79)
+    8                   2.09          6.2  (51)
+    50                  2.16         10.9 (175)
+
+**Ship max_iter = 8.** 2.09 laps dynamic at 6.2 ms/tick, 3.98 laps kinematic at
+4.1 ms mean and 29.4 ms worst -- inside the 50 ms budget with the car driving.
+
+- [x] Verified like-for-like before concluding: same cost (identical to 1e-6),
+      same trajectory when seeded (1e-4), same weights, same horizon. Earlier
+      acados runs used `r_a = 0.01` and `N = 20` against IPOPT's `0.05` and
+      `12` -- and 0.01 is the value that SPINS in IPOPT too, so those runs were
+      testing the spin configuration and blaming the solver.
+- [x] **Hard corridor is settled: it is wrong here.** Retested under the
+      working configuration: 17% and 9% solve, peak speed 1.14 m/s, the car
+      does not move. Soft is correct, and the CasADi backend's hard row is
+      tolerable only because a full solve absorbs it.
+- [ ] Worst case at max_iter = 8 is 51.3 ms for the dynamic model, marginally
+      over budget. Bound it properly before the car.
+
+### acados is real-time but does not drive — 2026-09-02
+
+**The real-time goal is met.** Per control tick on the oval, against 50 ms:
+
+    backend            kinematic          dynamic
+    IPOPT           126 ms (worst 903)  1840 ms (worst 29056)
+    acados          2-5 ms (worst 35)   3.6 ms (worst 15)
+
+That is 64x and 459x, and both fit the budget worst-case. This is the acados
+MUST HAVE demonstrated rather than asserted.
+
+**And the two backends solve the SAME problem.** Verified directly rather than
+by inspection:
+
+* stage cost at the same (x, u, theta): CasADi -0.108000, acados -0.108000,
+  difference 0.
+* seeded with the CasADi solution, acados converges to it: dv = 0.0014,
+  ds = 0.0063 at k = 20, status 0.
+
+So the dynamics, integrator, grip row, reference coupling and cost are all
+equivalent. **The remaining fault is in the closed loop, not the formulation.**
+
+Best acados result so far: 0.45 laps (dynamic), 0.31 (kinematic), against IPOPT
+kinematic's 7.16. Not a working controller.
+
+Fixed along the way, each real and none sufficient on its own:
+
+- [x] `WEIGHT_NAMES` grew to 8 and `build_ocp` still unpacked 6 -- the acados
+      backend had not built at all since. Now unpacked by name.
+- [x] `spline_mode="parameter"` decouples `s` from the path. The plant's `s`
+      runs 1.3 m ahead of the car after 39 ticks, so the frozen reference sat
+      at the wrong place. `spline` mode builds fine, contrary to the docstring's
+      hint, and drops `np` from 11 to 8.
+- [x] Feeding the TRUE track projection instead of the drifting virtual `s`:
+      dynamic solve 60% -> 83%.
+- [x] The grip row was in the CasADi OCP and NOT here. Porting a cost without
+      its constraints is why the "same" controller drove differently.
+- [x] **The RTI warm start was never shifted.** IPOPT re-solves to convergence
+      so a stale guess costs iterations; RTI takes ONE step from the guess it
+      is handed. Shifting: dynamic 0.18 -> 0.45 laps, QP NaNs 94 -> 17.
+- [x] `n_dyn` read off the model instead of a hardcoded 7, so the servo state
+      does not silently desynchronise the two backends.
+
+Measured and REJECTED, so nobody retries them:
+
+- **Hard corridor -- and the earlier claim about it was wrong twice.**
+  First, the constraints were never different: for a track with
+  `variable_width=False` (the oval) `mpcc.py` takes its ELSE branch,
+  `lbg = -margin, ubg = +margin`, which is the same two-sided hard bound acados
+  has, with the same +-0.630. The "hard in CasADi, soft in acados" reading came
+  from the variable-width branch, which this track does not use.
+  Second, "hard is worse" was a measurement artefact. Aggregate solve rate over
+  a whole run measures WHEN THE CAR LEFT, not whether the constraint works: a
+  hard corridor is permanently infeasible once the car is outside, so every
+  post-departure tick counts against it. Read tick by tick, the hard corridor
+  tracks BETTER early (|e_c| = 0.028 against 0.078) and does not fail at the
+  tick the soft one does.
+  **The corridor is a red herring either way.** The soft-corridor QP dies at
+  tick 8 with |e_c| = 0.078 against a margin of 0.630 -- the car is
+  comfortably inside the track when the solver fails.
+- **Full SQP instead of SQP_RTI.** 0.13 / 0.02 laps. RTI's single iteration was
+  never the problem by itself.
+- **acados integrator steps 2 -> 4.** 147 -> 146 NaNs.
+- **Blend width** 0.15 -> 0.50 at midpoint 0.70: worse.
+- **V_BIAS on the slip-angle denominators** (0.001 / 0.3 / 0.5 / 0.8): all
+  0.05-0.21 laps. Kept in the model anyway -- the previous 1e-3 guard did
+  nothing at 0.79 m/s, and capping the Jacobian at 1/V_BIAS is right in
+  principle.
+
+Best acados configuration measured: soft corridor + true-projection s + RTI
+shift, giving 0.45 laps (dynamic) and 0.31 (kinematic) at 83-87% solve. Adding
+the hard corridor to that makes it worse (0.35 / 0.28 at 23-27%).
+
+- [ ] **Stop permuting solver settings.** Six configurations, none drives. The
+      two backends provably solve the same problem (cost identical to 1e-6,
+      trajectories to 1e-4 when seeded), so the fault is in how the closed loop
+      drives the solver and not in any single option.
+- [ ] **Do this instead: run both backends from the SAME initial condition and
+      diff the trajectories tick by tick.** Where the applied controls first
+      diverge is where the closed loops differ. That took two minutes for the
+      cost comparison and settled a question six experiments could not.
+- [ ] The QP dies at tick 8 with the car well inside the corridor, at a benign
+      state (vx = 1.26, e_c = 0.078, on a straight, kinematic model). Nothing
+      about that state explains a NaN, which is the thing to chase.
+
+### acados: the OCP is fine, the dynamic model at low speed is not — 2026-09-02
+
+Isolated properly rather than guessed at. Solving 30 times from a seeded state
+at vx = 2.0:
+
+    kinematic                 nx=5  30/30
+    dynamic, as configured    nx=8  30/30
+    dynamic, no penalties     nx=8  30/30
+    dynamic, NO_REGULARIZE    nx=8  30/30
+    dynamic, MIRROR           nx=8  30/30
+
+**The acados OCP is correct.** The EXTERNAL cost, the soft-constraint slacks,
+the parameter packing, the EXACT Hessian and CONVEXIFY all work. So do the
+friction-ellipse and slip penalties. Every one of those was a suspect and every
+one is exonerated.
+
+The failure is in CLOSED LOOP and only for the dynamic model:
+
+    acados kinematic, 60 ticks   no QP failure at all
+    acados dynamic               QP status 3 (NaN) at tick 2
+
+- [x] **Cause found, and it was a change I made.** The blend midpoint had been
+      moved from 1.40 to the plant's own 0.70, on the reasoning that matching
+      the plant is more accurate. Measured, that is an eighteenfold regression:
+      first QP failure at tick 2 (0.70) against tick 36 (1.40) and tick 27
+      (2.00). Reverted to 1.40/0.30, with the reasoning written into model.py
+      so it does not get "corrected" back.
+- [x] The controller's blend is NOT the plant's blend. The plant blends because
+      the dynamic limb is meaningless at vx -> 0 and integrates at 2 ms. The
+      controller must additionally LINEARISE for a QP at 12.5 ms, and the slip
+      angles have Jacobian entries of order 1/vx.
+- [ ] **Still fails at tick 36.** Better by 18x and still not a working
+      controller. Starting above the blend (v0 = 2.5) reaches tick 17 with the
+      old constants, so speed alone is not the whole story either.
+
+Rejected by measurement, so nobody retries them:
+
+- **acados integrator steps** 2 -> 4 (h = 25 -> 12.5 ms): 147 -> 146 NaNs. No
+  effect, despite the same fault being the cause of three bugs on the CasADi
+  side. Kept anyway because h = 25 ms genuinely cannot resolve a 17.8 ms mode.
+- **Widening the blend** 0.15 -> 0.30 -> 0.50 at midpoint 0.70: WORSE, tick 1.
+  It is the midpoint that matters, not the width.
+
+### IPOPT cannot run the dynamic MPCC — 2026-09-02
+
+Measured per control tick on the oval, against the 50 ms budget at dt = 0.05:
+
+    model        mean ms/tick    worst ms    x budget
+    kinematic          126.0        902.9        2.5x
+    dynamic           1839.9      29055.6       36.8x
+
+A single tick taking **29 seconds**. This is not a tuning problem and no cost
+weight fixes it. Two consequences:
+
+- [ ] **"The kinematic MPCC works" needs qualifying.** It drives 7.16 laps
+      because simulation does not care how long a tick takes. At 126 ms mean
+      and 903 ms worst it misses every deadline on a real car. Every lap count
+      in this repo is an OFFLINE result.
+- [ ] **acados stops being a deployment step and becomes the blocker.** IPOPT
+      re-solves a full NLP each tick; SQP-RTI does one QP from the previous
+      solution. That is the difference between 100+ ms and single digits, and
+      it is the only way the dynamic model runs on the vehicle at all. See the
+      MUST HAVE section at the top.
+
+Also measured, and worth keeping because it repeats a pattern:
+
+- **More iterations makes it worse.** `max_iter` 300 -> 1000 took solve success
+  from 93% to 87% at 10 s/tick. Identical to the hard-grip-constraint finding
+  earlier the same day: a small budget stops at a usable half-solution.
+- **Integration fidelity and drivability trade against each other.** The
+  accurate integrators (`sub=4` RK4, `sub=8` Euler) drive at 1.08-1.09 laps
+  and then spin; the inaccurate ones (`sub=2` RK4, `sub=4` Euler) solve at
+  94-99% and barely move (0.06-0.07 laps). Neither end produces a car that
+  drives, so the missing ingredient is not integration accuracy.
+- **The spin is not a compute problem.** `sub=8` Euler at 794 ms/tick and 94%
+  solve still spins. Slow solves and the spin are separate faults.
+
+### The prediction model was wrong in four places — 2026-09-02
+
+Validated the only way that settles it: put the plant in a state, apply a fixed
+control sequence, roll plant and model forward over one horizon, compare. None
+of the faults were in the equations -- those cross-check clean against
+On-Track-SysID and CommonRoad's own STD. All four were setup or numerics.
+
+    case                        error before   after
+    straight, accelerating vx   0.833 m/s      0.008
+    steady cornering       r      -37%         -1.2%
+    corner entry braking   r      -39%           -4%
+    low speed              vx     0.287        0.002
+
+1. **The plant started every episode in a skid.** `ScuderiaPlant.reset` set
+   body speed to 1.0 m/s and left `omega_f = omega_r = 0`. Locked wheels under
+   a moving car: tyres saturated in longitudinal slip, combined slip took the
+   lateral grip with it. **Every STD result recorded before this is affected**,
+   including the "kinematic controller reaches 8.31 laps" reference -- that one
+   was driving a skidding car and should be re-measured.
+2. **`DRAG = 0.15` is fictional for this plant.** It coasts 3.000 -> 3.000 m/s
+   at zero throttle. In `ctrl_mode="accl"` there is no speed-proportional loss.
+3. **The yaw mode was under-resolved.** Its time constant is 17.8 ms
+   (`r_dot = 77.5` from rest toward 1.378) and the NLP integrated it with 25 ms
+   steps. `sub = 2 -> 4`; sub=4 and sub=8 agree to four decimals. The plant
+   resolves it at 2 ms.
+4. **Wheel inertia was missing.** Each wheel adds `I_y_w/R_w^2 = 1.04 kg`, so
+   the car accelerates as though it weighed 6.33 kg, not 4.25. That is a gain
+   of 0.671 on the acceleration command, not a drag term -- commanding
+   2.0 m/s^2 moves the plant at 1.328, predicted 1.343.
+
+Blend constants also now match the plant's own (`v_s = 0.70, v_b = 0.15`; they
+were 1.4/0.30, which held the model kinematic to far too high a speed).
+
+- [ ] **The steering servo is still not modelled.** First tick after a steering
+      step: plant `r = 0.938`, model `r = 1.945`. The plant carries delta as a
+      state behind a rate limit (`sv_max = 4 rad/s`) and a transport delay; the
+      controller applies it instantly. They agree by k=3, but the MPCC acts on
+      k=1. `MPCC_controller_ipopt` models this properly -- delta is a state and
+      the input is its RATE. That is the pattern to copy.
+- [ ] **Re-measure everything on STD.** Points 1-4 all changed the plant or the
+      prediction, so no lap count in this file predating 2026-09-02 carries.
+
+### The controller had no tyres either — 2026-09-02
+
+Swapping the *plant* to STD was only half the swap. **Every `MPCC(...)` in this
+repo passed `model=KinematicBicycle`**, including in the experiments that were
+supposedly measuring tyre behaviour. The controller predicted a car with no
+sideslip while driving a car that drifts.
+
+That explains the baseline. `r_delta = 5.0` is fifty times the bicycle's 0.1,
+and it was never a tuning result — it is the damping needed to stop a blind
+controller exciting dynamics it has no state for. A baseline reached that way is
+not "stable but not racing ready", it is a car held still enough not to fall
+over, which is why grip (item below) could not be made to bind and why the
+tuner had nothing to improve.
+
+- [x] `DynamicBicycle` in `mpcc_tuning/model.py` — single-track planar with
+      simplified Pacejka, adapted from
+      `MPCC_controller_ipopt/MPCC_controller.cpp::build_dynamics()`. Input
+      changed from duty/steering *rates* to this repo's angle/acceleration, and
+      parameters taken from `scuderia_gym_jax`'s `rc10_default.yaml` rather
+      than that source's 1:43 Liniger car.
+- [x] MPCC state generalised to `NS = 5 + model.n_dyn`, laid out
+      `[x, y, psi, vx, s, vy, r]`. **`s` stays at index 4**, so every index the
+      kinematic layout established keeps its meaning and no existing experiment
+      changes. A short `state5` is zero-padded in `MPCC._pad`.
+- [x] Sub-stepped Euler in the NLP, not RK4 — the source repo's own documented
+      choice. With RK4 the cold solves returned `Maximum_Iterations_Exceeded`
+      and `Restoration_Failed`; four Pacejka curves per shooting node is a
+      Hessian IPOPT cannot get through.
+- [x] `ScuderiaPlant.state_dyn()` feeds the real sideslip back: their STD state
+      carries `beta`, so `vx = v cos(beta)`, `vy = v sin(beta)`.
+- [ ] **Re-run step 1 with the dynamic controller.** The baseline to look for
+      is stable-but-not-fast *for the drift car*, and it should not need
+      `r_delta = 5`. Every step-2/3/4 number recorded before this is a
+      kinematic controller's and does not carry over.
 
 ## 0. The design this project is supposed to follow — and does not
 

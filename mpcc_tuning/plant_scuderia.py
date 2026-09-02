@@ -102,6 +102,8 @@ class ScuderiaPlant:
         # envs/scuderia.py about what stepping this from Python costs otherwise.
         self._step_env = jax.jit(self.env.step_env)
         self._key = jax.random.key(seed)
+        # std4w needs 10 action channels; st/std need 2.
+        self._n_pad = 8 if model == "std4w" else 0
         self.margin = track.half_width - 0.12
         self.max_steps = 600
 
@@ -119,6 +121,25 @@ class ScuderiaPlant:
         x = self._x
         return np.array([x[0], x[1], x[4], x[3], self.s])
 
+    def state_dyn(self) -> np.ndarray:
+        """``[x, y, psi, vx, s, vy, r]`` -- what DynamicBicycle needs.
+
+        Their STD state is ``[X, Y, delta, v, psi, r, beta]``: the car carries
+        sideslip as an angle on the velocity vector, so the body-frame split is
+        ``vx = v cos(beta)``, ``vy = v sin(beta)``, and the yaw rate is a state
+        already. ST and the kinematic models have no ``beta``, so those report
+        zero sideslip, which for them is true rather than an approximation.
+        """
+        x = self._x
+        v = float(x[3])
+        beta = float(x[6]) if x.size > 6 else 0.0
+        r = float(x[5]) if x.size > 5 else 0.0
+        # delta last, matching DynamicBicycle(steer_lag=True). Their state 2
+        # is the ACTUAL steering angle, which is what the controller needs to
+        # predict from -- not the angle it last asked for.
+        return np.array([x[0], x[1], x[4], v * np.cos(beta), self.s,
+                         v * np.sin(beta), r, float(x[2])])
+
     # -- interface --------------------------------------------------------
     def reset(self, s0: float = 0.0):
         p = self.track.center[0]
@@ -129,6 +150,22 @@ class ScuderiaPlant:
         # start rolling, so the first solves are not from a standstill
         self._state = self._state.replace(
             x=self._state.x.at[:, 3].set(1.0))
+        # ...and spin the WHEELS to match. STD carries omega_f, omega_r as
+        # states 7 and 8 (STD4W four of them), and env.reset leaves them at
+        # zero. Setting the body speed alone therefore started every episode
+        # with locked wheels under a car doing 1 m/s -- a full-lock skid. The
+        # tyres begin saturated in longitudinal slip, combined slip takes the
+        # lateral grip with it, and the controller spends the opening metres
+        # with no authority at all. Measured before this: commanding +2 m/s^2
+        # made the plant DECELERATE 2.0 -> 1.54 m/s.
+        #
+        # omega = v / R_w, with R_w = 0.031 m from rc10_default.yaml.
+        n = self._state.x.shape[1]
+        if n > 7:
+            w0 = 1.0 / 0.031
+            for i in range(7, n):
+                self._state = self._state.replace(
+                    x=self._state.x.at[:, i].set(w0))
         self._x = np.asarray(self._state.x[0])
         self.s = 0.0
         self.t = 0
@@ -143,7 +180,16 @@ class ScuderiaPlant:
         progress bookkeeping and never reaches the car.
         """
         u = np.asarray(u, dtype=float)
-        act = self._jnp.asarray([[u[0], u[1]]])
+        # STD4W reads a WIDER action than ST/STD. Its layout is
+        #   [0] steering, [1] drive (single-motor mode),
+        #   [2:6] per-wheel drive torque (four-motor mode only),
+        #   [6:10] per-wheel brake torque, additive in both modes.
+        # A two-element action leaves u[6:10] empty and the model dies inside
+        # jnp.minimum with "incompatible shapes for broadcasting: (0,), (4,)".
+        # That is why std4w has never run through this bridge -- it is a
+        # padding bug here, not a problem with the simulator, which is tested
+        # upstream. Zeros are the right pad: no extra drive, no extra brake.
+        act = self._jnp.asarray([np.concatenate([u[:2], np.zeros(self._n_pad)])])
         prev = self.track.project(self._x[0], self._x[1])
         for _ in range(self.substeps):        # zero-order hold, like a real rig
             _o, self._state, _r, _d, _i = self._step_env(

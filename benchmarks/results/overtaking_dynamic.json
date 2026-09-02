@@ -1,0 +1,56 @@
+{
+  "pace": 2.2038898763926924,
+  "rows": [
+    {
+      "backend": "acados:fqp_soft_funnel",
+      "ratio": 0.55,
+      "seed": 0,
+      "s_opp": 2.5,
+      "laps": 4.788161478350178,
+      "off": false,
+      "passes": 3,
+      "min_gap": 0.3196587210998563,
+      "ticks": 900,
+      "solve_pct": 98.0,
+      "converged_pct": 90.66666666666666,
+      "corridor_viol_max": 3.14452223269925,
+      "ms_mean": 7.30241725479977,
+      "ms_p99": 25.34701133146881,
+      "ms_max": 50.5833609495312
+    },
+    {
+      "backend": "acados:fqp_soft_funnel",
+      "ratio": 0.85,
+      "seed": 0,
+      "s_opp": 2.5,
+      "laps": 3.1061590931844503,
+      "off": true,
+      "passes": 1,
+      "min_gap": 0.31250270142050407,
+      "ticks": 614,
+      "solve_pct": 97.8827361563518,
+      "converged_pct": 90.87947882736157,
+      "corridor_viol_max": 11.043243613333278,
+      "ms_mean": 7.067316159240428,
+      "ms_p99": 27.52979669487104,
+      "ms_max": 41.790143004618585
+    },
+    {
+      "backend": "acados:fqp_soft_funnel",
+      "ratio": 1.1,
+      "seed": 0,
+      "s_opp": 2.5,
+      "laps": 4.695381842313281,
+      "off": false,
+      "passes": 1,
+      "min_gap": 0.25379502709162294,
+      "ticks": 900,
+      "solve_pct": 98.66666666666667,
+      "converged_pct": 92.0,
+      "corridor_viol_max": 4.801975850274088,
+      "ms_mean": 6.981932211460339,
+      "ms_p99": 24.114652342395853,
+      "ms_max": 43.55519695673138
+    }
+  ]
+}

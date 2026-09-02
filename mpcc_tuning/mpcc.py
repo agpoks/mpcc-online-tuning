@@ -74,7 +74,9 @@ from dataclasses import dataclass
 import casadi as ca
 import numpy as np
 
-from mpcc_tuning.model import ACCEL_MAX, SPEED_MAX, STEER_MAX, KinematicBicycle
+from mpcc_tuning.model import (A_LAT_MAX as A_LAT_MAX_MOD,
+                               ACCEL_MAX, SPEED_MAX, STEER_MAX,
+                               KinematicBicycle, _sabs, _smax)
 
 #: The learnable parameters. The last is a **distance, not a cost**, and that
 #: distinction was measured rather than assumed.
@@ -128,6 +130,10 @@ class MPCC:
                  obs_slack: tuple = (200.0, 5.0), obs_shape: str = "circle",
                  car_half_length: float = 0.285, terminal_speed: bool = True,
                  terminal_grip: float = 0.85, speed_from_grip: bool = True,
+                 q_friction: float = 50.0, q_slip: float = 50.0,
+                 vy_soft: float = 0.5, friction_peak: float = 24.29,
+                 q_vref: float = 0.0,
+                 friction_peak_long: float = 23.186,
                  cbf: bool = False, cbf_alpha: float = 0.35,
                  cbf_margin: float = 0.18, cbf_lookahead: float = 0.45,
                  cbf_penalty: float = 1e3, grip_penalty: float = 1e3,
@@ -163,7 +169,27 @@ class MPCC:
         # promise; a safety condition that assumes the best case is not one.
         self.terminal_speed = bool(terminal_speed)
         self.terminal_grip = float(terminal_grip)
+        self.q_vref = float(q_vref)
+        self.q_friction = float(q_friction)
+        self.q_slip = float(q_slip)
+        self.vy_soft = float(vy_soft)
+        self.friction_peak = float(friction_peak)
+        self.friction_peak_long = float(friction_peak_long)
         self.speed_from_grip = bool(speed_from_grip)
+        if getattr(model, "n_dyn", 0) and self.speed_from_grip:
+            # A model with tyres already enforces grip THROUGH the tyres. The
+            # speed_from_grip row is a kinematic proxy for the same physics --
+            # a_lat_max*grip - v^2|kappa|/k_v^2 >= 0 -- so keeping both prices
+            # the limit twice and over-constrains the OCP. That row is also
+            # where theta enters g (k_v is theta[7]), which is what makes the
+            # envelope gradient wrong when it binds. Dropping it for dynamic
+            # models fixes the double-count and returns dJ*/dtheta to exact in
+            # one move; the friction ellipse above replaces it, in the cost.
+            self.speed_from_grip = False
+            # The terminal row is the SAME kinematic proxy, one node further
+            # out: a_lat_max*grip - v^2|kappa| + St >= 0. It double-counts for
+            # exactly the same reason, so it goes with it.
+            self.terminal_speed = False
         # A discrete control barrier function as a CONSTRAINT of the OCP rather
         # than an override applied after it.
         #
@@ -197,6 +223,22 @@ class MPCC:
         if not 0.0 < self.cbf_alpha <= 1.0:
             raise ValueError("cbf_alpha must be in (0, 1]")
         self.assumed_grip = float(assumed_grip)
+        if getattr(self.model, "n_dyn", 0) and self.q_vref > 0.0:
+            # Grip-limited speed round the lap, swept forward and backward so
+            # the reference brakes into corners rather than only inside them.
+            # Static for a fixed track, so it is built once here and enters the
+            # NLP as a spline in s, the same way the centreline does.
+            from mpcc_tuning.speed import track_speed_profile
+            n_v, pad = 400, 4
+            s_v, v_v = track_speed_profile(
+                self.track, n=n_v, a_lat_max=A_LAT_MAX_MOD,
+                grip=self.assumed_grip, v_cap=SPEED_MAX)
+            ds = float(s_v[1] - s_v[0])
+            idx = np.concatenate([np.arange(-pad, 0), np.arange(n_v),
+                                  np.arange(n_v, n_v + pad)])
+            self._vref = ca.interpolant(
+                "vref", "bspline", [(idx * ds).tolist()],
+                v_v[idx % n_v].tolist())
         self._build(max_iter)
         self._w0 = None   # warm start
 
@@ -222,9 +264,15 @@ class MPCC:
         speed_from_grip, assumed_grip = self.speed_from_grip, self.assumed_grip
         from mpcc_tuning.model import A_LAT_MAX as a_lat_max
         M = self.max_obstacles
-        X = ca.MX.sym("X", 5, N + 1)     # [x, y, psi, v, s]
+        # [x, y, psi, v, s] + the model's own extra states. s stays at
+        # index 4 whatever the model is, so every index established by the
+        # kinematic layout keeps its meaning and nothing downstream moves.
+        n_dyn = getattr(self.model, "n_dyn", 0)
+        NS = 5 + n_dyn
+        self._NS, self._n_dyn = NS, n_dyn
+        X = ca.MX.sym("X", NS, N + 1)    # [x, y, psi, v, s, *dyn]
         U = ca.MX.sym("U", 3, N)         # [delta, a, v_s]
-        x0 = ca.MX.sym("x0", 5)
+        x0 = ca.MX.sym("x0", NS)
         theta = ca.MX.sym("theta", self.n_theta)
         # Obstacles as runtime parameters, [ox, oy, r_raw] each, and one slack
         # per obstacle per shooting node from k=1 (stage 0 is pinned to x0).
@@ -247,7 +295,7 @@ class MPCC:
         (q_c, q_l, q_v, r_d, r_a, r_dv,
          d_obs, k_v) = (ca.exp(theta[i]) for i in range(self.n_theta))
 
-        g, lbg, ubg = [ca.reshape(X[:, 0] - x0, -1, 1)], [0.0] * 5, [0.0] * 5
+        g, lbg, ubg = [ca.reshape(X[:, 0] - x0, -1, 1)], [0.0] * NS, [0.0] * NS
         J = 0
         for k in range(N):
             e_c, e_l = self.track.errors(X[0, k], X[1, k], X[4, k])
@@ -255,11 +303,80 @@ class MPCC:
                   - q_v * U[2, k] * self.dt
                   + r_d * U[0, k] ** 2 + r_a * U[1, k] ** 2
                   + r_dv * (U[2, k] - X[3, k]) ** 2)
-            nxt = ca.vertcat(self.model.step_sym(X[0:4, k], U[0:2, k], self.dt),
-                             X[4, k] + U[2, k] * self.dt)
+            if n_dyn and self.q_vref > 0.0:
+                # A curvature-based reference speed, as MPCC_controller_ipopt
+                # does with mpc_w_vref = 3.0.
+                #
+                # Removing the grip row for dynamic models was right -- it
+                # double-counts a limit the tyres already enforce -- but it was
+                # also the ONLY thing regulating corner entry speed, and the
+                # friction-ellipse penalty cannot replace it: Pacejka saturates
+                # at D_R, so (Fry/D_R)^2 <= 1 and the excess never grows. The
+                # measured consequence was a car driving at 97% of the grip
+                # limit with no margin (5.02 m/s against a 5.16 m/s corner
+                # limit) and spinning, while the kinematic controller sat at
+                # 81% and survived.
+                #
+                # This is a COST, not a constraint, so theta stays out of g and
+                # the envelope gradient stays exact -- which is what made the
+                # grip row a problem in the first place.
+                #
+                # MEASURED HARMFUL AT q_vref = 3.0, which is why it now
+                # defaults to 0.0 and is opt-in. Copying the ipopt
+                # controller's mpc_w_vref = 3.0 straight across ignored that
+                # its cost terms are scaled differently: here contouring costs
+                # are of order 0.01, so 3.0 * (v - v_ref)^2 dominates the whole
+                # objective. It removed the spin -- max sideslip fell from 150
+                # deg to 5-11 deg, so the diagnosis was right -- but laps went
+                # 1.08 -> 0.20 and the solve rate fell from 92% to 73-95%.
+                # A weight has to be scaled to the objective it joins.
+                #
+                # k_v is theta[7] and it is the margin fraction: v_ref is that
+                # fraction of the grip-limited corner speed. That is exactly
+                # what k_v was documented to mean, and after the grip row came
+                # out it was a DEAD weight with no path to the cost at all.
+                # A real speed PROFILE, not the pointwise corner formula.
+                #
+                # sqrt(a_lat/kappa) evaluated at the current node only says
+                # "you are going too fast" once the car is ALREADY in the
+                # bend. What a driver needs is the profile that has been swept
+                # backwards from each corner under the longitudinal limit, so
+                # the reference drops on the approach and the car brakes
+                # before turning in. mpcc_tuning/speed.py already computes
+                # exactly that -- forward/backward sweeps on the friction
+                # ellipse -- and it is static for a fixed track, so it is
+                # precomputed once and interpolated here.
+                v_ref = k_v * self._vref(self.track.wrap(X[4, k]))
+                J += self.q_vref * (X[3, k] - v_ref) ** 2
+            xd = ca.vertcat(X[0:4, k], X[5:, k]) if n_dyn else X[0:4, k]
+            if n_dyn and (self.q_friction > 0.0 or self.q_slip > 0.0):
+                # Both of these are COSTS, not constraints, and that is the
+                # point. Adapted from MPCC_controller_ipopt, which prices the
+                # friction ellipse and lateral slip in the objective and
+                # hard-bounds neither.
+                Frx, _Ffy, Fry = self.model.tyre_sym(xd, U[0:2, k])
+                if self.q_friction > 0.0:
+                    # "Without this the simplified Pacejka model allows
+                    # simultaneous peak forces in both directions, causing the
+                    # car to spin out" -- that source's own words, and this
+                    # model has exactly its simplification (E = 0, no
+                    # combined-slip correction), so it inherits the failure.
+                    # Separate long/lat peaks, as in the source: the driven
+                    # axle's longitudinal capacity (p_dx1 Fz_r = 23.19 N) is
+                    # not its lateral one (p_dy1 Fz_r = 24.29 N), and using one
+                    # for both reports false violations.
+                    comb = ((Frx / self.friction_peak_long) ** 2
+                            + (Fry / self.friction_peak) ** 2)
+                    exc = _smax(comb - 1.0)
+                    J += self.q_friction * exc ** 2
+                if self.q_slip > 0.0:
+                    vy_exc = _smax(_sabs(xd[4]) - self.vy_soft)
+                    J += self.q_slip * vy_exc ** 2
+            xn = self.model.step_sym(xd, U[0:2, k], self.dt)
+            nxt = ca.vertcat(xn[0:4], X[4, k] + U[2, k] * self.dt, xn[4:])
             g.append(X[:, k + 1] - nxt)
-            lbg += [0.0] * 5
-            ubg += [0.0] * 5
+            lbg += [0.0] * NS
+            ubg += [0.0] * NS
             if self.cbf:
                 # h(x_{k+1}) >= (1 - alpha) h(x_k), the discrete barrier
                 # condition, which by induction gives h_k >= (1-a)^k h_0 > 0.
@@ -322,14 +439,37 @@ class MPCC:
                 lbg.append(0.0)
                 ubg.append(ca.inf)
 
+            # Virtual speed coupling, from MPCC_controller_ipopt:
+            #   "vs <= vx + 0.5 prevents the optimizer from advancing the
+            #    virtual reference faster than the car can actually travel."
+            # This repo had NO such constraint -- v_s was bounded only by
+            # [0, SPEED_MAX] and the mismatch was merely PRICED, through
+            # r_dv (v_s - v)^2. A price is not a bound: measured on the oval,
+            # the progress variable ran 1.3 m ahead of the car after 39 ticks.
+            # IPOPT absorbs that because s is a decision variable and a full
+            # solve pulls it back; SQP-RTI takes one step and cannot, so the
+            # reference sat where the car was not.
+            g.append(X[3, k] + 0.5 - U[2, k])
+            lbg.append(0.0); ubg.append(ca.inf)
+
+            # The corridor on the NEXT state, not this one. Stage 0 is pinned
+            # to the measurement, so a corridor row there is a statement about
+            # the past -- and it is unsatisfiable exactly when the car has
+            # already left the track, which is the one moment the solver most
+            # needs to still return something. This file already makes that
+            # argument for the obstacle keep-out ("k=1..N are covered and the
+            # pinned stage 0 is not") and then constrained the corridor at
+            # stage k anyway. MPCC_controller_ipopt puts its corridor on
+            # xkp1 for the same reason.
+            e_cn, _e_ln = self.track.errors(X[0, k + 1], X[1, k + 1], X[4, k + 1])
             if getattr(self.track, "variable_width", False):
-                wl, wr = self.track.width(X[4, k])
-                g.append(wl - chw - e_c)                 # room to the left
+                wl, wr = self.track.width(X[4, k + 1])
+                g.append(wl - chw - e_cn)                # room to the left
                 lbg.append(0.0); ubg.append(ca.inf)
-                g.append(e_c + wr - chw)                 # room to the right
+                g.append(e_cn + wr - chw)                # room to the right
                 lbg.append(0.0); ubg.append(ca.inf)
             else:
-                g.append(e_c)
+                g.append(e_cn)
                 lbg.append(-self.margin)
                 ubg.append(self.margin)
             # Circular keep-outs on the *next* state, so k=1..N are covered and
@@ -403,7 +543,7 @@ class MPCC:
             ubg.append(ca.inf)
 
         self._lbg, self._ubg = np.array(lbg), np.array(ubg)
-        self._nx = 5 * (N + 1)
+        self._nx = NS * (N + 1)
         self._nw = self._nx + 3 * N
         # Slacks live at the end of w, after the states and controls, so _nx and
         # the u0 slice keep their meaning and rti.py needs no change.
@@ -411,13 +551,28 @@ class MPCC:
                     + (N if self.speed_from_grip else 0)
                     + (1 if self.terminal_speed else 0))
         self._nw += self._ns
-        lbw = np.concatenate([np.tile([-ca.inf, -ca.inf, -ca.inf, 0.0, -ca.inf], N + 1),
+        # vx is hard-bounded [0, SPEED_MAX] for the kinematic model and NOT for
+        # a model with tyres. Straight from MPCC_controller_ipopt: "Velocity
+        # states (vx, vy, r) are NOT hard-bounded in the NLP because Euler
+        # dynamics + hard velocity bounds cause infeasibility near the limits.
+        # Their envelope is enforced by clamping in the simulation loop."
+        # The plant clamps; the OCP must not be handed a box it cannot reach.
+        v_lo, v_hi = (-ca.inf, ca.inf) if n_dyn else (0.0, SPEED_MAX)
+        lbw = np.concatenate([np.tile([-ca.inf, -ca.inf, -ca.inf, v_lo, -ca.inf]
+                                      + [-ca.inf] * n_dyn, N + 1),
                               np.tile([-STEER_MAX, -ACCEL_MAX, 0.0], N),
                               np.zeros(self._ns)])
-        ubw = np.concatenate([np.tile([ca.inf, ca.inf, ca.inf, SPEED_MAX, ca.inf], N + 1),
+        ubw = np.concatenate([np.tile([ca.inf, ca.inf, ca.inf, v_hi, ca.inf]
+                                      + [ca.inf] * n_dyn, N + 1),
                               np.tile([STEER_MAX, ACCEL_MAX, SPEED_MAX], N),
                               np.full(self._ns, ca.inf)])
         self._lbw, self._ubw = np.array(lbw, float), np.array(ubw, float)
+        if n_dyn:
+            _x = ca.MX.sym("_x", 4 + n_dyn)
+            _u = ca.MX.sym("_u", 2)
+            self._roll = ca.Function(
+                "roll", [_x, _u],
+                [self.model.step_sym(_x, _u, self.dt)])
 
         gg = ca.vertcat(*g)
         # Kept so an SQP/RTI step can be built from the same problem rather
@@ -517,9 +672,21 @@ class MPCC:
             q[:len(self._obstacles)] = self._obstacles
         return q.ravel()
 
+    def _pad(self, state5: np.ndarray) -> np.ndarray:
+        """Accept a 5-vector even when the model carries extra states.
+
+        Callers that predate the dynamic model pass [x, y, psi, v, s] and
+        mean vy = r = 0. Padding here rather than at every call site is what
+        keeps the existing experiments running unchanged.
+        """
+        s = np.asarray(state5, float).ravel()
+        if s.size < self._NS:
+            s = np.concatenate([s, np.zeros(self._NS - s.size)])
+        return s[:self._NS]
+
     def _p(self, state5: np.ndarray, theta: np.ndarray) -> np.ndarray:
         th = np.asarray(theta, float)
-        parts = [np.asarray(state5, float), th]
+        parts = [self._pad(state5), th]
         if self.max_obstacles:
             parts.append(self._obs_param(float(np.exp(th[6])) if len(th) > 6 else None))
         return np.concatenate(parts)
@@ -539,9 +706,19 @@ class MPCC:
                     value=float(sol["f"]), u0=w[self._nx:self._nx + 3], ok=ok)
 
     def _initial_guess(self, state5: np.ndarray) -> np.ndarray:
-        X = np.tile(np.asarray(state5, float)[:, None], (1, self.N + 1))
-        X[4] += np.arange(self.N + 1) * state5[3] * self.dt
-        U = np.tile(np.array([0.0, 0.0, max(state5[3], 0.5)])[:, None], (1, self.N))
+        s5 = self._pad(state5)
+        X = np.tile(s5[:, None], (1, self.N + 1))
+        X[4] += np.arange(self.N + 1) * s5[3] * self.dt
+        U = np.tile(np.array([0.0, 0.0, max(s5[3], 0.5)])[:, None], (1, self.N))
+        if self._n_dyn:
+            # Tiling a constant state is not even close to satisfying tyre
+            # dynamics, and a cold start that far from the manifold is what
+            # made IPOPT fail on the first ticks. Roll the model forward
+            # instead, so the guess is at least dynamically consistent.
+            xk = X[[0, 1, 2, 3] + list(range(5, self._NS)), 0]
+            for k in range(self.N):
+                xk = np.asarray(self._roll(xk, U[:2, k])).ravel()
+                X[[0, 1, 2, 3] + list(range(5, self._NS)), k + 1] = xk
         return np.concatenate([X.ravel(order="F"), U.ravel(order="F"),
                                np.zeros(self._ns)])
 

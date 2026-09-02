@@ -437,7 +437,8 @@ class Track:
         return out
 
     @staticmethod
-    def icra_t2_raceline(scale: float = 1.0, ds: float = 0.1) -> "Track":
+    def icra_t2_raceline(scale: float = 1.0, ds: float = 0.1,
+                         widen: float = 1.35) -> "Track":
         """ICRA 2026 Track 2 from the team's optimised raceline, variable width.
 
         \SI{73.8}{\meter}, corridor \SI{0.59}{}--\SI{3.76}{\meter} -- a factor
@@ -450,12 +451,26 @@ class Track:
         raceline carries ``x, y, w_left_m, w_right_m``, which is a corridor.
 
         Newest of 41 T2 runs in the archive. See ``tracks/PROVENANCE.md``.
+
+        ``widen`` recovers the room the occupancy grid would show if T2 had
+        one. On Track 1, where BOTH the raceline margins and the team's map are
+        available, the map is wider by a measured 1.58x at the tightest point
+        and 1.17x at the median -- the optimiser leaves its own safety margin
+        inside a corridor that is really there. Track 2 has no grid, so the
+        same correction is applied by proportion rather than by raycast.
+
+        This is an approximation and is flagged as one: it assumes the
+        optimiser was equally conservative on both tracks, which is plausible
+        (same team, same tool, same week) but not measured. Set ``widen=1.0``
+        for the raw margins.
         """
-        return Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds)
+        return Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds,
+                               widen=widen)
 
     @staticmethod
     def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1,
-                  smooth_m: float = 0.6, map_stem: str | None = None) -> "Track":
+                  smooth_m: float = 0.6, map_stem: str | None = None,
+                  widen: float = 1.0) -> "Track":
         """Build a variable-width Track from one of the vendored raceline CSVs.
 
         Semicolon separated, the optimiser's own column names, with the
@@ -527,6 +542,11 @@ class Track:
             if got is not None:
                 half = got
                 vehicle_adjusted = False      # these ARE distances to the wall
+        if widen != 1.0:
+            # Scale the corridor toward what an occupancy grid would show. See
+            # icra_t2_raceline: measured 1.58x tightest / 1.17x median on the
+            # one track where both are available.
+            half = half * float(widen)
         t = Track(centre[:, 0], centre[:, 1], ds=ds,
                   w_left=half, w_right=half)
         t.width_vehicle_adjusted = vehicle_adjusted

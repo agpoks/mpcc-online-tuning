@@ -21,6 +21,9 @@ venv/
 # drops new ones silently.
 runs/
 c_generated_code/
+# the export ROOT too: acados_export and the sweeps write solver trees
+# here and it reaches 241 MB. Only c_generated_code/ was ignored before.
+c_generated/
 acados_ocp*.json
 
 # --- sphinx build output ---

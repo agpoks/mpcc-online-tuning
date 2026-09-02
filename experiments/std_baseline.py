@@ -39,25 +39,30 @@ sys.path.insert(0, str(ROOT))
 
 from concurrent.futures import ProcessPoolExecutor, as_completed  # noqa: E402
 
-from mpcc_tuning.model import KinematicBicycle  # noqa: E402
+from mpcc_tuning.model import DynamicBicycle, KinematicBicycle  # noqa: E402
 from mpcc_tuning.mpcc import MPCC, MPCCWeights  # noqa: E402
 from mpcc_tuning.track import Track  # noqa: E402
 
-#: Downward in q_v, upward in r_delta -- the region the bicycle grid never
-#: reached, and the one a sliding car should want.
+#: With a KINEMATIC controller the only survivable region was r_delta >= 5,
+#: fifty times the bicycle's 0.1. That was never a property of the car -- it is
+#: the damping a controller with no sideslip state needs to avoid exciting
+#: dynamics it cannot see. A controller that models the tyres should not need
+#: it, so the grid reaches back down to r_delta = 0.1 and is only kept open at
+#: the top to check that claim rather than assume it.
 GRID = [(qc, qv, rd)
         for qc in (0.3, 1.0, 3.0)
-        for qv in (0.25, 0.5, 1.0)
-        for rd in (1.0, 5.0, 20.0)]
+        for qv in (0.5, 1.0, 2.0)
+        for rd in (0.1, 0.5, 2.0, 5.0)]
 
 
 def one(job):
-    qc, qv, rd, plant, horizon, laps, track_name, max_iter = job
+    qc, qv, rd, plant, horizon, laps, track_name, max_iter, ctrl = job
     t = getattr(Track, track_name)()
     steps = int(laps * t.length / (0.05 * 1.5)) + 300
     th = MPCCWeights(q_c=qc, q_l=50.0, q_v=qv, r_d=rd).to_log()
-    m = MPCC(t, model=KinematicBicycle(dt=0.05), horizon=horizon, dt=0.05,
-             max_iter=max_iter)
+    dyn = ctrl == "dynamic"
+    m = MPCC(t, model=(DynamicBicycle if dyn else KinematicBicycle)(dt=0.05),
+             horizon=horizon, dt=0.05, max_iter=max_iter)
     if plant == "bicycle":
         from examples.tune_online import Plant
         P = Plant(t, dt=0.05, max_steps=steps)
@@ -72,7 +77,10 @@ def one(job):
     nok = k = 0
     vmax = 0.0
     for _ in range(steps):
-        o = m.value(s5, th)
+        # The dynamic controller has states the 5-vector does not carry, so it
+        # is given the plant's real sideslip rather than an assumed zero.
+        o = m.value(P.state_dyn() if (dyn and hasattr(P, "state_dyn"))
+                    else s5, th)
         nok += int(bool(o["ok"]))
         k += 1
         s5, _r, off, tr = P.step(o["u0"])
@@ -91,17 +99,22 @@ def main(argv=None):
     ap.add_argument("--laps", type=float, default=2.0)
     ap.add_argument("--horizon", type=int, default=12)
     ap.add_argument("--max-iter", type=int, default=300)
+    ap.add_argument("--ctrl", default="dynamic",
+                    choices=("dynamic", "kinematic"),
+                    help="the CONTROLLER's internal model. Not the plant. "
+                         "Every experiment in this repo used 'kinematic' "
+                         "until 2026-09-02, including on the STD plant.")
     ap.add_argument("--jobs", type=int, default=5)
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     if a.out is None:
         a.out = str(ROOT / "benchmarks" / "results"
-                    / f"std_baseline_{a.track}_{a.plant}.json")
+                    / f"std_baseline_{a.track}_{a.plant}_{a.ctrl}.json")
 
-    jobs = [(qc, qv, rd, a.plant, a.horizon, a.laps, a.track, a.max_iter)
-            for qc, qv, rd in GRID]
+    jobs = [(qc, qv, rd, a.plant, a.horizon, a.laps, a.track, a.max_iter,
+             a.ctrl) for qc, qv, rd in GRID]
     t = getattr(Track, a.track)()
-    print(f"  {a.track} on the {a.plant} plant, {t.length:.1f} m lap, "
+    print(f"  {a.ctrl} controller / {a.plant} plant, {t.length:.1f} m lap, "
           f"target {a.laps:g} laps, {len(jobs)} runs over {a.jobs} workers",
           flush=True)
 
@@ -134,7 +147,8 @@ def main(argv=None):
               f"{best[1]:.2f} laps, solve {best[3]:.0f}%")
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(
-        {"track": a.track, "plant": a.plant, "laps_target": a.laps,
+        {"track": a.track, "plant": a.plant, "ctrl": a.ctrl,
+         "laps_target": a.laps,
          "rows": [{"q_c": r[0][0], "q_v": r[0][1], "r_d": r[0][2],
                    "laps": r[1], "off": r[2], "solve_ok": r[3], "peak_v": r[4]}
                   for r in rows]}, indent=2) + "\n")
