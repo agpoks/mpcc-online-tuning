@@ -56,15 +56,32 @@ GRID = GRID_FULL
 
 
 def one(job):
-    qc, ql, rd, max_iter, horizon, laps, track_name = job
-    from examples.tune_online import Plant
+    qc, ql, rd, max_iter, horizon, laps, track_name, plant_name = job
 
     t = getattr(Track, track_name)()
+    # The PLANT is the thing being driven, and a kinematic bicycle is not a
+    # car: no slip angles, no tyre forces, no load transfer. Measured on the
+    # oval with the parameterisation that passes there, same weights and same
+    # controller, only the physics changed:
+    #
+    #     kinematic bicycle    7.71 laps, clean, 100% solve
+    #     scuderia ST (tyres)  0.20 laps, off,    72% solve
+    #     scuderia STD (drift) 0.22 laps, off,    84% solve
+    #
+    # So a gate passed on the bicycle says nothing about the car. It also means
+    # grip cannot be studied on the bicycle at all -- there is no friction in
+    # it to lower, only a speed cap.
     steps = int(laps * t.length / (0.05 * 2.0)) + 400   # generous
     th = MPCCWeights(q_c=qc, q_l=ql, q_v=2.0, r_d=rd).to_log()
     m = MPCC(t, model=KinematicBicycle(dt=0.05), horizon=horizon, dt=0.05,
              max_iter=max_iter)
-    P = Plant(t, dt=0.05, max_steps=steps)
+    if plant_name == "bicycle":
+        from examples.tune_online import Plant
+        P = Plant(t, dt=0.05, max_steps=steps)
+    else:
+        from mpcc_tuning.plant_scuderia import ScuderiaPlant
+        P = ScuderiaPlant(t, model=plant_name, dt=0.05)
+        P.max_steps = steps
     s5 = P.reset()
     m.reset()
     off = False
@@ -92,6 +109,11 @@ def main(argv=None):
     ap.add_argument("--horizon", type=int, default=12)
     ap.add_argument("--iters", type=int, nargs="*", default=[80, 300])
     ap.add_argument("--jobs", type=int, default=6)
+    ap.add_argument("--plant", default="bicycle",
+                    choices=("bicycle", "st", "std", "std4w"),
+                    help="st/std need scuderia_gym_jax on PYTHONPATH. The "
+                         "bicycle has no tyres, so a gate passed on it says "
+                         "nothing about the car.")
     ap.add_argument("--quick", action="store_true",
                     help="only the settings that pass on the oval -- enough to "
                          "answer whether ANY fixed setting drives this track")
@@ -102,11 +124,11 @@ def main(argv=None):
                     / f"acceptance_{a.track}.json")
 
     grid = GRID_QUICK if a.quick else GRID_FULL
-    jobs = [(qc, ql, rd, mi, a.horizon, a.laps, a.track)
+    jobs = [(qc, ql, rd, mi, a.horizon, a.laps, a.track, a.plant)
             for qc, ql, rd in grid for mi in a.iters]
     t = getattr(Track, a.track)()
-    print(f"  {a.track}: {t.length:.1f} m lap, target {a.laps:g} laps, "
-          f"{len(jobs)} runs over {a.jobs} workers", flush=True)
+    print(f"  {a.track} on the {a.plant} plant: {t.length:.1f} m lap, target "
+          f"{a.laps:g} laps, {len(jobs)} runs over {a.jobs} workers", flush=True)
 
     rows = []
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
