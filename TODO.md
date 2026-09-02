@@ -42,6 +42,51 @@ this remedy removes the unidentifiable direction *and most of the useful one*.
       per-situation tuning is +3.5% to +8.9%, so the advantage signal for
       deviating sits near the noise floor and a constant is close to correct.
 
+### On a tyre model the tuner is 94% worse, and it is not exploration — 2026-09-02
+
+Steps 1 and 2 of the stated order, run on `scuderia_gym_jax`'s STD drift model
+(Pacejka tyres fitted to RC-car recordings) instead of the kinematic bicycle.
+
+**Step 1 passes.** `q_c=0.3, q_l=50, q_v=1.0, r_d=5` completes 5.97 laps of the
+oval at 100% solve. It needs `r_d = 5` where the bicycle wanted `0.1`: fifty
+times the steering-rate damping, because the car can now slide. The bicycle
+grid never searched that region, which is why it looked like no baseline
+existed.
+
+**Step 2 fails, badly.**
+
+    track      fixed   tuner
+    oval        5.29    0.33, 0.22
+    circuit     1.04    0.56, 0.31
+
+**It is not the actuator exploration.** With `explore=0` the tuner is just as
+bad -- 0.24 and 0.18 laps against the baseline's 4.08:
+
+    mode     explore   laps    q_v/q_c emitted
+    fixed          -   4.08    3.33 +-0.00
+    tuner       0.05   0.30    3.54 +-2.04
+    tuner       0.05   0.19    4.32 +-1.27
+    tuner       0.00   0.24    3.35 +-1.33
+    tuner       0.00   0.18   10.16 +-7.62
+
+The cause is **the weights it emits**. The baseline sits at `q_v/q_c = 3.33`
+and the tuner drifts up to 3.5, 4.3, and in one seed 10.2 +- 7.6. On a
+kinematic bicycle a higher ratio means "go faster"; on tyres it means asking
+for grip that is not there. This is the proxy-optimised-past-validity failure
+with real physics under it for the first time.
+
+- [ ] **The baseline does not transfer between tracks.** 5.97 laps on the oval,
+      1.04 on the circuit -- below the 2-lap gate. A per-track baseline is
+      needed before any cross-track claim.
+- [ ] The tuner needs a **grip-aware** cost or a constraint the learner cannot
+      exceed, not a smaller step size. Its objective is progress and progress
+      is exactly what spins the car.
+- [ ] μ = 0.6 on the tightest corner STILL does not bind: fixed dry 5.44 laps,
+      fixed wet 5.42. The surviving baseline is too slow to ask for the grip it
+      lost, and the configuration fast enough to notice spins. **That gap is
+      the result**: on this plant there is no fixed weight vector that is both
+      fast enough for the wet corner to matter and slow enough to survive.
+
 ## 0. The design this project is supposed to follow — and does not
 
 Stated repeatedly and never written down here, which is why it keeps being
