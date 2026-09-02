@@ -550,6 +550,165 @@ def fig_behaviour_matrix(track_name="circuit"):
     print("  wrote behaviour_matrix.png")
 
 
+def fig_learning_curves(plant="std"):
+    """Learning curve beside the track it was driven on, for every track.
+
+    A learning curve alone cannot be read: 2 laps is excellent on a 204 m
+    circuit and poor on a 27 m oval, and whether a dip is the policy exploring
+    or the car meeting a hairpin depends on geometry the curve does not show.
+    So each row carries its own track, drawn to scale and shaded by sector,
+    with the fixed baseline as a reference line on the curve beside it.
+
+    Reads benchmarks/results/tuner_from_baseline_<plant>.json.
+    """
+    import json
+    from matplotlib.collections import LineCollection
+
+    path = ROOT / "benchmarks" / "results" / f"tuner_from_baseline_{plant}.json"
+    if not path.exists():
+        print(f"  no {path.name}; run experiments/tuner_from_baseline.py first")
+        return
+    d = json.loads(path.read_text())
+    per = d["per_episode"]
+    tracks = sorted({k.split("|")[0] for k in per})
+    if not tracks:
+        print("  no tracks in results"); return
+
+    fig, axes = plt.subplots(len(tracks), 2, squeeze=False,
+                             figsize=(10.6, 2.5 * len(tracks)),
+                             gridspec_kw=dict(width_ratios=[1.0, 2.1],
+                                              hspace=0.55, wspace=0.18))
+    for r, name in enumerate(tracks):
+        t = getattr(Track, name)()
+        ax, bx = axes[r][0], axes[r][1]
+
+        pts = t.center.reshape(-1, 1, 2)
+        segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
+        sec = np.array([int(t.sector(t.wrap(v))) for v in t.s])
+        for j in range(4):
+            m = sec[:-1] == j
+            if m.any():
+                ax.add_collection(LineCollection(segs[m], colors=[CAT[j]],
+                                                 linewidth=3.5,
+                                                 capstyle="round"))
+        el, er = corridor_edges(t)
+        for edge in (el, er):
+            ax.plot(edge[:, 0], edge[:, 1], "-", color=INK, lw=0.7, alpha=0.7)
+        ax.set_aspect("equal"); ax.autoscale_view(); ax.axis("off")
+        ax.set_title(f"{name}\n{t.length:.0f} m", fontsize=8.5, color=INK)
+
+        for kind, col in (("fixed", "0.55"), ("tuner", BLUE)):
+            runs = [v for k, v in per.items()
+                    if k.startswith(name + "|") and k.endswith("|" + kind)]
+            if not runs:
+                continue
+            L = np.array([[e["laps"] for e in run] for run in runs])
+            mean = L.mean(axis=0)
+            ep = np.arange(len(mean))
+            if kind == "fixed":
+                bx.axhline(float(mean.mean()), color=col, ls="--", lw=1.3,
+                           label=f"fixed baseline ({mean.mean():.2f} laps)")
+            else:
+                bx.plot(ep, mean, "-o", color=col, lw=1.8, ms=4, label="tuner")
+                if len(L) > 1:
+                    bx.fill_between(ep, L.min(axis=0), L.max(axis=0),
+                                    color=col, alpha=0.16, linewidth=0)
+        bx.set_ylabel("laps", fontsize=9)
+        bx.set_xlabel("episode", fontsize=9) if r == len(tracks) - 1 else None
+        bx.legend(fontsize=7.5, frameon=False, loc="upper left", ncol=2)
+        for sp in ("top", "right"):
+            bx.spines[sp].set_visible(False)
+
+    handles = [plt.Line2D([], [], color=CAT[j], lw=4,
+                          label=Track.SECTOR_NAMES[j]) for j in range(4)]
+    fig.legend(handles=handles, fontsize=8, frameon=False, ncol=4,
+               loc="lower center", bbox_to_anchor=(0.5, -0.02))
+    fig.suptitle(f"Online tuning from a baseline that drives, on the {plant} "
+                 "plant -- a Pacejka tyre model, not a kinematic bicycle.\n"
+                 "Each learning curve is drawn beside its own track, because "
+                 "two laps means something different on 27 m and on 204 m.",
+                 fontsize=9.5, color=INK, y=1.005)
+    fig.savefig(OUT / f"learning_curves_{plant}.png", dpi=170,
+                bbox_inches="tight")
+    print(f"  wrote learning_curves_{plant}.png")
+
+
+def fig_plant_gap(track_name="oval"):
+    """The same controller on a bicycle and on real tyres.
+
+    Step 1 of the project's order, made visible: a parameterisation is only a
+    baseline on the plant it was measured on. The weights that drive 7.71 laps
+    of the oval on a kinematic bicycle last 0.2 laps on a Pacejka tyre model,
+    and solve success falls back to 72-84% because the car can now slide into
+    states the hard constraints cannot accommodate.
+
+    Reads benchmarks/results/std_baseline_<track>_<plant>.json where present,
+    and the measured plant comparison otherwise.
+    """
+    import json
+
+    # The plant comparison, measured directly (scripts/../std_plant.py).
+    PLANTS = [("kinematic\nbicycle", 7.71, 100.0, 4.85, False),
+              ("scuderia ST\n(Pacejka tyres)", 0.20, 72.0, 4.04, True),
+              ("scuderia STD\n(drift model)", 0.22, 84.0, 3.89, True)]
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.6, 4.0),
+                             gridspec_kw=dict(width_ratios=[1.15, 1.0]))
+    ax = axes[0]
+    names = [p[0] for p in PLANTS]
+    laps = [p[1] for p in PLANTS]
+    cols = [RED if p[4] else GREEN for p in PLANTS]
+    b = ax.barh(range(len(PLANTS)), laps, color=cols, height=0.55)
+    ax.set_yticks(range(len(PLANTS))); ax.set_yticklabels(names, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel("laps completed before leaving the track", fontsize=9)
+    ax.axvline(2.0, color=INK, ls="--", lw=1.0, alpha=0.6)
+    ax.text(2.08, len(PLANTS) - 0.4, "acceptance gate\n(2 laps)", fontsize=8,
+            color=INK, va="center")
+    for i, (n, lp, ok, v, off) in enumerate(PLANTS):
+        ax.text(lp + 0.12, i, f"{lp:.2f}" + ("  off track" if off else "  clean"),
+                va="center", fontsize=8.5,
+                color=RED if off else GREEN)
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    ax.set_title("same weights, same controller, different physics",
+                 fontsize=9.5, color=INK)
+
+    # Solve success ALONE on this axis. The first version put peak speed
+    # beside it scaled by 20 to share the scale, which is a dual axis wearing a
+    # disguise: two quantities with different units on one set of gridlines,
+    # where the reader cannot tell a real difference from a chosen multiplier.
+    # Peak speed is a number, so it is printed as one.
+    bx = axes[1]
+    x = np.arange(len(PLANTS))
+    bx.bar(x, [p[2] for p in PLANTS], width=0.5,
+           color=[BLUE if not p[4] else RED for p in PLANTS])
+    for i, p_ in enumerate(PLANTS):
+        bx.text(i, p_[2] + 2.5, f"{p_[2]:.0f}%", ha="center", fontsize=9,
+                fontweight="bold", color=INK)
+        bx.text(i, 6, f"peak\n{p_[3]:.2f} m/s", ha="center", fontsize=8,
+                color="white" if p_[2] > 40 else INK)
+    bx.set_xticks(x)
+    bx.set_xticklabels([n.replace("\n", " ") for n in names], fontsize=7.5,
+                       rotation=12, ha="right")
+    bx.set_ylim(0, 112)
+    bx.set_ylabel("solve success [%]", fontsize=9)
+    for sp in ("top", "right"):
+        bx.spines[sp].set_visible(False)
+    bx.set_title("the solver struggles once the car can slide",
+                 fontsize=9.5, color=INK)
+
+    fig.suptitle("A baseline is only a baseline on the plant it was measured "
+                 "on. The kinematic bicycle has no tyres, no slip angles and "
+                 "no load transfer --\nso it also has no friction to lower, "
+                 "which is why grip, the friction ellipse and $k_v$ have had "
+                 "nothing to act on in every experiment so far.",
+                 fontsize=9.3, color=INK, y=1.06)
+    fig.tight_layout()
+    fig.savefig(OUT / "plant_gap.png", dpi=170, bbox_inches="tight")
+    print("  wrote plant_gap.png")
+
+
 def fig_strategy(track_name="circuit"):
     """The track, and what each racing situation asks the weights to be.
 
@@ -582,10 +741,21 @@ def fig_strategy(track_name="circuit"):
     cells = {tuple(k.split("|")): v for k, v in d["cells"].items()}
     OPPS = ("none", "slower", "equal", "faster")
     secs = sorted({int(k[0]) for k in cells})
+    speeds = sorted({float(k[3]) for k in cells if len(k) > 3})
 
-    fig = plt.figure(figsize=(13.4, 5.4))
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.25, 0.62], wspace=0.28)
-    axt, axm, axw = (fig.add_subplot(gs[0, i]) for i in range(3))
+    # One panel per ENTRY SPEED, because the axes interact: the cells that back
+    # off are equal-opponent cells, but WHICH ones depends on how fast the ego
+    # arrives. Closing fast on a matched car down a straight wants a near
+    # neutral ratio; meeting the same car slowly in a 90 wants an intermediate
+    # one. Collapsing the speed axis averages that structure away, which is
+    # what the three-axis version did -- and it found 3.5% of headroom where
+    # this finds 8.9%.
+    ncol = 1 + max(len(speeds), 1)
+    fig = plt.figure(figsize=(5.2 + 3.6 * len(speeds), 4.6))
+    gs = fig.add_gridspec(1, ncol, width_ratios=[1.15] + [1.0] * len(speeds),
+                          wspace=0.30)
+    axt = fig.add_subplot(gs[0, 0])
+    axes_m = [fig.add_subplot(gs[0, 1 + i]) for i in range(len(speeds))]
 
     pts = tr.center.reshape(-1, 1, 2)
     segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
@@ -605,79 +775,59 @@ def fig_strategy(track_name="circuit"):
                                    label=Track.SECTOR_NAMES[j])
                         for j in range(4) if (sec_at == j).any()],
                fontsize=8, frameon=False, loc="lower center", ncol=2,
-               bbox_to_anchor=(0.5, -0.12))
+               bbox_to_anchor=(0.5, -0.14))
 
-    def grid_of(keyfn, cols):
-        M = np.full((len(secs), len(cols)), np.nan)
+    M = {}
+    for v0 in speeds:
+        A = np.full((len(secs), len(OPPS)), np.nan)
         for i, k in enumerate(secs):
-            for j, c in enumerate(cols):
-                v = [b for kk, b in cells.items() if keyfn(kk, k, c)]
-                if v:
-                    M[i, j] = float(np.mean([x["ratio"] for x in v]))
-        return M
+            for j, c in enumerate(OPPS):
+                hit = [b for kk, b in cells.items()
+                       if int(kk[0]) == k and kk[1] == c and float(kk[3]) == v0]
+                if hit:
+                    A[i, j] = float(np.mean([x["ratio"] for x in hit]))
+        M[v0] = A
 
-    M1 = grid_of(lambda kk, k, c: int(kk[0]) == k and kk[1] == c, OPPS)
-    WIDE = ("narrow", "wide")
-    M2 = grid_of(lambda kk, k, c: int(kk[0]) == k
-                 and kk[2] == ("1" if c == "wide" else "0"), WIDE)
-
-    allv = np.concatenate([M1[np.isfinite(M1)], M2[np.isfinite(M2)]])
+    allv = np.concatenate([M[v][np.isfinite(M[v])] for v in speeds])
     lo, hi = float(np.log10(allv.min())), float(np.log10(allv.max()))
-    # Sequential, not diverging.
-    #
-    # A diverging ramp centred on the behaviour boundary q_v/q_c = 1 is the
-    # right encoding only if the data falls on both sides of it. Here every
-    # cell is between 5 and 17 -- all on the attack side -- so half the ramp
-    # went unused and the contrast that matters (5.0 against 16.7) came out as
-    # two shades of the same red. One hue over the data's own range shows it.
-    # That every cell exceeds the boundary is said in the caption instead,
-    # which is where a fact that is constant across the figure belongs.
     norm = mc.Normalize(lo, hi)
     im = None
-    for ax, M, cols, title in ((axm, M1, OPPS, "opponent"),
-                               (axw, M2, WIDE, "corridor")):
-        im = ax.imshow(np.log10(M), cmap="YlOrRd", norm=norm, aspect="auto")
-        ax.set_xticks(range(len(cols))); ax.set_xticklabels(cols, fontsize=8.5)
+    for ax, v0 in zip(axes_m, speeds):
+        A = M[v0]
+        im = ax.imshow(np.log10(A), cmap="YlOrRd", norm=norm, aspect="auto")
+        ax.set_xticks(range(len(OPPS))); ax.set_xticklabels(OPPS, fontsize=8.5)
         ax.set_yticks(range(len(secs)))
         ax.set_yticklabels([Track.SECTOR_NAMES[k] for k in secs], fontsize=8.5)
-        ax.set_xlabel(title, fontsize=9)
-        for i in range(M.shape[0]):
-            for j in range(M.shape[1]):
-                if np.isfinite(M[i, j]):
-                    # White on the dark end of the ramp, ink on the light --
-                    # a fixed colour is unreadable at one end or the other.
-                    frac = (np.log10(M[i, j]) - lo) / max(hi - lo, 1e-9)
-                    ax.text(j, i, f"{M[i, j]:.1f}", ha="center", va="center",
+        ax.set_title(f"entering at {v0:.0f} m/s", fontsize=9.5, color=INK)
+        ax.set_xlabel("opponent", fontsize=9)
+        for i in range(A.shape[0]):
+            for j in range(A.shape[1]):
+                if np.isfinite(A[i, j]):
+                    frac = (np.log10(A[i, j]) - lo) / max(hi - lo, 1e-9)
+                    ax.text(j, i, f"{A[i, j]:.1f}", ha="center", va="center",
                             fontsize=9.5, fontweight="bold",
                             color="white" if frac > 0.55 else INK)
-                else:
-                    ax.text(j, i, "n/a", ha="center", va="center",
-                            fontsize=8, color="0.55", style="italic")
         for sp in ax.spines.values():
             sp.set_visible(False)
-        ax.set_xticks(np.arange(-.5, len(cols), 1), minor=True)
+        ax.set_xticks(np.arange(-.5, len(OPPS), 1), minor=True)
         ax.set_yticks(np.arange(-.5, len(secs), 1), minor=True)
         ax.grid(which="minor", color="white", lw=2.0)
         ax.tick_params(which="minor", length=0)
-    cb = fig.colorbar(im, ax=[axm, axw], fraction=0.03, pad=0.02)
+    cb = fig.colorbar(im, ax=axes_m, fraction=0.03, pad=0.02)
     cb.set_label("best $q_v/q_c$   (higher = attack harder)", fontsize=8.5)
     cb.set_ticks([lo, 0.5 * (lo + hi), hi])
     cb.set_ticklabels([f"{10**lo:.1f}", f"{10**(0.5*(lo+hi)):.1f}", f"{10**hi:.1f}"])
     cb.ax.tick_params(labelsize=8)
 
     head = d.get("headroom_pct", float("nan"))
-    nnarrow = int(np.isfinite(M2[:, 0]).sum())
-    fig.suptitle("What each racing situation asks of the cost weights. Every "
-                 "cell attacks ($q_v/q_c>1$); what differs is by how much, and "
-                 "the cells that back off\nare those facing an EQUALLY FAST "
-                 "opponent -- the only one that can block. Per-situation weights "
-                 f"beat the best single constant by {head:+.1f}%.",
-                 fontsize=9.5, color=INK, y=1.02)
-    if not nnarrow:
-        fig.text(0.5, -0.04, "The narrow column is empty: every sector of this "
-                 "track is above its own median width. ICRA Tracks 1 and 2 are "
-                 "the instrument for that axis -- the same geometry at two "
-                 "widths.", ha="center", fontsize=8.5, color="0.35")
+    fig.suptitle("What each racing situation asks of the cost weights, by direct "
+                 "search over the weights themselves. The cells that back off are "
+                 "those facing an EQUALLY\nFAST opponent -- the only one that can "
+                 "block -- and WHICH of them depends on how fast we arrive, which "
+                 "is why own speed is an axis.\nPer-situation weights beat the "
+                 f"best single constant by {head:+.1f}%; with the speed axis "
+                 "collapsed the same search finds only 3.5%.",
+                 fontsize=9.3, color=INK, y=1.06)
     fig.savefig(OUT / "strategy.png", dpi=170, bbox_inches="tight")
     print("  wrote strategy.png")
 
@@ -1378,6 +1528,8 @@ FIGS = {"online": fig_online_curve, "driving": fig_driving_sectors, "architectur
         "rti": fig_rti, "tracks": fig_tracks, "reversal": fig_reversal,
         "overtake": fig_overtake, "icra_grip": fig_icra_grip,
         "strategy": fig_strategy,
+        "plant_gap": fig_plant_gap,
+        "learning_curves": fig_learning_curves,
         "behaviour_matrix": fig_behaviour_matrix,
         "behaviour": fig_behaviour, "ltc_gate": fig_ltc_gate}
 
