@@ -35,7 +35,7 @@ import numpy as np  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from concurrent.futures import ProcessPoolExecutor  # noqa: E402
+from concurrent.futures import ProcessPoolExecutor, as_completed  # noqa: E402
 
 from mpcc_tuning.model import KinematicBicycle  # noqa: E402
 from mpcc_tuning.mpcc import MPCC, MPCCWeights  # noqa: E402
@@ -226,7 +226,12 @@ def main(argv=None):
 
     res = {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
-        for key, per_ep in ex.map(one, jobs):
+        futs = [ex.submit(one, j) for j in jobs]
+        # as_completed, not map. map yields in SUBMISSION order, so one
+        # slow first job hides every result behind it -- three runs today
+        # showed nothing for an hour while their workers were finishing.
+        for _f in as_completed(futs):
+            key, per_ep = _f.result()
             res[key] = per_ep
             lp = float(np.mean([e["laps"] for e in per_ep[-3:]]))
             print(f"    seed {key[1]} {'tuner' if key[2] else 'fixed'} "

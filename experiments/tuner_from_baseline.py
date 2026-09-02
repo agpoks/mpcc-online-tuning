@@ -35,7 +35,7 @@ import numpy as np  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from concurrent.futures import ProcessPoolExecutor  # noqa: E402
+from concurrent.futures import ProcessPoolExecutor, as_completed  # noqa: E402
 
 from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,  # noqa: E402
                              PolicyTuner, WeightPolicy, features)
@@ -132,7 +132,12 @@ def main(argv=None):
 
     res, traces = {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
-        for key, per_ep, trace in ex.map(one, jobs):
+        futs = [ex.submit(one, j) for j in jobs]
+        # as_completed, not map. map yields in SUBMISSION order, so one
+        # slow first job hides every result behind it -- three runs today
+        # showed nothing for an hour while their workers were finishing.
+        for _f in as_completed(futs):
+            key, per_ep, trace = _f.result()
             res[key] = per_ep
             if key[3] and key[2] == 0:
                 traces[key[0]] = trace
