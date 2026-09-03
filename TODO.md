@@ -1222,7 +1222,36 @@ So the two halves of that result say different things:
 "The learner collapses to a constant" was defensible while the prize was zero.
 It is a defect now, on T2.
 
-- [ ] Rerun the T2 grid on the CORRECTED corridor. The numbers above were
+- [x] **Corrected corridor: the prize doubles, 9.2% -> 18.6%** — but 92% of
+      it sits in ONE cell (straight, v0 = 2.0) where the best constant
+      `(0.50, 0.85)` covers 4.00 m, i.e. crashes, and `(0.20, 0.35)` covers
+      44.05. That is one vector surviving where another does not, not a smooth
+      adaptation gain; the other seven cells sum to 3.5 m. The wider corridor
+      also cuts both ways: more room to take a line is more room to leave the
+      track at speed with a high grip claim.
+- [x] **`q_c` swept (`--with-qc`): lowering it wins in 7 of 8 cells.**
+      `q_c = 0.30` best in five, `0.10` in two, the baseline `1.00` only in the
+      slow hairpin. Getting off the centreline helps almost everywhere — which
+      is what a racing line is, and the reference here is the corridor CENTRE.
+
+      But as a CONSTANT, low `q_c` is worse. Holding the best constant's
+      `(q_v, k_v)` and varying only `q_c`, over the 7 survivable cells:
+
+          q_c = 1.00   30.38 m   0 off-track
+          q_c = 0.30   24.94 m   3 off-track
+          q_c = 0.10   21.95 m   4 off-track
+
+      The fast setting and the safe setting are different settings, and no
+      constant can be both. **That is the case for adaptive weights in one
+      table.** Prize +11.0%, and DISTRIBUTED this time: 90-deg slow +6.9 m,
+      hairpin fast +5.6, long curve slow +4.5, straight slow +2.8, hairpin
+      slow +2.4.
+
+      Caveat: this grid dropped `k_v = 0.35`, the only survivor in the
+      straight/2.0 cell, so all 27 vectors crash there and the sweeps are not
+      comparable — the 18.6% -> 11.0% change is a grid artifact.
+- [ ] Rerun the T2 grid on the CORRECTED corridor. DONE above; kept for the
+      history of what the tunnel hid. The numbers above were
       measured inside the 58%-width tunnel (§ corridor), so the prize is a
       lower bound: more width should widen the differences between sectors,
       not narrow them. The oval is unaffected (`variable_width=False`).
