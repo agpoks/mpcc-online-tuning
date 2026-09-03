@@ -1169,6 +1169,27 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2x. Baselines re-measured on the corrected geometry — 2026-09-03
+
+T2's START and BEST were scored inside the constant-width tunnel (controller
+AND referee, § corridor). Re-measured with `width(s)` in both, three physically
+different starts each:
+
+    START  2.05  2.00  2.21   -> 2.09 +- 0.09, all clean   (was 1.92)
+    BEST   0.31x 2.99  3.19   -> 2.16 +- 1.31, NOT clean   (was 3.05)
+
+START is confirmed and slightly better with the real width. **BEST is
+fragile**: two starts beat the recorded figure (3.19 is the best T2 lap count
+measured on any stack) and the standard start crashes at 0.31. That is
+`k_v = 0.85` — fast when it holds, and now that the tunnel no longer pins the
+car to the centre, unsafe from one start in three. It was hand-tuned INSIDE
+the tunnel, which was doing part of its job for it.
+
+- [ ] **Re-find a robust BEST** — in flight: `k_v` in {0.60, 0.70, 0.75}, all
+      else as BEST, three seeds each; the target must be clean on all three.
+      The sweep in 2y already pointed this way (k_v = 0.70 best in most cells).
+- [x] START updated in `baselines.py` (2.09, clean, peak 1.57 m/s).
+
 ## 2y. There IS a prize now — and it is not on the oval — 2026-09-03
 
 `experiments/situation_demands_acados.py`. The blocking result below said the

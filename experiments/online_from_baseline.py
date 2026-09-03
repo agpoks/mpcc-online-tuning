@@ -71,7 +71,7 @@ OUT = ROOT / "results"
 
 def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
-    track_name, seed, cond, episodes, steps, alpha, grad = job
+    track_name, seed, cond, episodes, steps, alpha, grad, box, factor = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -91,8 +91,16 @@ def one(job):
 
     tu = None
     if learn:
+        # "global" is the search box ltc.py was drawn with -- q_l spans 0.05
+        # to 400 -- and the policy walks it to the corners inside one episode.
+        # "adapt" is baselines.adaptation_box: at most a factor of `factor`
+        # either way, the design the project actually describes.
+        if box == "adapt":
+            lo, hi = B.adaptation_box(track_name, factor)
+        else:
+            lo, hi = THETA_LO, THETA_HI
         pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0,
-                           THETA_LO, THETA_HI, seed=seed)
+                           lo, hi, seed=seed)
         tu = PolicyTuner(m, pol, alpha=alpha, explore=0.05, delta_clip=1.0,
                          seed=seed, trust_region=0.01)
 
@@ -156,6 +164,11 @@ def main(argv=None):
     ap.add_argument("--alpha", type=float, default=2e-3)
     ap.add_argument("--grad", choices=("envelope", "native"),
                     default="envelope")
+    ap.add_argument("--box", choices=("global", "adapt"), default="global",
+                    help="policy output box: the global search box, or a "
+                         "small adaptation box around theta_0")
+    ap.add_argument("--factor", type=float, default=2.0,
+                    help="for --box adapt: max multiplicative move per weight")
     ap.add_argument("--conditions", nargs="*",
                     default=["fixed", "fixed_noise", "tuner"],
                     choices=("fixed", "fixed_noise", "tuner"))
@@ -166,7 +179,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     ap_conds = a.conditions
-    jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad)
+    jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
+             a.box, a.factor)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces = {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:

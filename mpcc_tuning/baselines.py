@@ -111,10 +111,13 @@ START = {
              "almost all the room is upward, toward BEST's 0.50."),
     "icra_t2_raceline": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.40),
-        horizon=25, q_vref=0.20, laps=1.92, clean=True, steps=2500,
-        peak_v=1.37,
-        note="clean at 1.37 m/s against 1.87 for the best clean candidate "
-             "in the same sweep. Same OCP as BEST -- only theta differs."),
+        horizon=25, q_vref=0.20, laps=2.09, clean=True, steps=2500,
+        peak_v=1.57,
+        note="RE-MEASURED 2026-09-03 on the corrected corridor and referee "
+             "(both used a scalar half-width before -- see acados_ocp.py and "
+             "plant_scuderia.py). Three physically different starts: 2.05, "
+             "2.00, 2.21, all clean. Was 1.92 inside the tunnel. Same OCP as "
+             "BEST -- only theta differs."),
 }
 
 #: The best CLEAN result found by hand. The target, not the start.
