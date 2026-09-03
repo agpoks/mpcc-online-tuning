@@ -1169,6 +1169,65 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2y. There IS a prize now — and it is not on the oval — 2026-09-03
+
+`experiments/situation_demands_acados.py`. The blocking result below said the
+benchmark cannot reward adaptation: on the KINEMATIC stack the best weight
+vector per situation scored 77.9 m and so did the best single constant, a
+prize of exactly zero. **That no longer holds.** Same search, dynamic drift
+model, acados, 16 vectors of (q_v, k_v) x (sector x entry speed), 400 steps:
+
+    track     best constant   best per situation   prize    cells differing
+    oval           57.66 m          57.66 m        +0.0%          1 of 4
+    ICRA T2        31.35 m          34.24 m        +9.2%          7 of 8
+
+A kinematic bicycle has no grip limit, so a corner and a straight impose the
+same demands and no weight vector can do better in one than the other. With a
+friction ellipse and combined slip they can, and on T2 they do.
+
+Where the constant loses on T2:
+
+    sector        v0     best   constant    loss   best (q_v, k_v)
+    long curve   1.0    27.73     17.12    10.61     1.00, 0.85
+    straight     1.0    28.23     24.23     4.00     2.00, 0.85
+    90-degree    2.0    40.65     37.24     3.40     1.00, 0.70
+    hairpin      1.0    26.93     24.23     2.70     0.50, 0.70
+
+The pattern is physically coherent rather than noise: entered SLOWLY a sector
+wants high `q_v` and high `k_v` (accelerate, claim the grip); entered FAST it
+wants less of both (settle, do not over-claim); the hairpin wants low `q_v` at
+either speed. The long curve entered slowly is worth 62% on its own and is
+most of the prize.
+
+**Own entry speed is a situation, and a strong one.** Every cell at v0 = 2.0
+covers 37-42 m against 17-28 m at v0 = 1.0, and the preferred weights differ
+between the two within the same sector. The network already receives v/v_max
+as feature 3; the grid had simply never asked.
+
+### This reframes 2z-bis below, and the oval was the wrong track
+
+Every online-tuning experiment used the oval as its headline, and **the oval
+has a prize of exactly zero** — every cell wants (2.00, 0.85), and its one
+differing cell is degenerate (1.60 m for all sixteen vectors: entering that
+curve at 2 m/s from a standing start inside the sector cannot be survived).
+
+So the two halves of that result say different things:
+
+* **oval** — nothing to find, and the tuner destroyed a 7.94-lap baseline down
+  to 0.70. The correct behaviour here is to STAND STILL. That is the missing
+  stopping criterion, stated as a measurement rather than a suspicion.
+* **T2** — 9.2% available, and two of three seeds improved on the fixed
+  baseline (2.28 against 1.84) while one crashed.
+
+"The learner collapses to a constant" was defensible while the prize was zero.
+It is a defect now, on T2.
+
+- [ ] Rerun the T2 grid on the CORRECTED corridor. The numbers above were
+      measured inside the 58%-width tunnel (§ corridor), so the prize is a
+      lower bound: more width should widen the differences between sectors,
+      not narrow them. The oval is unaffected (`variable_width=False`).
+- [ ] Repeats. One run per cell, no seeds.
+
 ## 2z-bis. Reproduced on the shipping stack — 2026-09-03
 
 `experiments/online_from_baseline.py`, acados + dynamic drift model + STD
