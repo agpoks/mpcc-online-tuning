@@ -45,6 +45,69 @@ GROUPS = (("path", ("q_c", "q_l", "q_v")),
           ("constraint", ("d_obs", "k_v")))
 
 
+def roll_acados(track_name, episodes, steps, seed, opponents):
+    """The same rollout on the stack that ships.
+
+    ``roll`` below drives IPOPT with a KINEMATIC bicycle on the synthetic
+    plant, which is none of the three things this project runs on the car. The
+    weights it animates are therefore being learned for a different controller
+    than the one in the results. This one uses acados, the dynamic drift model,
+    the scuderia STD plant, and theta_0 from :mod:`mpcc_tuning.baselines` --
+    so the GIF and the learning curves describe the same experiment.
+    """
+    from mpcc_tuning import baselines as B
+    from mpcc_tuning.acados_mpcc import AcadosMPCC
+    from mpcc_tuning.plant_scuderia import ScuderiaPlant
+
+    track = getattr(Track, track_name)()
+    st = B.start(track_name)
+    th0 = np.asarray(st.theta(), float)
+    m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
+                   q_vref=st.q_vref, max_obstacles=1 if opponents else 0,
+                   name=f"anim_{track_name}_{seed}")
+    pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0, THETA_LO,
+                       THETA_HI, seed=seed)
+    tu = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
+                     seed=seed, trust_region=0.01)
+    rec = []
+    for ep in range(episodes):
+        opp = (Opponent(track, s0=6.0, speed=(0.0, 1.0, 2.6, 3.4)[ep % 4],
+                        radius=0.24) if opponents else None)
+        P = ScuderiaPlant(track, model="std", dt=0.05)
+        P.max_steps = steps
+        s5 = P.reset()
+        m.reset(); tu.reset()
+        if opp:
+            m.set_obstacles([opp.keepout()])
+        tr = ObstacleTracker(dt=0.05)
+        if opp:
+            tr.update(opp.pose()[:2])
+        f = features(track, s5, [opp] if opp else [],
+                     opp_speed_est=tr.speed if opp else None)
+        th, u = tu.act(f, P.state_dyn())
+        for _ in range(steps):
+            if opp:
+                opp.step(0.05)
+            s5n, r, off, done = P.step(u)
+            if opp:
+                m.set_obstacles([opp.keepout()])
+                tr.update(opp.pose()[:2])
+            rec.append((ep, float(s5n[0]), float(s5n[1]), float(s5n[3]),
+                        int(track.sector(track.wrap(float(s5n[4])))),
+                        *np.exp(th),
+                        *(opp.pose()[:2] if opp else (np.nan, np.nan))))
+            f = features(track, s5n, [opp] if opp else [],
+                         opp_speed_est=tr.speed if opp else None)
+            out = tu.learn(r, P.state_dyn(), f, off)
+            if out[0] is None:
+                break
+            th, u = out; s5 = s5n
+            if off or done:
+                break
+        print(f"    ep {ep}: {len(rec)} ticks", flush=True)
+    return track, np.array(rec)
+
+
 def roll(track_name, episodes, steps, seed, q_c, q_l, r_d, opponents):
     track = getattr(Track, track_name)()
     from examples.tune_online import Plant
@@ -190,11 +253,18 @@ def main(argv=None):
     ap.add_argument("--q-l", type=float, default=50.0)
     ap.add_argument("--r-d", type=float, default=0.1)
     ap.add_argument("--opponents", action="store_true")
+    ap.add_argument("--backend", choices=("acados", "ipopt"), default="acados",
+                    help="acados + dynamic model + STD plant (what ships), or "
+                         "the original IPOPT + kinematic + synthetic plant")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
 
-    track, R = roll(a.track, a.episodes, a.steps, a.seed, a.q_c, a.q_l, a.r_d,
-                    a.opponents)
+    if a.backend == "acados":
+        track, R = roll_acados(a.track, a.episodes, a.steps, a.seed,
+                               a.opponents)
+    else:
+        track, R = roll(a.track, a.episodes, a.steps, a.seed, a.q_c, a.q_l,
+                        a.r_d, a.opponents)
     if not len(R):
         print("  no ticks recorded"); return
     out = Path(a.out) if a.out else OUT / f"learning_{a.track}.gif"

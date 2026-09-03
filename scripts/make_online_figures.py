@@ -46,12 +46,19 @@ def _load():
     return json.loads(p.read_text())
 
 
-def _curves(d, track, learn):
+#: fixed and fixed_noise are the SAME thing without learning, so they share a
+#: hue and separate by line style; only the tuner gets its own colour.
+CONDS = (("fixed", C_FIXED, "-", "fixed (START held)"),
+         ("fixed_noise", C_FIXED, (0, (4, 2)), "fixed + exploration noise"),
+         ("tuner", C_TUNER, "-", "online tuner"))
+
+
+def _curves(d, track, cond):
     """(episodes, seeds) laps array."""
     out = []
     for k, v in d["episodes"].items():
         t, s, lr = k.rsplit("|", 2)
-        if t == track and (lr == "True") == learn:
+        if t == track and lr == cond:
             out.append([e["laps"] for e in v])
     return np.asarray(out).T if out else np.zeros((0, 0))
 
@@ -63,20 +70,16 @@ def fig_learning(d):
                              squeeze=False)
     fig.patch.set_facecolor("white")
     for ax, t in zip(axes[0], tracks):
-        for learn, c, lab in ((False, C_FIXED, "fixed (START held)"),
-                              (True, C_TUNER, "online tuner")):
-            y = _curves(d, t, learn)
+        for cond, c, ls, lab in CONDS:
+            y = _curves(d, t, cond)
             if not y.size:
                 continue
             x = np.arange(1, y.shape[0] + 1)
             m, sd = y.mean(1), y.std(1)
-            ax.fill_between(x, m - sd, m + sd, color=c, alpha=0.16, lw=0,
+            ax.fill_between(x, m - sd, m + sd, color=c, alpha=0.13, lw=0,
                             zorder=2)
-            ax.plot(x, m, color=c, lw=2.0, zorder=3, label=lab,
+            ax.plot(x, m, color=c, lw=2.0, ls=ls, zorder=3, label=lab,
                     marker="o", ms=4.5, mec="white", mew=1.0)
-            ax.annotate(lab, (x[-1], m[-1]), xytext=(5, 0),
-                        textcoords="offset points", va="center",
-                        fontsize=8.5, color=c, fontweight="bold")
         s = d["summary"][t]
         for val, c, lab, dash in ((s["start"], C_START, "START", (0, (5, 3))),
                                   (s["best"], C_BEST, "BEST (hand-tuned)",
@@ -119,7 +122,7 @@ def fig_weights(d):
             "#E03131", "#495057"]
     for ax, t in zip(axes[0], tracks):
         per = [v for k, v in d["episodes"].items()
-               if k.startswith(t + "|") and k.endswith("|True")]
+               if k.startswith(t + "|") and k.endswith("|tuner")]
         if not per:
             continue
         th = np.asarray([[e["theta"] for e in run] for run in per])  # seed,ep,w
@@ -169,13 +172,20 @@ def fig_sectors(d):
     for ax, t in zip(axes[0], tracks):
         rows = []
         for k, tr in d["traces"].items():
-            if not (k.startswith(t + "|") and k.endswith("|True")):
+            if not (k.startswith(t + "|") and k.endswith("|tuner")):
                 continue
             for ep in tr[-3:]:                     # settled behaviour only
                 rows.extend(ep)
         if not rows:
             continue
         a = np.asarray(rows, float)
+        want = 4 + len(names)
+        if a.shape[1] != want:
+            raise SystemExit(
+                f"{t}: trace rows are {a.shape[1]} wide, expected {want} "
+                f"([x, y, v, sector] + {len(names)} weights). This JSON was "
+                f"written before the trace carried position and sector -- "
+                f"rerun experiments/online_from_baseline.py.")
         sec, th = a[:, 3].astype(int), a[:, 4:]
         frac = (np.log(np.maximum(th, 1e-12)) - lo) / (hi - lo)
         secs = sorted(set(sec.tolist()))

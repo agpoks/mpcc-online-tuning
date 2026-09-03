@@ -26,6 +26,53 @@ derivations written out.
       and why the finite-difference column is the least trustworthy of the
       three -- |fd| grows as eps shrinks, which is solver tolerance divided by
       eps rather than a derivative.
+- [ ] **The gradient is dominated by one weight, by ~80x.** Measured on ICRA
+      T2 at a settled iterate, `dV*/dtheta`:
+
+          k_v   +111.475      r_a    +0.432      q_l   +0.054
+          q_v     -1.372      r_d    +0.051      q_c   +0.014
+          r_dv    +0.004      d_obs   0.000
+
+      `k_v` is two orders of magnitude above everything else, which is what a
+      reference-speed term quadratic in `(v - k_v v_ref)` should do once
+      `q_vref > 0`. Consequences worth stating rather than leaving implicit:
+      the per-component RMS normalisation in `PolicyTuner._norm` is not a
+      tidying step but the thing that stops `k_v` being the only weight that
+      moves; and normalising it *equalises* the rates, so `k_v` — the weight
+      that decides how much grip the plan claims — then moves as fast as the
+      rest. `d_obs` reads exactly 0.000 here because no obstacle was near, not
+      because it is inert.
+- [x] **Native and hand-rolled gradients agree exactly when theta is in the
+      cost alone** — cosine 1.000000, relative difference 0.0000 on all eight
+      weights, ICRA T2, acados v0.6.0. That validates the envelope form for
+      every experiment without an opponent, and confirms the native call is
+      differentiating the same problem. Note the first version of this test
+      compared them with `max_obstacles=1` but an EMPTY obstacle slot: the
+      keep-out row was present structurally and inactive numerically, so the
+      multiplier was zero and the two agreed trivially. An agreement measured
+      with the constraint inactive says nothing about the case that matters.
+- [x] **With the keep-out row ACTIVE the two gradients diverge on exactly one
+      weight, and it is the one in `g`.** ICRA T2, obstacle on the centreline,
+      closest approach 0.526 m against a 0.54 m keep-out, so the row binds:
+
+          weight     native    hand-rolled    rel.diff
+          d_obs    +51.902        0.00000       100%
+          k_v      +83.884      +83.88368         0%
+          q_c       +2.044       +2.04384         0%
+          q_v       -2.221       -2.22141         0%
+          (r_d, r_a, r_dv, q_l all 0%)     cosine 0.8505
+
+      This is the predicted signature and it is worth stating in the paper as
+      a confirmation rather than a caveat: `d_obs` is the only component of
+      theta that enters the constraints, and it is the only component that
+      differs. The envelope form returns exactly ZERO for it.
+
+      The magnitude is the point. `+51.9` is the second-largest component of
+      the whole gradient, behind only `k_v`. So during a pass the hand-rolled
+      form discards the second-largest term outright and the search direction
+      is off by cosine 0.85 — which is also why `d_obs` previously "looked
+      dead". `AcadosMPCC` now dispatches to the native gradient whenever theta
+      is a `p_global` parameter.
 - [ ] **What acados needs before it will give a parameter gradient**, since it
       is not obvious and cost a build to discover: theta must be `p_global`,
       not a stage parameter; `with_value_sens_wrt_params` must be set; and both

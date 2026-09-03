@@ -22,8 +22,16 @@ unreachable by construction.
 Three lines per track, same seeds, same plant, same OCP:
 
 ``fixed``
-    theta held at ``START`` for the whole episode. The control. Any difference
-    the tuner shows has to beat this, not beat nothing.
+    theta held at ``START`` for the whole episode, no exploration noise.
+``fixed_noise``
+    theta held at ``START``, but with the SAME actuator exploration noise the
+    tuner applies. This control exists because the first version of this
+    experiment did not have it and could not answer the obvious question: the
+    tuner perturbs steering and acceleration by 5% of their limits every tick,
+    and on a car driving at the grip limit that alone can put it off the
+    track. Without this row, "the tuner made it worse" cannot be separated
+    from "the exploration noise made it worse", and those call for opposite
+    fixes.
 ``tuner``
     TD(lambda) on the LTC policy, anchored at ``START``.
 ``BEST``
@@ -63,7 +71,8 @@ OUT = ROOT / "results"
 
 def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
-    track_name, seed, learn, episodes, steps, alpha, grad = job
+    track_name, seed, cond, episodes, steps, alpha, grad = job
+    learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
                                  PolicyTuner, WeightPolicy, features)
@@ -75,6 +84,10 @@ def one(job):
     m = AcadosMPCC(t, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, theta_global=(grad == "native"),
                    discrete=True, name=f"onl_{track_name}_{seed}_{int(learn)}")
+
+    from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
+    lim = np.array([STEER_MAX, ACCEL_MAX])
+    rng = np.random.default_rng(seed)
 
     tu = None
     if learn:
@@ -102,7 +115,11 @@ def one(job):
         ep_th = []
         for k in range(steps):
             if not learn:
-                u = m.value(P.state_dyn(), th)["u0"]
+                u = np.asarray(m.value(P.state_dyn(), th)["u0"], float).copy()
+                if cond == "fixed_noise":
+                    # identical perturbation to PolicyTuner._explore
+                    u[:2] = np.clip(u[:2] + rng.normal(0.0, 0.05, 2) * lim,
+                                    -lim, lim)
             s5n, r, off, tr = P.step(u)
             if k % 5 == 0:
                 # position and sector alongside theta: the same trace then
@@ -124,7 +141,7 @@ def one(job):
         per_ep.append(dict(ep=ep, laps=laps, off=bool(off),
                            theta=np.exp(th).tolist()))
         wtrace.append(ep_th)
-    return (track_name, seed, bool(learn)), per_ep, wtrace
+    return (track_name, seed, cond), per_ep, wtrace
 
 
 def main(argv=None):
@@ -139,12 +156,15 @@ def main(argv=None):
     ap.add_argument("--alpha", type=float, default=2e-3)
     ap.add_argument("--grad", choices=("envelope", "native"),
                     default="envelope")
+    ap.add_argument("--conditions", nargs="*",
+                    default=["fixed", "fixed_noise", "tuner"],
+                    choices=("fixed", "fixed_noise", "tuner"))
     ap.add_argument("--jobs", type=int, default=6)
     a = ap.parse_args(argv)
 
-    jobs = [(t, s, learn, a.episodes, a.steps or B.start(t).steps, a.alpha,
-             a.grad)
-            for t in a.tracks for s in range(a.seeds) for learn in (False, True)]
+    ap_conds = a.conditions
+    jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad)
+            for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces = {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
         futs = [ex.submit(one, j) for j in jobs]
@@ -153,38 +173,35 @@ def main(argv=None):
             res[key] = per_ep
             traces["|".join(map(str, key))] = wt
             last = per_ep[-1]
-            print("  [%2d/%2d] %-18s seed %d %-5s  last ep %.2f laps%s"
-                  % (i + 1, len(futs), key[0], key[1],
-                     "tuner" if key[2] else "fixed", last["laps"],
+            print("  [%2d/%2d] %-18s seed %d %-11s  last ep %.2f laps%s"
+                  % (i + 1, len(futs), key[0], key[1], key[2], last["laps"],
                      " OFF" if last["off"] else ""), flush=True)
 
     print()
     print("  Laps, mean of the last three episodes. START and BEST are the")
     print("  recorded hand-tuned anchors; the tuner has to beat FIXED, which")
     print("  is START held constant on the same seeds.")
-    print("  %-18s %8s %8s %8s %8s %10s"
-          % ("track", "START", "fixed", "tuner", "BEST", "closed"))
+    hdr = "  %-18s %8s" + " %13s" * len(ap_conds) + " %8s"
+    print(hdr % (("track", "START") + tuple(ap_conds) + ("BEST",)))
     summary = {}
     for t in a.tracks:
-        def tail(learn):
-            v = [np.mean([e["laps"] for e in res[(t, s, learn)][-3:]])
+        def tail(c):
+            v = [np.mean([e["laps"] for e in res[(t, s, c)][-3:]])
                  for s in range(a.seeds)]
             return float(np.mean(v)), float(np.std(v))
-        fm, fs = tail(False)
-        tm, ts = tail(True)
+        got = {c: tail(c) for c in ap_conds}
         st, bs = B.start(t).laps, B.best(t).laps
-        gap = bs - fm
-        closed = (tm - fm) / gap * 100 if abs(gap) > 1e-9 else float("nan")
-        summary[t] = dict(fixed=fm, fixed_sd=fs, tuner=tm, tuner_sd=ts,
-                          start=st, best=bs, closed_pct=closed)
-        print("  %-18s %8.2f %8.2f %8.2f %8.2f %9.0f%%"
-              % (t, st, fm, tm, bs, closed))
+        summary[t] = dict(start=st, best=bs,
+                          **{c: got[c][0] for c in ap_conds},
+                          **{c + "_sd": got[c][1] for c in ap_conds})
+        row = "  %-18s %8.2f" % (t, st)
+        for c in ap_conds:
+            row += " %8.2f+-%.2f" % got[c]
+        row += " %8.2f" % bs
+        print(row)
     print()
-    for t in a.tracks:
-        d = summary[t]
-        print("  %-18s fixed %.2f +-%.2f   tuner %.2f +-%.2f  (n=%d seeds)"
-              % (t, d["fixed"], d["fixed_sd"], d["tuner"], d["tuner_sd"],
-                 a.seeds))
+    print("  fixed_noise isolates the exploration noise from the learning:")
+    print("  if fixed_noise ~ tuner, the noise did it, not the policy.")
     print("  A difference smaller than the spread across seeds is not a result.")
 
     OUT.mkdir(exist_ok=True)
