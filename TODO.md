@@ -1169,6 +1169,85 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2z-bis. Reproduced on the shipping stack — 2026-09-03
+
+`experiments/online_from_baseline.py`, acados + dynamic drift model + STD
+plant, theta_0 = `baselines.START`, 3 seeds x 10 episodes, laps over the last
+three episodes:
+
+    track     START   fixed        fixed+noise    tuner          BEST
+    oval       7.90   7.94 +-0.04  7.85 +-0.02    0.70 +-0.25   12.55
+    ICRA T2    1.92   1.84 +-0.05  1.70 +-0.08    1.72 +-0.79    3.05
+
+**The two standing explanations for 2z are now ruled out.** That result was
+measured around an anchor that crashed, on a kinematic plant, with IPOPT. All
+three are fixed here — `fixed` reproduces the recorded baseline to within 0.1
+laps across three physically different starts — and the finding survives.
+
+### What the learner does, and it is the same thing on both tracks
+
+Weights as a position in the policy box, theta_0 -> end of episode 10:
+
+    oval      q_v  0.54 -> 1.00  CEILING      T2   q_v  0.46 -> 0.95
+              q_l  0.77 -> 0.00  floor             q_l  0.77 -> 0.00  floor
+              r_d  0.67 -> 0.06                    r_dv 0.50 -> 0.02  floor
+              r_a  0.42 -> 0.03  floor             q_c  0.50 -> 0.03  floor
+              r_dv 0.50 -> 0.02  floor             r_a  0.94 -> 0.37
+
+**Maximise the progress weight, delete everything that damps.** Almost all of
+the travel happens between theta_0 and the END OF EPISODE ONE; the remaining
+nine episodes only creep. This is the greedy optimum of a myopic progress
+reward and it is the documented monotone-drive-to-a-bound, now on tyres.
+
+`k_v` was NOT the runaway, which was the obvious hypothesis given that its raw
+gradient is ~80x every other weight. It is the *discriminator* instead — see
+below.
+
+### The exploration noise is not the cause, and now there is a control for it
+
+`fixed_noise` holds theta at START while applying the SAME 5% actuator
+perturbation the tuner uses. It costs **0.05 laps on the oval** (7.94 -> 7.85)
+and 0.27 on T2 (1.84 -> 1.70, the tighter track charging more for the same
+noise). The tuner costs **7.2 laps**. Without this row "the tuner made it
+worse" and "the noise made it worse" were inseparable, and they call for
+opposite fixes.
+
+### T2 is bimodal, and that is the most useful thing here
+
+    T2 tuner, laps per episode
+      seed 0  clean    2.22 2.40 2.38 2.34 2.30 2.29 2.30 2.28 2.27 2.27
+      seed 1  CRASHES  0.78x 0.29x 0.22x 0.38x 0.32x 0.34x 0.20x 0.99x 0.40x 0.41x
+      seed 2  clean    2.85 2.76 2.58 2.46 2.40 2.35 2.32 2.30 2.28 2.28
+
+Two of three seeds **beat the fixed baseline**: 2.28 against 1.84, which is
+39% of the 1.13-lap headroom to BEST. The mean of 1.72 +-0.79 describes no run
+that happened and should not be quoted; the spread is wider than the effect.
+
+The discriminator is `k_v`, the grip utilisation. The two surviving seeds
+drove it to the floor (0.001, 0.006) and kept `r_d`/`r_a` off the floor
+(0.44/0.58 and 0.38/0.48). The crashing seed left `k_v` at 0.635 and collapsed
+`r_d`/`r_a` to 0.087/0.063 — it claimed more grip while removing the damping.
+
+**Seed 2's best episode was its FIRST** (2.85, against BEST's 3.05) and it
+degraded monotonically for nine episodes to 2.28. The learner had nearly the
+hand-tuned result and tuned it away. That is the single strongest argument for
+keep-best-and-revert of the candidates below, and it is cheap to test.
+
+- [ ] **`delta_clip = 1.0` clips the crash penalty.** Reward is progress,
+      ~0.05-0.15 m per step, and a crash is -5 — clipped to -1. The one signal
+      that teaches the car not to leave the track is attenuated 5x, by a
+      parameter set for the *typical* TD error. Try clipping asymmetrically or
+      not at all on terminal transitions.
+
+### Sector-dependence: still a constant, measured not assumed
+
+Spread of each weight across sectors, last 3 episodes, in box units:
+
+    oval  (2 sectors)   largest 0.0295 (q_c), everything else < 0.015
+    T2    (4 sectors)   largest 0.0242 (r_d), everything else < 0.023
+
+The policy emits the same theta everywhere on the track. `online_sectors.png`.
+
 ## 2z. The policy degenerates to a constant — the blocking result
 
 `experiments/feature_sensitivity.py`. Train the policy, freeze it, sweep one

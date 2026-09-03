@@ -39,7 +39,8 @@ NICE = {"oval": "Oval", "icra_t2_raceline": "ICRA T2"}
 
 
 def _load():
-    p = ROOT / "results" / "online_from_baseline.json"
+    name = sys.argv[1] if len(sys.argv) > 1 else "online_all.json"
+    p = ROOT / "results" / name
     if not p.exists():
         raise SystemExit(f"no results at {p} -- run experiments/"
                          f"online_from_baseline.py first")
@@ -75,10 +76,17 @@ def fig_learning(d):
             if not y.size:
                 continue
             x = np.arange(1, y.shape[0] + 1)
-            m, sd = y.mean(1), y.std(1)
-            ax.fill_between(x, m - sd, m + sd, color=c, alpha=0.13, lw=0,
-                            zorder=2)
-            ax.plot(x, m, color=c, lw=2.0, ls=ls, zorder=3, label=lab,
+            # INDIVIDUAL seeds, not a mean and a band.
+            #
+            # The tuner is bimodal on T2 -- two seeds settle near 2.28 and one
+            # crashes at 0.41 -- and mean +- sd draws a distribution that does
+            # not exist, centred on a value no run ever took. The band was
+            # also wider than the gap it was being compared against, which is
+            # the shape of a summary that hides its own result.
+            for j in range(y.shape[1]):
+                ax.plot(x, y[:, j], color=c, lw=0.9, ls=ls, alpha=0.45,
+                        zorder=2)
+            ax.plot(x, y.mean(1), color=c, lw=2.2, ls=ls, zorder=3, label=lab,
                     marker="o", ms=4.5, mec="white", mew=1.0)
         s = d["summary"][t]
         for val, c, lab, dash in ((s["start"], C_START, "START", (0, (5, 3))),
@@ -97,10 +105,14 @@ def fig_learning(d):
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
         ax.tick_params(colors=MUT, labelsize=8.5)
-        ax.legend(frameon=False, fontsize=8.5, loc="lower right")
-    fig.suptitle("Online tuning from a verified baseline: band is +-1 sd "
-                 "across seeds", fontsize=10.5, color=MUT, x=0.01, ha="left",
-                 y=1.02)
+
+    h, l = axes[0][0].get_legend_handles_labels()
+    fig.legend(h, l, frameon=False, fontsize=9, ncol=3, loc="lower center",
+               bbox_to_anchor=(0.5, -0.06))
+    fig.suptitle("Online tuning from a verified baseline. Thick = mean, thin "
+                 "= individual seeds, because the tuner is bimodal on T2 and "
+                 "its mean describes no actual run.",
+                 fontsize=10.5, color=MUT, x=0.01, ha="left", y=1.02)
     fig.savefig(OUT / "online_learning.png", dpi=190, bbox_inches="tight",
                 facecolor="white")
     plt.close(fig)
@@ -128,30 +140,63 @@ def fig_weights(d):
         th = np.asarray([[e["theta"] for e in run] for run in per])  # seed,ep,w
         lo, hi = np.asarray(THETA_LO), np.asarray(THETA_HI)
         frac = (np.log(th) - lo) / (hi - lo)
-        m = frac.mean(0)
-        x = np.arange(1, m.shape[0] + 1)
+        # Prepend the TRUE anchor as episode 0.
+        #
+        # Ranking movement between episodes 1 and 10 hid the whole result:
+        # most of the travel happens between theta_0 and the END of episode 1,
+        # so q_v -- which is pinned at the ceiling by episode 1 and stays --
+        # was drawn faint as though it had not moved.
+        from mpcc_tuning import baselines as B
+        th0 = (np.asarray(B.start(t).theta(), float) - lo) / (hi - lo)
+        m = np.vstack([th0, frac.mean(0)])
+        x = np.arange(0, m.shape[0])
         moved = np.argsort(-np.abs(m[-1] - m[0]))
+        # Highlight a weight if it ENDS PINNED AT A BOUND, not merely if it
+        # travelled far. Being stuck on the floor or ceiling is the failure
+        # signature here -- the policy saturates and stops responding -- and
+        # q_v reaches the oval's ceiling while ranking only fourth by distance.
+        pinned = set(np.flatnonzero((m[-1] > 0.93) | (m[-1] < 0.07)).tolist())
+        big_set = pinned | set(moved[:2].tolist())
+        lab_pts = []
         for i in range(m.shape[1]):
-            big = i in moved[:3]
+            big = i in big_set
             ax.plot(x, m[:, i], color=cols[i], lw=2.0 if big else 1.0,
                     alpha=1.0 if big else 0.45, zorder=3 if big else 2)
             if big:
-                ax.annotate(names[i], (x[-1], m[-1, i]), xytext=(5, 0),
-                            textcoords="offset points", va="center",
-                            fontsize=8.5, color=cols[i], fontweight="bold")
+                tag = "%s %.2f->%.2f" % (names[i], m[0, i], m[-1, i])
+                if m[-1, i] > 0.93:
+                    tag += "  CEILING"
+                elif m[-1, i] < 0.07:
+                    tag += "  floor"
+                lab_pts.append([m[-1, i], tag, cols[i]])
+        # nudge labels apart so a cluster on the floor stays readable
+        lab_pts.sort()
+        for j in range(1, len(lab_pts)):
+            if lab_pts[j][0] - lab_pts[j - 1][0] < 0.055:
+                lab_pts[j][0] = lab_pts[j - 1][0] + 0.055
+        for yv, tag, c in lab_pts:
+            ax.annotate(tag, (x[-1], yv), xytext=(6, 0),
+                        textcoords="offset points", va="center",
+                        fontsize=8, color=c, fontweight="bold")
         ax.set_title(f"{NICE[t]} -- weights the policy actually moves",
                      fontsize=11.5, fontweight="bold", loc="left", color=INK)
-        ax.set_xlabel("episode", fontsize=9.5, color=MUT)
+        ax.axvline(0, color=MUT, lw=0.8, ls=(0, (2, 2)), zorder=1)
+        ax.text(0, 1.03, " theta_0", fontsize=8, color=MUT, va="bottom")
+        ax.set_xlabel("episode  (0 = the START anchor)", fontsize=9.5,
+                      color=MUT)
         ax.set_ylabel("position in policy box (0 = floor, 1 = ceiling)",
                       fontsize=9.5, color=MUT)
-        ax.set_ylim(-0.02, 1.02)
+        ax.set_ylim(-0.02, 1.08)
+        ax.set_xlim(-0.4, m.shape[0] + 4.4)
         ax.grid(True, color=GRID, lw=0.7, zorder=0)
         ax.set_axisbelow(True)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
         ax.tick_params(colors=MUT, labelsize=8.5)
-    fig.suptitle("Bold = the three weights that move most; faint = the rest, "
-                 "drawn so 'nothing moved' stays visible",
+    fig.suptitle("Bold = weights that end PINNED at a bound (the failure "
+                 "signature: the squash saturates and the output stops "
+                 "responding), plus the two furthest travelled. Faint = the "
+                 "rest, drawn so 'nothing moved' stays visible.",
                  fontsize=10.5, color=MUT, x=0.01, ha="left", y=1.02)
     fig.savefig(OUT / "online_weights.png", dpi=190, bbox_inches="tight",
                 facecolor="white")
@@ -189,12 +234,22 @@ def fig_sectors(d):
         sec, th = a[:, 3].astype(int), a[:, 4:]
         frac = (np.log(np.maximum(th, 1e-12)) - lo) / (hi - lo)
         secs = sorted(set(sec.tolist()))
+        # Four named sectors, four hues, never cycled: the old list wrapped at
+        # three and painted sectors 0 and 3 the same blue, which makes two
+        # categories indistinguishable. Validated (all checks pass; the
+        # orange<->green tritan dE of 7.9 sits in the floor band, so the bars
+        # also carry a white separator and a legend).
+        SEC_COLS = ("#4C6EF5", "#0CA678", "#E8590C", "#AE3EC9")
+        if len(secs) > len(SEC_COLS):
+            raise SystemExit(
+                f"{t}: {len(secs)} sectors but only {len(SEC_COLS)} hues. "
+                f"Add hues and re-validate rather than cycling them.")
         w = 0.8 / max(len(secs), 1)
         xs = np.arange(len(names))
         for j, sname in enumerate(secs):
             mu = frac[sec == sname].mean(0)
             ax.bar(xs + (j - (len(secs) - 1) / 2) * w, mu, w * 0.92,
-                   color=["#4C6EF5", "#0CA678", "#E8590C"][j % 3],
+                   color=SEC_COLS[j],
                    label=f"sector {sname}", zorder=3,
                    edgecolor="white", linewidth=0.8)
         ax.set_xticks(xs)
@@ -207,10 +262,11 @@ def fig_sectors(d):
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
         ax.tick_params(colors=MUT, labelsize=8.5)
-        ax.legend(frameon=False, fontsize=8.5, ncol=len(secs))
+        ax.legend(frameon=False, fontsize=8.5, ncol=len(secs),
+                  loc="upper center", bbox_to_anchor=(0.5, -0.10))
     fig.suptitle("Equal bars across sectors = the policy learned a CONSTANT, "
-                 "not a function of situation", fontsize=10.5, color=MUT,
-                 x=0.01, ha="left", y=1.02)
+                 "not a function of situation. That is what these show.",
+                 fontsize=10.5, color=MUT, x=0.01, ha="left", y=1.02)
     fig.savefig(OUT / "online_sectors.png", dpi=190, bbox_inches="tight",
                 facecolor="white")
     plt.close(fig)

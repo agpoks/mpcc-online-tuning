@@ -160,6 +160,9 @@ def main(argv=None):
                     default=["fixed", "fixed_noise", "tuner"],
                     choices=("fixed", "fixed_noise", "tuner"))
     ap.add_argument("--jobs", type=int, default=6)
+    ap.add_argument("--out", default="online_from_baseline.json",
+                    help="filename under results/; use a distinct name when "
+                         "running a subset of conditions to be merged later")
     a = ap.parse_args(argv)
 
     ap_conds = a.conditions
@@ -205,7 +208,7 @@ def main(argv=None):
     print("  A difference smaller than the spread across seeds is not a result.")
 
     OUT.mkdir(exist_ok=True)
-    p = OUT / "online_from_baseline.json"
+    p = OUT / a.out
     p.write_text(json.dumps(dict(
         summary=summary, weight_names=list(WEIGHT_NAMES),
         episodes={"|".join(map(str, k)): v for k, v in res.items()},
