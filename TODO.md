@@ -1169,6 +1169,51 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2w. The adaptation box makes the tuner safe, and shows the direction is structural — 2026-09-03
+
+`experiments/online_from_baseline.py --box adapt --factor 2.0`, T2, corrected
+corridor, 3 seeds x 10 episodes, laps over the last three:
+
+    START 2.09   fixed 1.81 +-0.12   fixed+noise 1.53 +-0.21   tuner 1.42 +-0.22   BEST 2.65
+
+**Nothing crashes any more** (one seed loses episode 9 and recovers). Bounded
+to a factor of two around theta_0 the learner can no longer destroy the
+baseline. It also does not improve it: most of its deficit against `fixed` is
+the exploration noise (-0.28), the rest (-0.11) is inside the seed spread.
+Safe, not yet useful.
+
+**All three seeds land on the identical corner of the box**: `q_v` at x2,
+every other weight at /2, `d_obs` the only one not pinned. Same corner as the
+global box, scaled down. The box decides whether the corner is survivable;
+it does not decide the direction.
+
+### Why the direction is always the same — this is the mechanism behind 2z
+
+The critic is the MPCC's own optimal cost, `V = -J*(theta)`. By the envelope
+theorem `dJ*/dq_i` is cost term `i` evaluated at the optimum, which is >= 0
+for every penalty weight, and `dJ*/dq_v = -sum(v_s) < 0`. So
+`dV/dtheta` points the SAME way at every state: raise `q_v`, cut every
+penalty. That is the gauge direction (scaling all penalties leaves the plan
+nearly unchanged), so following it barely alters the driving, the TD error
+does not respond, and theta drifts monotonically to whatever bound exists.
+The TD error only ever supplies the sign of a step whose direction was fixed
+before the car moved.
+
+- [ ] **The critic has to be something other than the controller's own
+      cost.** Candidates: a value learned from the actual return
+      (progress / -time), with theta entering only through the policy; or
+      keep `V = -J*` but project the gauge direction out of the gradient
+      (the gauge fix was "measured harmful" -- re-examine why; it may have
+      been removing the wrong subspace).
+- [ ] **`fixed` is not episode-invariant.** Deterministic plant, constant
+      theta, and one seed drops to 0.4 laps in episode 2 then recovers.
+      `AcadosMPCC.reset()` re-seeds the primal (`_seed`) but the multipliers
+      and the funnel globalization state persist across `P.reset()`. Reset
+      them, or the "fixed" reference line has noise that is not the car's.
+- [ ] Progress-clock run (`--clock progress`) in flight, same box, same seeds.
+      Prediction from the mechanism above: same corner, different speed of
+      arrival -- the clock changes cadence, not the direction of `dV/dtheta`.
+
 ## 2x. Baselines re-measured on the corrected geometry — 2026-09-03
 
 T2's START and BEST were scored inside the constant-width tunnel (controller
