@@ -140,7 +140,19 @@ def fig_weights(d, cond="tuner", suffix=""):
         if not per:
             continue
         th = np.asarray([[e["theta"] for e in run] for run in per])  # seed,ep,w
-        lo, hi = np.asarray(THETA_LO), np.asarray(THETA_HI)
+        # Position in the box the policy ACTUALLY had. With --box adapt that
+        # is baselines.adaptation_box, a factor of `factor` around theta_0;
+        # drawn against the global box instead, a weight sitting hard on the
+        # adaptation ceiling would read as "barely moved".
+        cfg = d.get("config") or {}
+        if cfg.get("box") == "adapt":
+            from mpcc_tuning import baselines as B
+            lo, hi = B.adaptation_box(t, float(cfg.get("factor", 2.0)))
+            box_lab = f"adaptation box (x/{cfg.get('factor', 2.0)} .. x{cfg.get('factor', 2.0)} of theta_0)"
+        else:
+            lo, hi = np.asarray(THETA_LO), np.asarray(THETA_HI)
+            box_lab = "global search box"
+        lo, hi = np.asarray(lo, float), np.asarray(hi, float)
         frac = (np.log(th) - lo) / (hi - lo)
         # Prepend the TRUE anchor as episode 0.
         #
@@ -186,7 +198,7 @@ def fig_weights(d, cond="tuner", suffix=""):
         ax.text(0, 1.03, " theta_0", fontsize=8, color=MUT, va="bottom")
         ax.set_xlabel("episode  (0 = the START anchor)", fontsize=9.5,
                       color=MUT)
-        ax.set_ylabel("position in policy box (0 = floor, 1 = ceiling)",
+        ax.set_ylabel(f"position in {box_lab}\n(0 = floor, 1 = ceiling)",
                       fontsize=9.5, color=MUT)
         ax.set_ylim(-0.02, 1.08)
         ax.set_xlim(-0.4, m.shape[0] + 4.4)
