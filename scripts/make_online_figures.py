@@ -49,9 +49,11 @@ def _load():
 
 #: fixed and fixed_noise are the SAME thing without learning, so they share a
 #: hue and separate by line style; only the tuner gets its own colour.
+C_TUNER_P = "#AE3EC9"          # the fourth hue of the validated set
 CONDS = (("fixed", C_FIXED, "-", "fixed (START held)"),
          ("fixed_noise", C_FIXED, (0, (4, 2)), "fixed + exploration noise"),
-         ("tuner", C_TUNER, "-", "online tuner"))
+         ("tuner", C_TUNER, "-", "online tuner, per tick"),
+         ("tuner_progress", C_TUNER_P, "-", "online tuner, per metre"))
 
 
 def _curves(d, track, cond):
@@ -119,7 +121,7 @@ def fig_learning(d):
     print("  wrote", OUT / "online_learning.png")
 
 
-def fig_weights(d):
+def fig_weights(d, cond="tuner", suffix=""):
     """Which weights move, in policy-box coordinates so scales are comparable."""
     from mpcc_tuning.ltc import THETA_HI, THETA_LO
     names = d["weight_names"]
@@ -134,7 +136,7 @@ def fig_weights(d):
             "#E03131", "#495057"]
     for ax, t in zip(axes[0], tracks):
         per = [v for k, v in d["episodes"].items()
-               if k.startswith(t + "|") and k.endswith("|tuner")]
+               if k.startswith(t + "|") and k.endswith("|" + cond)]
         if not per:
             continue
         th = np.asarray([[e["theta"] for e in run] for run in per])  # seed,ep,w
@@ -198,13 +200,13 @@ def fig_weights(d):
                  "responding), plus the two furthest travelled. Faint = the "
                  "rest, drawn so 'nothing moved' stays visible.",
                  fontsize=10.5, color=MUT, x=0.01, ha="left", y=1.02)
-    fig.savefig(OUT / "online_weights.png", dpi=190, bbox_inches="tight",
-                facecolor="white")
+    fig.savefig(OUT / f"online_weights{suffix}.png", dpi=190,
+                bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    print("  wrote", OUT / "online_weights.png")
+    print("  wrote", OUT / f"online_weights{suffix}.png")
 
 
-def fig_sectors(d):
+def fig_sectors(d, cond="tuner", suffix=""):
     """Does the policy emit different weights in different sectors?"""
     from mpcc_tuning.ltc import THETA_HI, THETA_LO
     names = d["weight_names"]
@@ -217,7 +219,7 @@ def fig_sectors(d):
     for ax, t in zip(axes[0], tracks):
         rows = []
         for k, tr in d["traces"].items():
-            if not (k.startswith(t + "|") and k.endswith("|tuner")):
+            if not (k.startswith(t + "|") and k.endswith("|" + cond)):
                 continue
             for ep in tr[-3:]:                     # settled behaviour only
                 rows.extend(ep)
@@ -267,10 +269,10 @@ def fig_sectors(d):
     fig.suptitle("Equal bars across sectors = the policy learned a CONSTANT, "
                  "not a function of situation. That is what these show.",
                  fontsize=10.5, color=MUT, x=0.01, ha="left", y=1.02)
-    fig.savefig(OUT / "online_sectors.png", dpi=190, bbox_inches="tight",
-                facecolor="white")
+    fig.savefig(OUT / f"online_sectors{suffix}.png", dpi=190,
+                bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    print("  wrote", OUT / "online_sectors.png")
+    print("  wrote", OUT / f"online_sectors{suffix}.png")
 
 
 if __name__ == "__main__":
@@ -278,3 +280,6 @@ if __name__ == "__main__":
     fig_learning(d)
     fig_weights(d)
     fig_sectors(d)
+    if any(k.endswith("|tuner_progress") for k in d["episodes"]):
+        fig_weights(d, "tuner_progress", "_progress")
+        fig_sectors(d, "tuner_progress", "_progress")

@@ -130,10 +130,20 @@ BEST = {
              "T2 wants 0.85, which is the situation-dependence this project "
              "is about, visible in hand-tuned data before any learning."),
     "icra_t2_raceline": Setting(
-        weights=dict(q_c=1.0, q_l=50.0, q_v=1.0, r_d=0.5, r_a=6.0, k_v=0.85),
-        horizon=25, q_vref=0.20, laps=3.05, clean=True, steps=2500,
-        peak_v=1.87,
-        note="k_v = 0.85, the opposite of the oval's preference."),
+        weights=dict(q_c=1.0, q_l=50.0, q_v=1.0, r_d=0.5, r_a=6.0, k_v=0.60),
+        horizon=25, q_vref=0.20, laps=2.65, clean=True, steps=2500,
+        peak_v=2.70,
+        note="RE-TUNED 2026-09-03 on the corrected corridor and referee. The "
+             "previous BEST (k_v = 0.85, 3.05 laps) was hand-tuned inside the "
+             "constant-width tunnel, which held the car near the centre "
+             "regardless of the weights; with the real width it is FRAGILE -- "
+             "2.99 and 3.19 from two starts, 0.31 and off the track from the "
+             "third. k_v is the grip claim, and the pattern is monotone: 0.85 "
+             "and 0.75 crash from 1-2 of 3 starts, 0.70 from one, 0.60 from "
+             "none (2.50, 2.75, 2.69). The target is the highest claim that "
+             "survives every start, not the highest lap count seen once. Note "
+             "the oval wants 0.50 -- still the opposite direction from START's "
+             "0.40 here, which is what the tuner has to find."),
 }
 
 #: Horizon is part of the baseline, not a global constant. Measured: N=40 gives

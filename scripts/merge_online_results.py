@@ -29,7 +29,12 @@ def main(argv):
         raise SystemExit("usage: merge_online_results.py OUT.json IN.json ...")
     out = RES / argv[1]
     eps, traces, names, cfg = {}, {}, None, None
-    for name in argv[2:]:
+    for spec in argv[2:]:
+        # "file.json" or "file.json:old=new" to rename a condition on the
+        # way in -- the progress-clock run writes its learner as "tuner" like
+        # every other run, and it has to sit beside the time-clock "tuner"
+        name, _, ren = spec.partition(":")
+        rename = dict([ren.split("=")]) if ren else {}
         p = RES / name
         if not p.exists():
             print(f"  skipping {p} -- not found")
@@ -37,11 +42,16 @@ def main(argv):
         d = json.loads(p.read_text())
         names = names or d.get("weight_names")
         cfg = cfg or d.get("config")
+        def _key(k):
+            k = _norm(k)
+            t, s_, c = k.rsplit("|", 2)
+            return f"{t}|{s_}|{rename.get(c, c)}"
         for k, v in d["episodes"].items():
-            eps[_norm(k)] = v
+            eps[_key(k)] = v
         for k, v in d.get("traces", {}).items():
-            traces[_norm(k)] = v
-        print(f"  {p.name}: {len(d['episodes'])} runs")
+            traces[_key(k)] = v
+        print(f"  {p.name}: {len(d['episodes'])} runs"
+              + (f"  ({ren})" if ren else ""))
 
     conds = sorted({k.rsplit('|', 1)[1] for k in eps})
     tracks = sorted({k.split('|')[0] for k in eps})
