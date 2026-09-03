@@ -3,6 +3,51 @@
 Ordered by what unblocks a result. Everything already measured lives in
 `docs/source/`; this file is only what is **not** done.
 
+## FOR THE PAPER — the gradient and the equations must be written up
+
+All of the following is implemented and measured but exists only as code
+comments and TODO entries. It belongs in the Overleaf paper, with the
+derivations written out.
+
+- [ ] **The envelope gradient, stated properly.** `dJ*/dtheta = dL/dtheta` at
+      the optimum, and why the multipliers drop out when theta is in the cost
+      alone. Include the case where they do NOT: `d_obs` in the keep-out row
+      and `k_v` in the grip row put theta into `g`, and the honest gradient
+      then needs `lambda^T dg/dtheta`.
+- [ ] **Correct the CBF section.** It currently claims "gradient unaffected --
+      theta stays out of g". That is FALSE as written: `k_v` is theta[7] and it
+      sits in the grip row. Measured: the analytic gradient goes wrong exactly
+      when that row is active.
+- [ ] **The acados gradient, three ways, with the measurement.** dV*/dtheta at
+      the same state:
+          acados native (p_global)   q_v -1.891   r_d +0.296
+          hand-rolled envelope       q_v -1.836   r_d +0.447
+          finite differences         q_v -1.886   r_d +0.004
+      and why the finite-difference column is the least trustworthy of the
+      three -- |fd| grows as eps shrinks, which is solver tolerance divided by
+      eps rather than a derivative.
+- [ ] **What acados needs before it will give a parameter gradient**, since it
+      is not obvious and cost a build to discover: theta must be `p_global`,
+      not a stage parameter; `with_value_sens_wrt_params` must be set; and both
+      sensitivity flags raise "only compatible with DISCRETE dynamics", so the
+      model must use `disc_dyn_expr` rather than ERK. Using the same
+      `step_sym` for that also removes the last integrator difference between
+      the two backends.
+- [ ] **The MPCC as a value function.** `V(s) = -J*(s)`, `Q(s,a)` as the same
+      NLP with `u_0` pinned, and `Q(s, pi(s)) = V(s)` -- which is why the
+      common path costs no second solve. State the gauge freedom too: scaling
+      all six cost weights by `c` scales `V` by `c` and leaves the plan
+      unchanged, and the gauge fix built to remove it was MEASURED HARMFUL.
+- [ ] **The dynamic model, with its parameters and its known gaps.** Pacejka
+      with the E term, the tanh blend, combined slip on the driven axle, the
+      wheel-inertia gain `m/(m + 2 I_w/R_w^2) = 0.671`, and the steering servo
+      as a state. Gaps to state rather than hide: no combined-slip `G_y` from
+      longitudinal slip, no load transfer, no front longitudinal yaw moment.
+- [ ] **The five model faults as a methods contribution.** Each was found by
+      rolling plant and model forward from the same state and diffing, not by
+      inspection -- and the equations were correct throughout. That is a
+      transferable lesson about validating a prediction model.
+
 ## MUST HAVE — acados, because this has to run on the car
 
 **The target is a real-time MPCC on the physical car, via acados code
@@ -592,16 +637,57 @@ same point. Every adaptation result is a deviation from a bad baseline, and
 that is a more likely explanation for weak adaptation than any of the five
 mechanisms investigated on 2026-08-31/09-01.
 
-- [ ] **Establish a stable θ₀ per track, verified to complete laps**, before any
-      further learner work. Not the fastest — the one that finishes.
-      Candidates measured so far: circuit `q_c=1.0` horizon 12 (92 m, clean);
-      ICRA T1 `q_c=0.1, q_l=50, r_d=0.1` horizon 40 (125 m, 1.6 laps);
-      ICRA 2025 same weights horizon 50 (148 m, clean).
-- [ ] **Re-anchor the policy on it**, and re-derive `THETA_LO`/`THETA_HI` around
-      the new θ₀ so the spans mean something. The current box was drawn around
-      the old anchor and put two weights on their own ceilings (§ dead span).
+- [x] **Establish a stable θ₀ per track, verified to complete laps** — DONE
+      2026-09-03, in `mpcc_tuning/baselines.py`, on the solver that ships
+      (acados `fqp_soft_funnel`, dynamic drift model, STD plant):
+
+      | track | START (θ₀) | BEST (hand-tuned) | reachable headroom |
+      |---|---|---|---|
+      | oval | 7.90 laps clean, peak 2.05 m/s | 12.55 clean | 4.65 laps |
+      | ICRA T2 | 1.92 laps clean, peak 1.37 m/s | 3.05 clean | 1.13 laps |
+
+      Both entries per track are recorded, because **the gap between them is
+      the experiment**: START is what the tuner begins from, BEST is what hand
+      tuning achieved, and "did the learner improve things" then has an answer
+      rather than an impression.
+
+      Two traps found while establishing it, both of which would have made the
+      result unreadable rather than merely wrong:
+
+      - **`q_vref` is not a weight.** It is a `build_ocp` argument, so the
+        policy cannot emit it. The first version of the table had the oval
+        going 0.00 → 0.05 and T2 0.00 → 0.20 between START and BEST, putting
+        *all* of the oval's recorded headroom behind a constant the learner
+        has no access to. `baselines.check()` now refuses to import if START
+        and BEST ever stop being the same OCP.
+      - **An anchor outside the policy box.** The slowest clean oval setting
+        was `k_v = 0.25`, against a floor of 0.30 — −12.4% of the log span, so
+        `WeightPolicy` could not emit θ₀ at all. `check_in_policy_box()` now
+        enforces strict interiority for both entries.
+
+      ICRA T1 is deliberately absent: same geometry as T2. It was measured
+      anyway, and the negative is worth keeping — **`q_vref` does not help
+      T1** (2.01 laps clean with it against 2.05 without, and the 2.56-lap
+      setting leaves the track), the opposite of its effect on T2.
+- [ ] **Re-derive `THETA_LO`/`THETA_HI` around the new θ₀** so the spans mean
+      something. Partly checked: every weight of both anchors is now strictly
+      interior, and `k_v = 0.35` on the oval sits at 10.5% of span with almost
+      all its room upward, which is where BEST (0.50) lies. Still open:
+      **`r_a = 6.0` on T2 sits at 94.5% of its log span**, so upward revision
+      is compressed into the last 0.51 of 9.21 log units. Widen the ceiling
+      or accept that `r_a` is effectively one-directional there.
 - [ ] **Only then** re-run the adaptation experiments. Everything measured
       before this is a deviation from a baseline that does not drive.
+      *In progress 2026-09-03:* `experiments/online_from_baseline.py` runs the
+      TD(λ) policy from START on acados + the dynamic model, against a fixed
+      control on the same seeds, with `BEST` as a recorded reference line.
+      Figures: `scripts/make_online_figures.py`.
+- [x] **Seeds must differ physically.** `ScuderiaPlant.reset()` accepted `s0`
+      and ignored it — every reset placed the car at `center[0]` with `s = 0`,
+      so on a deterministic plant every "repeat" was byte-identical and a
+      spread of exactly zero was twice reported as agreement between runs.
+      `reset(s0, v0)` now actually moves the start point and entry speed
+      (verified: shifted starts land on the centreline, lateral = 0).
 - [ ] The horizon belongs in the baseline too: 12 on the synthetic tracks, 40–50
       on the competition ones. It is a structural parameter of the OCP, not
       something the weight policy can adapt, and 0.6 s of lookahead cannot see

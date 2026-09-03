@@ -141,15 +141,27 @@ class ScuderiaPlant:
                          v * np.sin(beta), r, float(x[2])])
 
     # -- interface --------------------------------------------------------
-    def reset(self, s0: float = 0.0):
-        p = self.track.center[0]
-        nxt = self.track.center[1]
-        psi = float(np.arctan2(nxt[1] - p[1], nxt[0] - p[0]))
-        poses = self._jnp.asarray([[p[0], p[1], psi]])
+    def reset(self, s0: float = 0.0, v0: float = 1.0):
+        # s0 used to be accepted and then ignored: every reset placed the car
+        # at center[0] with self.s = 0. On a deterministic plant that makes
+        # every "repeat" byte-identical, and a spread of zero across seeds was
+        # reported twice as agreement between runs. Seeds have to differ
+        # PHYSICALLY -- reseeding an RNG the plant does not consult perturbs
+        # nothing -- so s0 now actually moves the start, and v0 the entry
+        # speed.
+        s0 = float(s0) % self.track.length
+        if s0 == 0.0:
+            p = self.track.center[0]
+            nxt = self.track.center[1]
+            psi = float(np.arctan2(nxt[1] - p[1], nxt[0] - p[0]))
+        else:
+            p = np.asarray(self.track.pos(s0), float).ravel()
+            psi = float(self.track.tangent_angle(s0))
+        poses = self._jnp.asarray([[float(p[0]), float(p[1]), psi]])
         _obs, self._state = self.env.reset(self._split(), poses)
         # start rolling, so the first solves are not from a standstill
         self._state = self._state.replace(
-            x=self._state.x.at[:, 3].set(1.0))
+            x=self._state.x.at[:, 3].set(float(v0)))
         # ...and spin the WHEELS to match. STD carries omega_f, omega_r as
         # states 7 and 8 (STD4W four of them), and env.reset leaves them at
         # zero. Setting the body speed alone therefore started every episode
@@ -162,12 +174,14 @@ class ScuderiaPlant:
         # omega = v / R_w, with R_w = 0.031 m from rc10_default.yaml.
         n = self._state.x.shape[1]
         if n > 7:
-            w0 = 1.0 / 0.031
+            w0 = float(v0) / 0.031
             for i in range(7, n):
                 self._state = self._state.replace(
                     x=self._state.x.at[:, i].set(w0))
         self._x = np.asarray(self._state.x[0])
-        self.s = 0.0
+        # progress starts where the car does, so lap counts measured as
+        # (s_end - s_start) / length stay correct for a shifted start
+        self.s = s0
         self.t = 0
         self.trace = [self._x.copy()]
         return self.state5()

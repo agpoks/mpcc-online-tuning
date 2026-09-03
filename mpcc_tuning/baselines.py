@@ -100,12 +100,15 @@ QVREF = {"oval": 0.05, "icra_t2_raceline": 0.20}
 #: headroom as possible: an improvement should be visible rather than marginal.
 START = {
     "oval": Setting(
-        weights=dict(q_c=1.0, q_l=50.0, q_v=0.30, r_d=1.0, r_a=0.05, k_v=0.25),
-        horizon=12, q_vref=0.05, laps=5.79, clean=True, steps=2500,
-        peak_v=1.56,
-        note="clean but timid: peaks at 1.56 m/s where the tuned setting "
-             "reaches 2.9. k_v=0.25 asks for a quarter of the reference "
-             "speed, and r_d=1.0 damps the steering on top of that."),
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.30, r_d=0.5, r_a=0.05, k_v=0.35),
+        horizon=12, q_vref=0.05, laps=7.90, clean=True, steps=2500,
+        peak_v=2.05,
+        note="clean but timid: peaks at 2.05 m/s where the tuned setting "
+             "reaches 2.90. NOT the slowest clean setting measured -- that "
+             "was 5.79 laps at k_v=0.25, which is BELOW the policy's floor "
+             "of 0.30 and so cannot be emitted at all. k_v=0.35 sits at "
+             "10.5% of its log span, which is where an anchor wants to be: "
+             "almost all the room is upward, toward BEST's 0.50."),
     "icra_t2_raceline": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.40),
         horizon=25, q_vref=0.20, laps=1.92, clean=True, steps=2500,
@@ -162,6 +165,36 @@ def headroom(track: str) -> float:
     return BEST[track].laps - START[track].laps
 
 
+def check_in_policy_box() -> None:
+    """Every START must be an anchor the policy can actually emit.
+
+    :class:`~mpcc_tuning.ltc.WeightPolicy` anchors at theta0 and spans
+    ``hi - theta0`` above and ``theta0 - lo`` below, so an anchor outside the
+    box is not merely clipped -- it is unreachable, and one exactly ON a bound
+    has zero span on that side and a structurally zero gradient there.
+
+    The first oval START written to this file failed exactly that: k_v = 0.25
+    against a floor of 0.30, at -12.4% of the log span. The tuner would have
+    started from a weight vector its own policy could not represent.
+    """
+    import numpy as np
+    from mpcc_tuning.ltc import THETA_HI, THETA_LO
+    from mpcc_tuning.mpcc import WEIGHT_NAMES
+    for t in TRACKS:
+        for tag, st in (("START", START[t]), ("BEST", BEST[t])):
+            th = np.asarray(st.theta(), float)
+            bad = np.flatnonzero((th <= THETA_LO) | (th >= THETA_HI))
+            if bad.size:
+                names = ", ".join(
+                    f"{WEIGHT_NAMES[i]}={np.exp(th[i]):.3g} not strictly in "
+                    f"[{np.exp(THETA_LO[i]):.3g}, {np.exp(THETA_HI[i]):.3g}]"
+                    for i in bad)
+                raise ValueError(
+                    f"{t} {tag}: {names}. The policy anchors at theta0 with "
+                    f"span hi-theta0 above and theta0-lo below; an anchor on "
+                    f"or outside a bound has no span on that side.")
+
+
 def check() -> None:
     """Fail loudly if START and BEST ever stop being the same OCP.
 
@@ -192,6 +225,7 @@ def check() -> None:
             raise ValueError(
                 f"{t}: BEST ({b.laps}) is not better than START ({a.laps}); "
                 f"there is nothing for the tuner to find.")
+    check_in_policy_box()
 
 
 check()

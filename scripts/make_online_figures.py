@@ -1,0 +1,214 @@
+"""Figures for the online-tuning experiment.
+
+Reads ``results/online_from_baseline.json`` and draws three things:
+
+1. **learning curves** -- laps per episode, tuner against the fixed control,
+   with START and BEST as reference lines. The control is the point: an
+   improving curve on its own says nothing if the fixed baseline improves too
+   (it cannot here, but the reader should be able to see that rather than
+   take it on trust).
+2. **weight trajectories** -- which of the eight weights actually move, drawn
+   as position in the policy's own log box so weights of wildly different
+   scale are comparable on one axis.
+3. **weights by sector** -- the situation-dependence claim: does the policy
+   emit different weights in corners than on straights?
+
+Palette is the repo's existing categorical order, validated: all checks pass,
+with orange<->green tritan dE 7.9 in the floor band, so those two are
+direct-labelled dashed references rather than relying on hue alone.
+"""
+import json
+import sys
+from pathlib import Path
+
+import matplotlib
+import numpy as np
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+OUT = ROOT / "paper" / "figures"
+OUT.mkdir(parents=True, exist_ok=True)
+
+INK, MUT, GRID = "#212529", "#868E96", "#DEE2E6"
+C_FIXED, C_TUNER = "#868E96", "#4C6EF5"
+C_BEST, C_START = "#0CA678", "#E8590C"
+NICE = {"oval": "Oval", "icra_t2_raceline": "ICRA T2"}
+
+
+def _load():
+    p = ROOT / "results" / "online_from_baseline.json"
+    if not p.exists():
+        raise SystemExit(f"no results at {p} -- run experiments/"
+                         f"online_from_baseline.py first")
+    return json.loads(p.read_text())
+
+
+def _curves(d, track, learn):
+    """(episodes, seeds) laps array."""
+    out = []
+    for k, v in d["episodes"].items():
+        t, s, lr = k.rsplit("|", 2)
+        if t == track and (lr == "True") == learn:
+            out.append([e["laps"] for e in v])
+    return np.asarray(out).T if out else np.zeros((0, 0))
+
+
+def fig_learning(d):
+    tracks = [t for t in NICE if any(k.startswith(t + "|")
+                                     for k in d["episodes"])]
+    fig, axes = plt.subplots(1, len(tracks), figsize=(5.9 * len(tracks), 4.5),
+                             squeeze=False)
+    fig.patch.set_facecolor("white")
+    for ax, t in zip(axes[0], tracks):
+        for learn, c, lab in ((False, C_FIXED, "fixed (START held)"),
+                              (True, C_TUNER, "online tuner")):
+            y = _curves(d, t, learn)
+            if not y.size:
+                continue
+            x = np.arange(1, y.shape[0] + 1)
+            m, sd = y.mean(1), y.std(1)
+            ax.fill_between(x, m - sd, m + sd, color=c, alpha=0.16, lw=0,
+                            zorder=2)
+            ax.plot(x, m, color=c, lw=2.0, zorder=3, label=lab,
+                    marker="o", ms=4.5, mec="white", mew=1.0)
+            ax.annotate(lab, (x[-1], m[-1]), xytext=(5, 0),
+                        textcoords="offset points", va="center",
+                        fontsize=8.5, color=c, fontweight="bold")
+        s = d["summary"][t]
+        for val, c, lab, dash in ((s["start"], C_START, "START", (0, (5, 3))),
+                                  (s["best"], C_BEST, "BEST (hand-tuned)",
+                                   (0, (1.5, 2)))):
+            ax.axhline(val, color=c, lw=1.5, ls=dash, zorder=1)
+            ax.text(0.985, val, f" {lab} {val:.2f}", transform=
+                    ax.get_yaxis_transform(), ha="right", va="bottom",
+                    fontsize=8.5, color=c, fontweight="bold")
+        ax.set_title(NICE[t], fontsize=11.5, fontweight="bold", loc="left",
+                     color=INK)
+        ax.set_xlabel("episode", fontsize=9.5, color=MUT)
+        ax.set_ylabel("laps completed", fontsize=9.5, color=MUT)
+        ax.grid(True, color=GRID, lw=0.7, zorder=0)
+        ax.set_axisbelow(True)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+        ax.tick_params(colors=MUT, labelsize=8.5)
+        ax.legend(frameon=False, fontsize=8.5, loc="lower right")
+    fig.suptitle("Online tuning from a verified baseline: band is +-1 sd "
+                 "across seeds", fontsize=10.5, color=MUT, x=0.01, ha="left",
+                 y=1.02)
+    fig.savefig(OUT / "online_learning.png", dpi=190, bbox_inches="tight",
+                facecolor="white")
+    plt.close(fig)
+    print("  wrote", OUT / "online_learning.png")
+
+
+def fig_weights(d):
+    """Which weights move, in policy-box coordinates so scales are comparable."""
+    from mpcc_tuning.ltc import THETA_HI, THETA_LO
+    names = d["weight_names"]
+    tracks = [t for t in NICE if any(k.startswith(t + "|")
+                                     for k in d["episodes"])]
+    fig, axes = plt.subplots(1, len(tracks), figsize=(5.9 * len(tracks), 4.5),
+                             squeeze=False)
+    fig.patch.set_facecolor("white")
+    # sequential-by-index would imply an order the weights do not have; these
+    # are identities, so a fixed categorical order it is
+    cols = ["#4C6EF5", "#0CA678", "#E8590C", "#AE3EC9", "#1098AD", "#F59F00",
+            "#E03131", "#495057"]
+    for ax, t in zip(axes[0], tracks):
+        per = [v for k, v in d["episodes"].items()
+               if k.startswith(t + "|") and k.endswith("|True")]
+        if not per:
+            continue
+        th = np.asarray([[e["theta"] for e in run] for run in per])  # seed,ep,w
+        lo, hi = np.asarray(THETA_LO), np.asarray(THETA_HI)
+        frac = (np.log(th) - lo) / (hi - lo)
+        m = frac.mean(0)
+        x = np.arange(1, m.shape[0] + 1)
+        moved = np.argsort(-np.abs(m[-1] - m[0]))
+        for i in range(m.shape[1]):
+            big = i in moved[:3]
+            ax.plot(x, m[:, i], color=cols[i], lw=2.0 if big else 1.0,
+                    alpha=1.0 if big else 0.45, zorder=3 if big else 2)
+            if big:
+                ax.annotate(names[i], (x[-1], m[-1, i]), xytext=(5, 0),
+                            textcoords="offset points", va="center",
+                            fontsize=8.5, color=cols[i], fontweight="bold")
+        ax.set_title(f"{NICE[t]} -- weights the policy actually moves",
+                     fontsize=11.5, fontweight="bold", loc="left", color=INK)
+        ax.set_xlabel("episode", fontsize=9.5, color=MUT)
+        ax.set_ylabel("position in policy box (0 = floor, 1 = ceiling)",
+                      fontsize=9.5, color=MUT)
+        ax.set_ylim(-0.02, 1.02)
+        ax.grid(True, color=GRID, lw=0.7, zorder=0)
+        ax.set_axisbelow(True)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+        ax.tick_params(colors=MUT, labelsize=8.5)
+    fig.suptitle("Bold = the three weights that move most; faint = the rest, "
+                 "drawn so 'nothing moved' stays visible",
+                 fontsize=10.5, color=MUT, x=0.01, ha="left", y=1.02)
+    fig.savefig(OUT / "online_weights.png", dpi=190, bbox_inches="tight",
+                facecolor="white")
+    plt.close(fig)
+    print("  wrote", OUT / "online_weights.png")
+
+
+def fig_sectors(d):
+    """Does the policy emit different weights in different sectors?"""
+    from mpcc_tuning.ltc import THETA_HI, THETA_LO
+    names = d["weight_names"]
+    tracks = [t for t in NICE if any(k.startswith(t + "|")
+                                     for k in d["episodes"])]
+    fig, axes = plt.subplots(1, len(tracks), figsize=(5.9 * len(tracks), 4.2),
+                             squeeze=False)
+    fig.patch.set_facecolor("white")
+    lo, hi = np.asarray(THETA_LO), np.asarray(THETA_HI)
+    for ax, t in zip(axes[0], tracks):
+        rows = []
+        for k, tr in d["traces"].items():
+            if not (k.startswith(t + "|") and k.endswith("|True")):
+                continue
+            for ep in tr[-3:]:                     # settled behaviour only
+                rows.extend(ep)
+        if not rows:
+            continue
+        a = np.asarray(rows, float)
+        sec, th = a[:, 3].astype(int), a[:, 4:]
+        frac = (np.log(np.maximum(th, 1e-12)) - lo) / (hi - lo)
+        secs = sorted(set(sec.tolist()))
+        w = 0.8 / max(len(secs), 1)
+        xs = np.arange(len(names))
+        for j, sname in enumerate(secs):
+            mu = frac[sec == sname].mean(0)
+            ax.bar(xs + (j - (len(secs) - 1) / 2) * w, mu, w * 0.92,
+                   color=["#4C6EF5", "#0CA678", "#E8590C"][j % 3],
+                   label=f"sector {sname}", zorder=3,
+                   edgecolor="white", linewidth=0.8)
+        ax.set_xticks(xs)
+        ax.set_xticklabels(names, fontsize=8.5, color=INK)
+        ax.set_title(f"{NICE[t]} -- weights by sector, last 3 episodes",
+                     fontsize=11.5, fontweight="bold", loc="left", color=INK)
+        ax.set_ylabel("mean position in policy box", fontsize=9.5, color=MUT)
+        ax.grid(True, axis="y", color=GRID, lw=0.7, zorder=0)
+        ax.set_axisbelow(True)
+        for sp in ("top", "right"):
+            ax.spines[sp].set_visible(False)
+        ax.tick_params(colors=MUT, labelsize=8.5)
+        ax.legend(frameon=False, fontsize=8.5, ncol=len(secs))
+    fig.suptitle("Equal bars across sectors = the policy learned a CONSTANT, "
+                 "not a function of situation", fontsize=10.5, color=MUT,
+                 x=0.01, ha="left", y=1.02)
+    fig.savefig(OUT / "online_sectors.png", dpi=190, bbox_inches="tight",
+                facecolor="white")
+    plt.close(fig)
+    print("  wrote", OUT / "online_sectors.png")
+
+
+if __name__ == "__main__":
+    d = _load()
+    fig_learning(d)
+    fig_weights(d)
+    fig_sectors(d)

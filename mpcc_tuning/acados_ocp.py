@@ -56,7 +56,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from mpcc_tuning.model import (ACCEL_MAX, DRAG, SPEED_MAX, STEER_MAX,
+from mpcc_tuning.model import (A_LAT_MAX as A_LAT_MAX_ACA,
+                               ACCEL_MAX, DRAG, SPEED_MAX, STEER_MAX,
                                WHEELBASE, DynamicBicycle, _smax, _sabs)
 from mpcc_tuning.mpcc import WEIGHT_NAMES
 
@@ -65,11 +66,14 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
               a_lat_grip: float = 6.0 * 1.0,
               soft_corridor: bool = True,
               lin_corridor: bool = False,
+              theta_global: bool = False,
+              discrete: bool = False,
               car_half_width: float = 0.12, max_obstacles: int = 0,
               obs_margin: float = 0.15, spline_mode: str = "parameter",
               obs_shape: str = "circle", car_half_length: float = 0.285,
               name: str = "mpcc_tuning", vehicle: str = "kinematic",
               q_friction: float = 50.0, q_slip: float = 50.0,
+              q_vref: float = 0.0,
               vy_soft: float = 0.5, friction_peak: float = 24.29,
               friction_peak_long: float = 23.186):
     """The MPCC as an :class:`AcadosOcp`.
@@ -127,11 +131,38 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         f = ca.vertcat(v * ca.cos(psi), v * ca.sin(psi),
                        v / WHEELBASE * ca.tan(delta), a - DRAG * v, v_s)
     model.x, model.u, model.xdot = x, u, xdot
-    model.f_expl_expr = f
-    model.f_impl_expr = xdot - f
+    if discrete:
+        # DISCRETE dynamics, using the SAME step_sym the CasADi backend uses.
+        #
+        # Two reasons, and the second is the one that matters. It removes the
+        # last integrator difference between the backends -- ERK-4 against a
+        # hand-rolled RK4 was equivalent to 1e-11 but not identical. And
+        # acados' parameter sensitivities are gated on it:
+        # with_value_sens_wrt_params raises "only compatible with DISCRETE
+        # dynamics", so dV*/dtheta from the solver itself is unavailable with
+        # ERK. That gradient is what lets the tuner run on acados at all.
+        if dyn:
+            xd_n = _m.step_sym(ca.vertcat(x[0:4], x[5:]), u[0:2], dt)
+            model.disc_dyn_expr = ca.vertcat(
+                xd_n[0:4], x[4] + v_s * dt, xd_n[4:])
+        else:
+            k1 = f
+            xm = x + dt / 2 * k1
+            model.disc_dyn_expr = x + dt * ca.substitute(f, x, xm)
+    else:
+        model.f_expl_expr = f
+        model.f_impl_expr = xdot - f
 
     n_th = len(WEIGHT_NAMES)
     theta = ca.SX.sym("theta", n_th)          # the learnable log weights
+    # theta as a GLOBAL parameter, not a per-stage one, when the build asks for
+    # it. It is global in fact -- the same weights at every shooting node --
+    # and declaring it so unlocks acados' own sensitivity machinery:
+    # eval_and_get_optimal_value_gradient(with_respect_to="p_global") returns
+    # dV*/dtheta computed by the solver, including the constraint multiplier
+    # term that a hand-written envelope form has to assume away. That term is
+    # exactly what is needed once d_obs enters the keep-out row.
+    global_theta = bool(theta_global)
     if spline_mode == "parameter":
         ref = ca.SX.sym("ref", 3)             # ref_x, ref_y, path heading
         ref_x, ref_y, phi = ref[0], ref[1], ref[2]
@@ -162,6 +193,31 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     # EXTERNAL, so the linear progress term survives -- see the module note.
     stage = (q_c * e_c ** 2 + q_l * e_l ** 2 - q_v * v_s * dt
              + r_d * delta ** 2 + r_a * a ** 2 + r_dv * (v_s - v) ** 2)
+    if dyn and q_vref > 0.0 and spline_mode == "spline":
+        # A curvature-derived reference speed, so k_v has a path to the cost.
+        #
+        # k_v is the fraction of the grip-limited corner speed the car aims
+        # for -- exactly the quantity that should differ between a wide fast
+        # track and a tight one, and therefore exactly what a situation-
+        # dependent tuner should be able to move. Without this term it has NO
+        # consumer in the acados problem: the grip row is off for dynamic
+        # models (it double-counts the tyres) and this cost lived only in the
+        # CasADi backend. Measured: dV*/dk_v was exactly 0.000, and laps were
+        # identical to two decimals across k_v = 0.50 / 0.85 / 1.20.
+        #
+        # The profile is swept forward and backward under the longitudinal
+        # limit, so the reference falls BEFORE a corner rather than inside it.
+        from mpcc_tuning.speed import track_speed_profile
+        _n, _pad = 400, 4
+        _s, _v = track_speed_profile(track, n=_n, a_lat_max=A_LAT_MAX_ACA,
+                                     grip=1.0, v_cap=SPEED_MAX)
+        _ds = float(_s[1] - _s[0])
+        _idx = np.concatenate([np.arange(-_pad, 0), np.arange(_n),
+                               np.arange(_n, _n + _pad)])
+        _vref = ca.interpolant("vref_a", "bspline", [(_idx * _ds).tolist()],
+                               _v[_idx % _n].tolist())
+        stage = stage + q_vref * (v - k_v * _vref(track.wrap(s))) ** 2
+
     if dyn and (q_friction > 0.0 or q_slip > 0.0):
         # The same two cost terms mpcc_tuning/mpcc.py adds, so the exported
         # controller optimises the objective that was actually tuned. Both use
@@ -232,7 +288,12 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
             a_e = r_eff + car_half_length
             b_e = r_eff * (car_half_width / max(car_half_length, 1e-9)) + car_half_width
             h.append(((u_ax / a_e) ** 2 + (v_ax / b_e) ** 2 - 1.0) * (a_e * b_e))
-    model.p = ca.vertcat(*p_list)
+    if global_theta:
+        model.p_global = theta
+        rest = [q for q in p_list if q is not theta]
+        model.p = ca.vertcat(*rest) if rest else ca.SX.sym("p_unused", 0)
+    else:
+        model.p = ca.vertcat(*p_list)
     model.con_h_expr = ca.vertcat(*h)
     # TERMINAL corridor (and grip), which acados did not have at all.
     #
@@ -322,6 +383,16 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
 
     n_p = (n_th + (3 if spline_mode == "parameter" else 0)
            + (4 if lin_corridor else 0) + stride * max_obstacles)
+    if global_theta:
+        ocp.p_global_values = np.zeros(n_th)
+        n_p = max(n_p - n_th, 0)
+        # acados must be told to build the value-sensitivity machinery.
+        # VALUE sensitivity only. with_solution_sens_wrt_params raises
+        # "only compatible with DISCRETE dynamics" and this model integrates
+        # with ERK -- but the learner needs dV*/dtheta, not the sensitivity of
+        # the whole solution, so the restriction does not bite.
+        if hasattr(ocp.solver_options, "with_value_sens_wrt_params"):
+            ocp.solver_options.with_value_sens_wrt_params = True
     ocp.parameter_values = np.zeros(n_p)
     if max_obstacles:
         off = ([0.0, 0.0, -obs_margin] if obs_shape == "circle"
@@ -345,7 +416,7 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     # which is the only way a cross-version comparison means anything.
     if hasattr(ocp.solver_options, "cost_scaling"):
         ocp.solver_options.cost_scaling = np.ones(horizon + 1)
-    ocp.solver_options.integrator_type = "ERK"
+    ocp.solver_options.integrator_type = "DISCRETE" if discrete else "ERK"
     ocp.solver_options.sim_method_num_stages = 4
     # 2 steps is enough for the kinematic model and NOT for the dynamic one.
     # ERK4 with num_steps = 2 at dt = 0.05 integrates with h = 25 ms, and this
