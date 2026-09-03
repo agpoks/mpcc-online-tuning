@@ -109,8 +109,8 @@ def fig_learning(d):
         ax.tick_params(colors=MUT, labelsize=8.5)
 
     h, l = axes[0][0].get_legend_handles_labels()
-    fig.legend(h, l, frameon=False, fontsize=9, ncol=3, loc="lower center",
-               bbox_to_anchor=(0.5, -0.06))
+    fig.legend(h, l, frameon=False, fontsize=9, ncol=len(l), loc="lower center",
+               bbox_to_anchor=(0.5, -0.10))
     fig.suptitle("Online tuning from a verified baseline. Thick = mean, thin "
                  "= individual seeds: where runs are bimodal the mean "
                  "describes no actual run.",

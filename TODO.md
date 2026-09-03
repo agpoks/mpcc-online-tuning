@@ -1210,9 +1210,36 @@ before the car moved.
       `AcadosMPCC.reset()` re-seeds the primal (`_seed`) but the multipliers
       and the funnel globalization state persist across `P.reset()`. Reset
       them, or the "fixed" reference line has noise that is not the car's.
-- [ ] Progress-clock run (`--clock progress`) in flight, same box, same seeds.
-      Prediction from the mechanism above: same corner, different speed of
-      arrival -- the clock changes cadence, not the direction of `dV/dtheta`.
+- [x] **Progress clock: the prediction was WRONG, and the way it was wrong is
+      the result.** Same box, same seeds, same data; only the reward's units
+      changed (metres of progress per tick -> seconds of time per metre). The
+      learner walks to the OPPOSITE corner on all three seeds:
+
+          weight        per tick          per metre
+          q_v           x2 (ceiling)      /2 (floor)
+          q_c r_d r_dv  /2 (floor)        x2 (ceiling)
+          q_l r_a       /2                x1.7-1.9
+          k_v           /2                x1.2-1.5
+
+      So the direction is not learned from how the car drove. It is the sign
+      of a TD error that compares a return in metres (or seconds) against a
+      critic in MPCC-cost units, `V = -J*`. Which is bigger decides the sign,
+      and the sign decides the corner. **`V = -J*` is not a value function of
+      the return; it is in different units, and the TD error is comparing
+      apples to oranges.** This is the mechanism behind 2z, demonstrated by a
+      controlled reversal rather than argued.
+
+      Laps: per tick 1.42 +-0.22 (never crashes, never improves); per metre
+      1.06 +-0.14 over the last three episodes -- but it is the ONLY condition
+      that ever beats START: seeds reach 2.14-2.54 laps in episodes 1-4,
+      above fixed (1.81) and approaching BEST (2.65), then saturate at the
+      corner and crash from episode 8. It passes THROUGH good weights on the
+      way to a bad corner. In that early region k_v moved toward BEST's 0.60
+      and q_c/r_d rose -- a smoother, more centre-tracking car that was
+      faster. Keep-best-and-revert would have banked 2.54.
+
+      `paper/figures/online_learning.png`, `online_weights_progress.png`,
+      `online_sectors_progress.png`; data `results/online_t2_clocks.json`.
 
 ## 2x. Baselines re-measured on the corrected geometry — 2026-09-03
 
