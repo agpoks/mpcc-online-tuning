@@ -216,6 +216,22 @@ class ScuderiaPlant:
         self.t += 1
         self.trace.append(self._x.copy())
         lateral = self.track.lateral(self._x[0], self._x[1])
-        off = abs(lateral) > self.margin or not np.isfinite(self._x).all()
+        # OFF-TRACK judged against the real width, not a scalar.
+        #
+        # self.margin is `track.half_width - 0.12`, one number. On ICRA T2 that
+        # is 0.403 m while the real usable half-width runs 0.28-2.42 m, so the
+        # referee was wrong in BOTH directions: it called the car off inside a
+        # corner it was comfortably within, and let it run wide where the track
+        # actually narrows. Every "off" and every `clean` flag measured on T2
+        # and T1 before this was judged against that tunnel.
+        if getattr(self.track, "variable_width", False):
+            wl, wr = self.track.width(self.track.project(self._x[0],
+                                                         self._x[1]))
+            # widths are symmetric on these tracks, but keep both sides so an
+            # asymmetric one cannot silently pick the wrong bound
+            off = (lateral > float(wr) - 0.12) or (-lateral > float(wl) - 0.12)
+        else:
+            off = abs(lateral) > self.margin
+        off = bool(off) or not np.isfinite(self._x).all()
         reward = progress - (5.0 if off else 0.0)
         return self.state5(), reward, off, self.t >= self.max_steps

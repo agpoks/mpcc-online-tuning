@@ -68,7 +68,8 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
               lin_corridor: bool = False,
               theta_global: bool = False,
               discrete: bool = False,
-              car_half_width: float = 0.12, max_obstacles: int = 0,
+              car_half_width: float = 0.12, corridor_safety: float = 0.08,
+              max_obstacles: int = 0,
               obs_margin: float = 0.15, spline_mode: str = "parameter",
               obs_shape: str = "circle", car_half_length: float = 0.285,
               name: str = "mpcc_tuning", vehicle: str = "kinematic",
@@ -245,13 +246,45 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     # The cost keeps the spline, so s stays coupled to the path and the
     # envelope gradient still runs through it. Only the CONSTRAINT is
     # linearised -- which is the part HPIPM has to satisfy exactly.
+    # VARIABLE track width, which mpcc.py has always used and this had not.
+    #
+    # `margin = track.half_width - car_half_width` is a SCALAR. On a track
+    # whose width varies that is wrong in both directions at once. Measured on
+    # ICRA T2: real half-width runs 0.40-2.54 m and the scalar is 0.523, so the
+    # corridor allowed 21%-130% of the real track, a median of 58%. The car was
+    # driving a constant 1.05 m tunnel down a course that opens to 5.07 m --
+    # unable to use the racing line where the track is wide, and PERMITTED TO
+    # LEAVE IT where the track is narrow.
+    #
+    # mpcc.py:466 does the right thing already: two one-sided rows from
+    # track.width(s). This is another acados-vs-IPOPT difference that the
+    # globalization investigation did not turn up.
+    var_w = (bool(getattr(track, "variable_width", False))
+             and spline_mode == "spline" and not lin_corridor)
     if lin_corridor:
         cor = ca.SX.sym("cor", 4)              # nx, ny, ref_x, ref_y
         p_list.append(cor)
         e_c_lin = cor[0] * (px - cor[2]) + cor[1] * (py - cor[3])
         h = [e_c_lin]
+        n_cor = 1
+    elif var_w:
+        # A SOFT corridor plus an EXACT referee needs a buffer between them.
+        #
+        # Measured on T2 with no buffer: the solver plans a wide line through
+        # the hairpin -- which is what a racing line is, and the terminal node
+        # sits 1.0-1.39 m off the centreline deliberately -- and clips the
+        # boundary by 2.7 cm on exactly ONE tick out of 1756. The run is then
+        # scored "off track". The constraint is not broken; it is soft, and a
+        # soft constraint is allowed to be violated slightly. So the plan aims
+        # a little further inside than the rule requires.
+        wl_s, wr_s = track.width(s)
+        keep = car_half_width + corridor_safety
+        h = [wl_s - keep - e_c,                # room to the left,  >= 0
+             e_c + wr_s - keep]                # room to the right, >= 0
+        n_cor = 2
     else:
         h = [e_c]                              # corridor, as in the NLP
+        n_cor = 1
     # The grip row, which was in mpcc_tuning/mpcc.py and NOT here. Porting the
     # cost across without the constraints is why the acados controller drove
     # differently from the CasADi one for the same model: measured on the oval,
@@ -307,7 +340,13 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     #
     # Only the rows that depend on x alone: the v_s coupling needs a control
     # and there is no control at the terminal node.
-    h_e = [e_c_lin if lin_corridor else e_c]
+    if var_w:
+        wl_e, wr_e = track.width(s)
+        keep_e = car_half_width + corridor_safety
+        h_e = [wl_e - keep_e - e_c, e_c + wr_e - keep_e]
+    else:
+        h_e = [e_c_lin if lin_corridor else e_c]
+    n_cor_e = 2 if var_w else 1
     if spline_mode == "spline" and not dyn:
         h_e.append(a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
     model.con_h_expr_e = ca.vertcat(*h_e)
@@ -342,8 +381,13 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     ocp.constraints.lbu = np.array([-STEER_MAX, -ACCEL_MAX, 0.0])
     ocp.constraints.ubu = np.array([STEER_MAX, ACCEL_MAX, SPEED_MAX])
 
-    ocp.constraints.lh = np.array([-margin] + [0.0] * (nh - 1))
-    ocp.constraints.uh = np.array([margin] + [1e8] * (nh - 1))
+    if var_w:
+        # both corridor rows are "room remaining", so >= 0 with no upper bound
+        ocp.constraints.lh = np.zeros(nh)
+        ocp.constraints.uh = np.full(nh, 1e8)
+    else:
+        ocp.constraints.lh = np.array([-margin] + [0.0] * (nh - 1))
+        ocp.constraints.uh = np.array([margin] + [1e8] * (nh - 1))
     # Soft, so "stay behind" stays a finite-cost option rather than an
     # infeasible solve -- the same argument as in mpcc_tuning/mpcc.py.
     # WHICH rows are soft matters, and this softened all of them.
@@ -361,23 +405,27 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     # says the two are not equivalent in a way still not understood -- so the
     # default stays soft, and the flag exists to re-test rather than to argue.
     soft = (np.arange(nh, dtype=np.int64) if soft_corridor
-            else np.arange(1, nh, dtype=np.int64))
+            else np.arange(n_cor, nh, dtype=np.int64))
     ocp.constraints.idxsh = soft
     ocp.constraints.lsh = np.zeros(len(soft))
     ocp.constraints.ush = np.zeros(len(soft))
     Z = np.full(nh, 200.0); z = np.full(nh, 5.0)
-    Z[0], z[0] = 500.0, 10.0                   # corridor held harder
+    Z[:n_cor], z[:n_cor] = 500.0, 10.0         # corridor rows held harder
     Z, z = Z[soft], z[soft]
     ocp.cost.Zl = Z.copy(); ocp.cost.Zu = Z.copy()
     ocp.cost.zl = z.copy(); ocp.cost.zu = z.copy()
     # Same rows at the terminal node, softened the same way.
-    ocp.constraints.lh_e = np.array([-margin] + [0.0] * (nh_e - 1))
-    ocp.constraints.uh_e = np.array([margin] + [1e8] * (nh_e - 1))
+    if var_w:
+        ocp.constraints.lh_e = np.zeros(nh_e)
+        ocp.constraints.uh_e = np.full(nh_e, 1e8)
+    else:
+        ocp.constraints.lh_e = np.array([-margin] + [0.0] * (nh_e - 1))
+        ocp.constraints.uh_e = np.array([margin] + [1e8] * (nh_e - 1))
     ocp.constraints.idxsh_e = np.arange(nh_e, dtype=np.int64)
     ocp.constraints.lsh_e = np.zeros(nh_e)
     ocp.constraints.ush_e = np.zeros(nh_e)
     Ze = np.full(nh_e, 200.0); ze = np.full(nh_e, 5.0)
-    Ze[0], ze[0] = 500.0, 10.0
+    Ze[:n_cor_e], ze[:n_cor_e] = 500.0, 10.0
     ocp.cost.Zl_e = Ze.copy(); ocp.cost.Zu_e = Ze.copy()
     ocp.cost.zl_e = ze.copy(); ocp.cost.zu_e = ze.copy()
 

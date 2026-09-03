@@ -165,6 +165,50 @@ def headroom(track: str) -> float:
     return BEST[track].laps - START[track].laps
 
 
+def adaptation_box(track: str, factor: float = 2.0):
+    """A SMALL box around theta_0, for adaptation rather than search.
+
+    The project's stated design is a stable baseline that the online tuner
+    *adjusts*, not an operating point it is free to leave:
+
+    > stable baseline, improved for racing; per sector an adaptive changing
+    > weight; online tuning tries to push toward the racing limits
+
+    The global box in ``ltc.py`` is not that. It spans ``q_l`` from 0.05 to
+    400 and ``r_d`` from 0.001 to 10 -- four to five orders of magnitude --
+    because it was drawn to let a search FIND weights, not to let a controller
+    adapt around ones already known good. Measured with that box: the policy
+    puts ``q_v`` on its ceiling and every damping weight on its floor within a
+    single episode, and the oval falls from 7.94 laps to 0.70.
+
+    A weight is allowed to move by at most ``factor`` in either direction,
+    intersected with the global bounds so a physical limit is never exceeded.
+    ``factor = 2.0`` means "at most double or half", which is an adaptation;
+    the global box permits ``q_l`` to move by 8000x, which is a different
+    controller.
+
+    Returns ``(lo, hi)`` in log space, ready for :class:`WeightPolicy`.
+    """
+    import numpy as np
+    from mpcc_tuning.ltc import THETA_HI, THETA_LO
+    if factor <= 1.0:
+        raise ValueError("factor must exceed 1; a factor of 1 leaves the "
+                         "policy no room and its gradient is then zero")
+    th0 = np.asarray(start(track).theta(), float)
+    d = np.log(float(factor))
+    lo = np.maximum(th0 - d, np.asarray(THETA_LO, float))
+    hi = np.minimum(th0 + d, np.asarray(THETA_HI, float))
+    dead = (hi - th0 <= 1e-9) | (th0 - lo <= 1e-9)
+    if dead.any():
+        from mpcc_tuning.mpcc import WEIGHT_NAMES
+        names = [WEIGHT_NAMES[i] for i in np.flatnonzero(dead)]
+        raise ValueError(
+            f"{track}: {names} would have zero span on one side. theta_0 sits "
+            f"on a global bound there, so no factor can give it room -- widen "
+            f"THETA_LO/THETA_HI instead.")
+    return lo, hi
+
+
 def check_in_policy_box() -> None:
     """Every START must be an anchor the policy can actually emit.
 
