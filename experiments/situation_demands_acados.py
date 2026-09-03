@@ -82,6 +82,7 @@ def _sector_starts(track, n_probe=1500):
 def one_track(job):
     """Every grid cell for one track, on a single generated solver."""
     track_name, grid, entry_speeds, steps = job
+    # grid entries are (q_v, k_v) or (q_v, k_v, q_c)
     import time
 
     import casadi as ca
@@ -99,8 +100,11 @@ def one_track(job):
     rows = []
     for sec, s0 in sorted(starts.items()):
         for v0 in entry_speeds:
-            for (q_v, k_v) in grid:
+            for cell in grid:
+                q_v, k_v = cell[0], cell[1]
+                q_c = cell[2] if len(cell) > 2 else base["q_c"]
                 w = dict(base); w["q_v"] = q_v; w["k_v"] = k_v
+                w["q_c"] = q_c
                 th = MPCCWeights(**w).to_log()
                 P = ScuderiaPlant(track, model="std", dt=0.05)
                 P.max_steps = steps
@@ -118,6 +122,7 @@ def one_track(job):
                                  sector_name=SECTOR_NAME.get(int(sec),
                                                              f"s{sec}"),
                                  v0=float(v0), q_v=float(q_v), k_v=float(k_v),
+                                 q_c=float(q_c),
                                  covered=float(covered), off=bool(off),
                                  secs=time.perf_counter() - t0))
             print("    %-18s sector %d (%s) v0=%.1f: %d vectors done"
@@ -131,12 +136,26 @@ def main(argv=None):
     ap.add_argument("--tracks", nargs="*", default=list(B.TRACKS))
     ap.add_argument("--steps", type=int, default=400)
     ap.add_argument("--jobs", type=int, default=2)
+    ap.add_argument("--with-qc", action="store_true",
+                    help="also vary q_c, the price of leaving the centreline")
+    ap.add_argument("--out", default="situation_demands_acados.json")
     a = ap.parse_args(argv)
 
-    # q_v carries behaviour, k_v carries how much grip the plan claims. Those
-    # are the two the tracks are already known to disagree about.
-    grid = [(qv, kv) for qv in (0.2, 0.5, 1.0, 2.0)
-            for kv in (0.35, 0.50, 0.70, 0.85)]
+    # q_v carries behaviour, k_v how much grip the plan claims, q_c how
+    # expensive it is to leave the centreline.
+    #
+    # q_c was FIXED at the baseline in the first run of this, which measured
+    # the prize for adapting without ever asking whether the car should come
+    # off the centreline -- and coming off the centreline is what a racing
+    # line IS. Combined with the corridor having been a fixed-width tunnel,
+    # the car had neither the room nor the incentive to try, so that prize is
+    # a lower bound in two separate ways.
+    if a.with_qc:
+        grid = [(qv, kv, qc) for qv in (0.2, 1.0, 2.0)
+                for kv in (0.50, 0.70, 0.85) for qc in (0.1, 0.3, 1.0)]
+    else:
+        grid = [(qv, kv) for qv in (0.2, 0.5, 1.0, 2.0)
+                for kv in (0.35, 0.50, 0.70, 0.85)]
     entry = (1.0, 2.0)
     jobs = [(t, grid, entry, a.steps) for t in a.tracks]
 
@@ -163,18 +182,20 @@ def main(argv=None):
             sub = [r for r in R if (r["sector"], r["v0"]) == c]
             b = max(sub, key=lambda r: r["covered"])
             per_cell[c] = b["covered"]
-            best_vec[c] = (b["q_v"], b["k_v"])
+            best_vec[c] = (b["q_v"], b["k_v"], b.get("q_c", 0.0))
         # best single constant across all cells
         const = {}
-        for (qv, kv) in {(r["q_v"], r["k_v"]) for r in R}:
+        for (qv, kv, qc) in {(r["q_v"], r["k_v"], r.get("q_c", 0.0))
+                             for r in R}:
             vals = []
             for c in cells:
                 sub = [r for r in R if (r["sector"], r["v0"]) == c
-                       and r["q_v"] == qv and r["k_v"] == kv]
+                       and r["q_v"] == qv and r["k_v"] == kv
+                       and r.get("q_c", 0.0) == qc]
                 if sub:
                     vals.append(sub[0]["covered"])
             if len(vals) == len(cells):
-                const[(qv, kv)] = float(np.mean(vals))
+                const[(qv, kv, qc)] = float(np.mean(vals))
         bc, bcv = max(const.items(), key=lambda kv: kv[1])
         adaptive = float(np.mean([per_cell[c] for c in cells]))
         summary[t] = dict(adaptive=adaptive, constant=bcv,
@@ -185,13 +206,14 @@ def main(argv=None):
                           best_vec={f"{c[0]}|{c[1]}": list(best_vec[c])
                                     for c in cells})
         print(f"  {t}")
-        print("    %-14s %6s %10s %14s" % ("sector", "v0", "best m", "best (q_v,k_v)"))
+        print("    %-14s %6s %10s %20s" % ("sector", "v0", "best m",
+                                              "best (q_v,k_v,q_c)"))
         for c in cells:
-            print("    %-14s %6.1f %10.2f %14s"
+            print("    %-14s %6.1f %10.2f %20s"
                   % (SECTOR_NAME.get(c[0], f"s{c[0]}"), c[1], per_cell[c],
-                     "%.2f, %.2f" % best_vec[c]))
-        print("    best single constant q_v=%.2f k_v=%.2f -> %.2f m mean"
-              % (bc[0], bc[1], bcv))
+                     "%.2f, %.2f, %.2f" % best_vec[c]))
+        print("    best single constant q_v=%.2f k_v=%.2f q_c=%.2f -> %.2f m mean"
+              % (bc[0], bc[1], bc[2], bcv))
         print("    best PER SITUATION                     -> %.2f m mean"
               % adaptive)
         print("    prize for adapting: %+.2f m (%.1f%%)"
@@ -202,7 +224,7 @@ def main(argv=None):
     print("  adaptation -- not that the learner failed.")
 
     OUT.mkdir(exist_ok=True)
-    p = OUT / "situation_demands_acados.json"
+    p = OUT / a.out
     p.write_text(json.dumps(dict(summary=summary, rows=rows,
                                  config=vars(a)), indent=1))
     print(f"  wrote {p}")
