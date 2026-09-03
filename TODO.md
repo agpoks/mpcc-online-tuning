@@ -1169,6 +1169,39 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2v. Three ideas from the user, 2026-09-03 — and what was found checking them
+
+1. **Keep-best-and-revert, on the NETWORK, not on the weights.** "we also
+   should not fix the weight just fix the network after we find a good policy
+   network that fits for track and opponent etc." Snapshot the policy
+   parameters (LTC cell + readout) at the end of the best episode; when a later
+   episode is worse by more than the seed noise, or crashes, restore the
+   snapshot and keep learning from there. The weights stay a *function* of the
+   situation -- what is banked is the function, not one output of it. The
+   per-metre run in 2w passed through 2.14-2.54 laps before saturating; this
+   would have kept it.
+
+2. **The sectors are far too fragmented.** "they should not be one meter
+   straight then next light curve then next straight." MEASURED on T2: 79
+   sector runs per 81.7 m lap, median run 0.60 m, 67 of 79 shorter than 2 m,
+   corners detected as short as 0.09 m and 0.00 m (one sample). Cause:
+   `corners(kappa_frac=0.10)` thresholds at 10% of the lap's PEAK curvature
+   (1.41 -> 0.14 1/m), so every wiggle in the 0.6 m-smoothed centreline is a
+   corner. The one-hot the network sees flips every half-metre; no policy can
+   be a smooth function of an input like that, and the sector-spread
+   measurement (2z-bis) was partly measuring this flicker.
+   - [ ] minimum corner: length >= 1.0 m AND |dpsi| >= 15 deg, else it is a
+         straight; merge corners separated by < 1.0 m of straight
+   - [ ] **interpolate**: the sector feature becomes a soft membership --
+         one-hots averaged over several preview distances -- so it ramps in
+         and out over ~2 m instead of switching. "I would expect a light
+         switching depending on the curvature and sector of some weights,
+         not a lot."
+
+3. **Small, situation-dependent switching of SOME weights, not wholesale
+   moves.** Already partly in place via `adaptation_box`; the soft sector
+   feature is what lets the network express it.
+
 ## 2w. The adaptation box makes the tuner safe, and shows the direction is structural — 2026-09-03
 
 `experiments/online_from_baseline.py --box adapt --factor 2.0`, T2, corrected
