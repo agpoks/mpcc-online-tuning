@@ -71,7 +71,8 @@ OUT = ROOT / "results"
 
 def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
-    track_name, seed, cond, episodes, steps, alpha, grad, box, factor = job
+    (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
+     clock) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -102,7 +103,7 @@ def one(job):
         pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0,
                            lo, hi, seed=seed)
         tu = PolicyTuner(m, pol, alpha=alpha, explore=0.05, delta_clip=1.0,
-                         seed=seed, trust_region=0.01)
+                         seed=seed, trust_region=0.01, clock=clock)
 
     # physical perturbation per seed -- see the module docstring
     s0 = (seed % 4) * (t.length / 4.0)
@@ -138,7 +139,17 @@ def one(job):
                               int(t.sector(t.wrap(float(s5n[4]))))]
                              + np.exp(th).tolist())
             if learn:
-                out = tu.learn(r, P.state_dyn(), features(t, s5n), off)
+                if clock == "progress":
+                    # the plant's reward is progress - 5*off; recover the
+                    # progress, and charge TIME instead so the return is
+                    # minus the lap time (see PolicyTuner on why the reward
+                    # must change with the clock)
+                    progress = float(r) + (5.0 if off else 0.0)
+                    r_learn = -0.05 - (5.0 if off else 0.0)
+                    out = tu.learn(r_learn, P.state_dyn(), features(t, s5n),
+                                   off, ds=progress)
+                else:
+                    out = tu.learn(r, P.state_dyn(), features(t, s5n), off)
                 if out[0] is None:
                     break
                 th, u = out
@@ -169,6 +180,9 @@ def main(argv=None):
                          "small adaptation box around theta_0")
     ap.add_argument("--factor", type=float, default=2.0,
                     help="for --box adapt: max multiplicative move per weight")
+    ap.add_argument("--clock", choices=("time", "progress"), default="time",
+                    help="what advances the learner: control ticks, or metres "
+                         "of real progress (semi-Markov TD, reward = -time)")
     ap.add_argument("--conditions", nargs="*",
                     default=["fixed", "fixed_noise", "tuner"],
                     choices=("fixed", "fixed_noise", "tuner"))
@@ -180,7 +194,7 @@ def main(argv=None):
 
     ap_conds = a.conditions
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
-             a.box, a.factor)
+             a.box, a.factor, a.clock)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces = {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:

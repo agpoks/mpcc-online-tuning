@@ -560,10 +560,37 @@ class PolicyTuner:
     def __init__(self, mpcc, policy, gamma=0.98, lam=0.9, alpha=2e-3,
                  clip=1.0, delta_clip=1.0, explore=0.05, seed=0,
                  trust_region: float | None = None, theta_prior: float = 0.0,
-                 theta_explore: float = 0.0, entropy: float = 0.0):
+                 theta_explore: float = 0.0, entropy: float = 0.0,
+                 clock: str = "time", ds_ref: float = 0.10):
         from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
         self.mpcc, self.pol = mpcc, policy
         self.gamma, self.lam, self.alpha = gamma, lam, alpha
+        # WHAT ADVANCES THE LEARNER: the controller's clock, or the car's
+        # progress along the track.
+        #
+        # ``clock="time"`` is the inherited scheme -- one TD step per control
+        # tick. That makes the learning rate PER METRE OF TRACK depend on
+        # speed (a slow car updates many times per metre, a fast one few),
+        # decays the eligibility trace in seconds so credit assignment spans
+        # less track when slow, and indexes the "situation" by a moment when
+        # the thing the weights should depend on is a place.
+        #
+        # ``clock="progress"`` is semi-Markov TD(lambda): one step per
+        # ``ds_ref`` metres of real progress, with the discount and the trace
+        # decay raised to n = ds / ds_ref. Information arrives as the car
+        # moves, and not otherwise -- a stopped car learns nothing from
+        # standing still except the time it costs.
+        #
+        # THE REWARD HAS TO CHANGE WITH IT. The plant's reward is progress per
+        # tick. Under a progress clock every metre would earn 1 and be
+        # discounted per metre, so speed would vanish from the objective and
+        # the only thing left to learn would be crash avoidance. The caller
+        # must pass ``reward = -dt`` (time spent) per tick instead; the return
+        # is then minus the lap time, which is the racing objective anyway.
+        if clock not in ("time", "progress"):
+            raise ValueError(f"clock must be 'time' or 'progress', got {clock!r}")
+        self.clock, self.ds_ref = clock, float(ds_ref)
+        self._acc_r, self._acc_ds = 0.0, 0.0
         self.clip, self.delta_clip, self.explore = clip, delta_clip, explore
         # Exploration in THETA, not only in the actuator.
         #
@@ -629,6 +656,7 @@ class PolicyTuner:
         self.ec = np.zeros_like(self.pol.cell.p)
         self.prev = None
         self.stats = {}
+        self._acc_r, self._acc_ds = 0.0, 0.0
 
     def _explore(self, u):
         if self.explore <= 0:
@@ -671,19 +699,38 @@ class PolicyTuner:
         return meta_features(self._last_theta, self._last_r, self._last_td,
                              self.pol.lo, self.pol.hi, r_scale)
 
-    def learn(self, reward, next_state5, next_feat, terminated):
-        """One TD update, then emit the next tick's theta and action."""
+    def learn(self, reward, next_state5, next_feat, terminated, ds=None):
+        """One TD update, then emit the next tick's theta and action.
+
+        ``ds`` is the real progress made this tick, in metres. Required when
+        ``clock="progress"``; ignored otherwise.
+        """
         s, theta, q = self._pending
+        g_n, gl_n = self.gamma, self.gamma * self.lam
+        if self.clock == "progress":
+            if ds is None:
+                raise ValueError("clock='progress' needs ds (metres of real "
+                                 "progress this tick) passed to learn()")
+            self._acc_r += float(reward)
+            self._acc_ds += float(ds)
+            if self._acc_ds < self.ds_ref and not terminated:
+                # the step is not complete: keep acting, do not learn yet.
+                # ``prev`` still holds the START of this progress step.
+                return self.act(next_feat, next_state5)
+            n = max(self._acc_ds / self.ds_ref, 1e-6)
+            reward = self._acc_r
+            g_n, gl_n = self.gamma ** n, (self.gamma * self.lam) ** n
+            self._acc_r, self._acc_ds = 0.0, 0.0
         gQ = self.mpcc.grad_theta(q, s, theta)
         if self.prev is not None:
             pg, pq = self.prev
             v_next = 0.0 if terminated else -q["value"]
-            delta = float(np.clip(reward + self.gamma * v_next - (-pq),
+            delta = float(np.clip(reward + g_n * v_next - (-pq),
                                   -self.delta_clip, self.delta_clip))
             self._last_r, self._last_td = float(reward), delta
             dG, dc = pg
-            self.eG = self.gamma * self.lam * self.eG + self._norm(-dG, "G")
-            self.ec = self.gamma * self.lam * self.ec + self._norm(-dc, "c")
+            self.eG = gl_n * self.eG + self._norm(-dG, "G")
+            self.ec = gl_n * self.ec + self._norm(-dc, "c")
             dG = self.alpha * delta * self.eG
             dc = self.alpha * delta * self.ec
             if self.entropy > 0:
