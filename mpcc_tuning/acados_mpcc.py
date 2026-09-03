@@ -124,6 +124,20 @@ class AcadosMPCC:
         self._obs = list(obs) if obs else None
 
     def reset(self):
+        """Forget the previous episode entirely.
+
+        ``_seed`` re-fills the primal (x, u) on the first solve, but acados
+        also carries the multipliers, the slacks and the funnel globalization
+        memory, and none of those were being cleared. Measured: a FIXED theta
+        on a deterministic plant gave different laps in different episodes --
+        one seed dropped from ~1.8 to 0.4 laps in episode 2 and recovered --
+        which is noise from the solver, not the car. ``solver.reset()`` zeroes
+        all internal state; the primal is then re-seeded as before.
+        """
+        try:
+            self.sv.reset()
+        except Exception:      # older acados without reset(): seed only
+            pass
         self._seeded = False
 
     def _seed(self, state, theta):

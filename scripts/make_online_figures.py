@@ -112,8 +112,8 @@ def fig_learning(d):
     fig.legend(h, l, frameon=False, fontsize=9, ncol=3, loc="lower center",
                bbox_to_anchor=(0.5, -0.06))
     fig.suptitle("Online tuning from a verified baseline. Thick = mean, thin "
-                 "= individual seeds, because the tuner is bimodal on T2 and "
-                 "its mean describes no actual run.",
+                 "= individual seeds: where runs are bimodal the mean "
+                 "describes no actual run.",
                  fontsize=10.5, color=MUT, x=0.01, ha="left", y=1.02)
     fig.savefig(OUT / "online_learning.png", dpi=190, bbox_inches="tight",
                 facecolor="white")
