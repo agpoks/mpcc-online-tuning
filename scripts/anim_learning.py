@@ -153,7 +153,11 @@ def roll(track_name, episodes, steps, seed, q_c, q_l, r_d, opponents):
     return track, np.array(rec)
 
 
-def render(track, R, path, title, fps=25, stride=2):
+def render(track, R, path, title, fps=25, stride=2, dpi=72):
+    # Frame count drives file size almost linearly. A 3-episode 700-step run
+    # at stride 2 produced 1050 frames and a 40 MB GIF -- eleven times the
+    # next largest animation in this directory, for a repo that tracks them.
+    # Stride and dpi are exposed so the default stays viewable in the docs.
     R = R[::stride]
     n = len(R)
     ep, xs, ys, v, sec = R[:, 0], R[:, 1], R[:, 2], R[:, 3], R[:, 4].astype(int)
@@ -161,7 +165,7 @@ def render(track, R, path, title, fps=25, stride=2):
     ox, oy = R[:, -2], R[:, -1]
     idx = {nm: i for i, nm in enumerate(WEIGHT_NAMES)}
 
-    fig = plt.figure(figsize=(12.6, 6.4))
+    fig = plt.figure(figsize=(12.6, 6.4), dpi=dpi)
     gs = fig.add_gridspec(3, 2, width_ratios=[1.05, 1.0], hspace=0.32, wspace=0.16)
     axt = fig.add_subplot(gs[:, 0])
     axw = [fig.add_subplot(gs[i, 1]) for i in range(3)]
@@ -257,6 +261,9 @@ def main(argv=None):
                     help="acados + dynamic model + STD plant (what ships), or "
                          "the original IPOPT + kinematic + synthetic plant")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--stride", type=int, default=5,
+                    help="keep every Nth tick; file size scales with frames")
+    ap.add_argument("--dpi", type=int, default=72)
     a = ap.parse_args(argv)
 
     if a.backend == "acados":
@@ -269,7 +276,8 @@ def main(argv=None):
         print("  no ticks recorded"); return
     out = Path(a.out) if a.out else OUT / f"learning_{a.track}.gif"
     render(track, R, out,
-           f"{a.track}: the weights being learned while the car drives")
+           f"{a.track}: the weights being learned while the car drives",
+           stride=a.stride, dpi=a.dpi)
 
 
 if __name__ == "__main__":
