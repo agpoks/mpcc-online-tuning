@@ -58,7 +58,15 @@ CONDS = (("fixed", C_FIXED, "-", "fixed (START held)"),
          ("tuner_kb", C_TUNER, (0, (4, 2)), "tuner, per tick, keep-best"),
          ("tuner_progress", C_TUNER_P, "-", "tuner, per metre"),
          ("tuner_progress_kb", C_TUNER_P, (0, (4, 2)),
-          "tuner, per metre, keep-best"))
+          "tuner, per metre, keep-best"),
+         # validated keep-best: dash-dot; the fitted critic is a different
+         # learner and gets the fifth validated hue (palette re-validated at
+         # five: all pass, purple<->blue deutan dE 7.8 in the floor band, so
+         # legend labels + dashes carry the secondary encoding)
+         ("tuner_mpcc_val", C_TUNER_P, (0, (6, 2, 1, 2)),
+          "per metre, MPCC critic, validated keep-best"),
+         ("tuner_fitted_val", "#1098AD", "-",
+          "per metre, FITTED critic, validated keep-best"))
 
 
 def _curves(d, track, cond):
@@ -298,7 +306,9 @@ if __name__ == "__main__":
     fig_weights(d)
     fig_sectors(d)
     for cond, suf in (("tuner_progress", "_progress"), ("tuner_kb", "_kb"),
-                      ("tuner_progress_kb", "_progress_kb")):
+                      ("tuner_progress_kb", "_progress_kb"),
+                      ("tuner_mpcc_val", "_mpcc_val"),
+                      ("tuner_fitted_val", "_fitted_val")):
         if any(k.endswith("|" + cond) for k in d["episodes"]):
             fig_weights(d, cond, suf)
             fig_sectors(d, cond, suf)

@@ -1169,6 +1169,29 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2t. Two fixes in flight — 2026-09-04
+
+Both asked for by the user after 2u/2w, both implemented and running on T2
+(per-metre clock, factor-2 box, soft sectors, 3 seeds x 10 episodes, one
+frozen evaluation at the end):
+
+1. **A critic fitted to the actual return** (`--critic fitted`): linear
+   `V_w(x)` on the policy's own 18 features + bias, TD(lambda) on the real
+   reward (-time per metre), theta nowhere in it. Actor direction from
+   theta-exploration (sigma 0.1 in log space) via the score-function
+   estimator chained through the policy -- theta enters the return only
+   through the policy. Actuator noise off (it cost 0.28 laps for nothing).
+   This is the structural answer to 2w: with `V = -J*` the actor's direction
+   was fixed by units before the car moved.
+2. **Frozen validation before banking** (`--validate`): a better episode
+   yields a candidate network; one frozen episode scores it; it is banked
+   only at that frozen score, only if it beats the validated incumbent, and
+   never if it crashed. Reverts compare against validated scores. Answer to
+   2u, where the banked score turned out not to belong to the banked network.
+
+Run as a pair -- fitted critic + validation against MPCC critic + validation
+-- so the critic is the only difference. Results below when they land.
+
 ## 2u. Keep-best on the network: the bank works, the learner re-walks the cliff — 2026-09-04
 
 `--box adapt --clock progress --keep-best`, T2, soft sectors, 3 seeds x 10 ep:
