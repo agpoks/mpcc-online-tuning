@@ -438,7 +438,7 @@ class Track:
 
     @staticmethod
     def _map_widths(centre, stem, max_m: float = 3.0, both_sides: bool = False,
-                    dilate_m: float = 0.10, bridge_px: int = 31):
+                    dilate_m: float = 0.10, bridge_px: int = 21):
         """Perpendicular room along ``centre``, from the occupancy grid.
 
         By default the symmetric usable half-width, min(left, right) at each
@@ -460,11 +460,11 @@ class Track:
         spec.loader.exec_module(cl)
         im, res, org = cl.load(str(pgm), str(yml))
         H, W = im.shape
-        # bridge_px=21 (1.05 m) joins the MEDIAN cone spacing; the row along
-        # T1's middle straight has a gap of about 1.2 m centre-to-centre and
-        # the default left it open, so the ray slipped between two cones and
-        # reported 2.3 m of room on a 1.4 m corridor. 31 px (1.55 m) closes
-        # it; the guard below checks nothing drivable got walled off.
+        # bridge_px stays at the tool's default (21 px, 1.05 m): 31 px was tried
+        # and welded the chicane's two cone columns into one block with the
+        # centreline inside it. The leak this was meant to close is between the
+        # round island and the first cone of a row, and is bounded by the cap
+        # in _raceline instead.
         occ = cl.connect_cone_rows(im <= 50, bridge_px=bridge_px)
         # Close the gaps between cones BEFORE raycasting. The rows are drawn
         # as dots; where connect_cone_rows leaves a gap the ray slips through
@@ -614,11 +614,14 @@ class Track:
                 # a 0.9 m track, drawing the corridor into the infield. Two
                 # guards. (1) The optimiser's own margin is conservative but
                 # never wrong about which side of the wall the track is on,
-                # so the raycast may not exceed twice it. (2) An isolated
+                # so the raycast may exceed it by at most 0.6 m -- the optimiser's
+                # own safety allowance plus a little (measured +0.18 m median,
+                # +0.20 m at the tightest point on this map). (2) An isolated
                 # excursion above 1.6x the rolling median over +-1.5 m is a
                 # leak, not a widening, and is clamped to that median.
                 def _guard(w, ref):
-                    w = np.minimum(np.asarray(w, float), 2.0 * np.asarray(ref, float))
+                    ref = np.asarray(ref, float)
+                    w = np.minimum(np.asarray(w, float), ref + 0.6)   # margin + the optimiser's own safety allowance, never a metre-scale leak
                     m = max(int(round(3.0 / max(step, 1e-9))) | 1, 5)
                     pad = np.concatenate([w[-(m // 2):], w, w[:m // 2]])
                     med = np.array([np.median(pad[i:i + m]) for i in range(len(w))])
