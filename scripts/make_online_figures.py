@@ -50,10 +50,15 @@ def _load():
 #: fixed and fixed_noise are the SAME thing without learning, so they share a
 #: hue and separate by line style; only the tuner gets its own colour.
 C_TUNER_P = "#AE3EC9"          # the fourth hue of the validated set
+# keep-best variants share the hue of their clock and separate by dash: they
+# are the same learner with a memory, not a new one
 CONDS = (("fixed", C_FIXED, "-", "fixed (START held)"),
          ("fixed_noise", C_FIXED, (0, (4, 2)), "fixed + exploration noise"),
-         ("tuner", C_TUNER, "-", "online tuner, per tick"),
-         ("tuner_progress", C_TUNER_P, "-", "online tuner, per metre"))
+         ("tuner", C_TUNER, "-", "tuner, per tick"),
+         ("tuner_kb", C_TUNER, (0, (4, 2)), "tuner, per tick, keep-best"),
+         ("tuner_progress", C_TUNER_P, "-", "tuner, per metre"),
+         ("tuner_progress_kb", C_TUNER_P, (0, (4, 2)),
+          "tuner, per metre, keep-best"))
 
 
 def _curves(d, track, cond):
@@ -292,6 +297,8 @@ if __name__ == "__main__":
     fig_learning(d)
     fig_weights(d)
     fig_sectors(d)
-    if any(k.endswith("|tuner_progress") for k in d["episodes"]):
-        fig_weights(d, "tuner_progress", "_progress")
-        fig_sectors(d, "tuner_progress", "_progress")
+    for cond, suf in (("tuner_progress", "_progress"), ("tuner_kb", "_kb"),
+                      ("tuner_progress_kb", "_progress_kb")):
+        if any(k.endswith("|" + cond) for k in d["episodes"]):
+            fig_weights(d, cond, suf)
+            fig_sectors(d, cond, suf)
