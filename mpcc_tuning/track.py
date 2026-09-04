@@ -192,7 +192,9 @@ class Track:
         return int(np.searchsorted(self.segment_edges(n), abs(self.curvature(s))))
 
     # -- named sectors ----------------------------------------------------
-    def corners(self, kappa_frac: float = 0.10, samples: int = 900):
+    def corners(self, kappa_frac: float = 0.10, samples: int = 900,
+                min_len: float = 1.0, min_turn_deg: float = 15.0,
+                merge_gap: float = 1.0):
         """Corners as maximal runs of high curvature, each with its *total* turn.
 
         This exists because :meth:`segment` **cannot** express the distinction
@@ -249,7 +251,38 @@ class Track:
                         float(ss[(j - 1 + shift) % samples]),
                         dpsi, float(np.abs(k_r[i:j]).max())))
             i = j
-        return out
+        # A corner has to be a corner.
+        #
+        # Measured on ICRA T2 before this: 79 sector runs per 81.7 m lap,
+        # median run 0.60 m, 67 of 79 shorter than 2 m, "corners" of 0.09 m
+        # and of a single sample. The threshold is 10% of the lap's PEAK
+        # curvature, so every wiggle of the reconstructed centreline trips
+        # it, and the one-hot the policy network is fed flips every
+        # half-metre. No policy can be a smooth function of that input.
+        #
+        # So: merge same-sign corners separated by less than ``merge_gap`` of
+        # straight (one corner with a flat spot, not two), then drop anything
+        # shorter than ``min_len`` or turning less than ``min_turn_deg``.
+        # What is dropped is, by definition, a straight with a wiggle.
+        def _len(a, b):
+            return (b - a) % self.length
+        merged = []
+        for c in out:
+            if merged:
+                p0, p1, pd, pk = merged[-1]
+                if _len(p1, c[0]) < merge_gap and np.sign(pd) == np.sign(c[2]):
+                    merged[-1] = (p0, c[1], pd + c[2], max(pk, c[3]))
+                    continue
+            merged.append(c)
+        # the list may wrap: check the last against the first too
+        if len(merged) > 1:
+            p0, p1, pd, pk = merged[-1]; c = merged[0]
+            if _len(p1, c[0]) < merge_gap and np.sign(pd) == np.sign(c[2]):
+                merged[0] = (p0, c[1], pd + c[2], max(pk, c[3]))
+                merged.pop()
+        thr_turn = np.deg2rad(min_turn_deg)
+        return [c for c in merged
+                if _len(c[0], c[1]) >= min_len and abs(c[2]) >= thr_turn]
 
     #: Total-turn thresholds, in degrees, separating the three corner classes.
     SECTOR_EDGES_DEG = (60.0, 135.0)
@@ -271,8 +304,20 @@ class Track:
             cls = []
             for s0, s1, dpsi, _kp in self.corners(kappa_frac):
                 a = abs(dpsi)
-                cls.append((s0, s1, 1 if a < lo else (2 if a < hi else 3)))
-            self._sector_cache = cls
+                cls.append([s0, s1, 1 if a < lo else (2 if a < hi else 3)])
+            # No sub-metre straights. Between two corners of OPPOSITE sign
+            # (an S-bend) corners() leaves a gap it must not merge, and on
+            # T2 those gaps came out at 0.2-0.8 m -- a "straight" the car
+            # crosses in a quarter of a second. Give such a gap to its
+            # neighbours, half each, so the label runs corner-to-corner.
+            L = self.length
+            for i in range(len(cls)):
+                a, b = cls[i], cls[(i + 1) % len(cls)]
+                gap = (b[0] - a[1]) % L
+                if 0.0 < gap < 1.0:
+                    a[1] = (a[1] + gap / 2.0) % L
+                    b[0] = (b[0] - gap / 2.0) % L
+            self._sector_cache = [tuple(c) for c in cls]
         sw = float(s) % self.length
         for s0, s1, c in self._sector_cache:
             inside = (s0 <= sw <= s1) if s0 <= s1 else (sw >= s0 or sw <= s1)

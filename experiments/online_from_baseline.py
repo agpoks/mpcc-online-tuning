@@ -72,7 +72,7 @@ OUT = ROOT / "results"
 def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
-     clock) = job
+     clock, keep_best, kb_tol) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -157,8 +157,13 @@ def one(job):
             if off or tr:
                 break
         laps = (float(s5[4]) - base) / t.length
+        reverted = False
+        if learn and keep_best:
+            reverted = tu.end_episode(laps, crashed=bool(off), tol=kb_tol)
         per_ep.append(dict(ep=ep, laps=laps, off=bool(off),
-                           theta=np.exp(th).tolist()))
+                           theta=np.exp(th).tolist(), reverted=reverted,
+                           best=(tu.best_score if (learn and keep_best)
+                                 else None)))
         wtrace.append(ep_th)
     return (track_name, seed, cond), per_ep, wtrace
 
@@ -183,6 +188,13 @@ def main(argv=None):
     ap.add_argument("--clock", choices=("time", "progress"), default="time",
                     help="what advances the learner: control ticks, or metres "
                          "of real progress (semi-Markov TD, reward = -time)")
+    ap.add_argument("--keep-best", action="store_true",
+                    help="bank the policy network at the best episode and "
+                         "revert to it when an episode is worse by more than "
+                         "--keep-best-tol laps, or crashes")
+    ap.add_argument("--keep-best-tol", type=float, default=0.15,
+                    help="drop in laps that counts as worse (the fixed "
+                         "controller's seed spread is about 0.12)")
     ap.add_argument("--conditions", nargs="*",
                     default=["fixed", "fixed_noise", "tuner"],
                     choices=("fixed", "fixed_noise", "tuner"))
@@ -194,7 +206,7 @@ def main(argv=None):
 
     ap_conds = a.conditions
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
-             a.box, a.factor, a.clock)
+             a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces = {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
@@ -204,9 +216,12 @@ def main(argv=None):
             res[key] = per_ep
             traces["|".join(map(str, key))] = wt
             last = per_ep[-1]
-            print("  [%2d/%2d] %-18s seed %d %-11s  last ep %.2f laps%s"
+            nrev = sum(1 for e in per_ep if e.get("reverted"))
+            print("  [%2d/%2d] %-18s seed %d %-11s  last ep %.2f laps%s%s"
                   % (i + 1, len(futs), key[0], key[1], key[2], last["laps"],
-                     " OFF" if last["off"] else ""), flush=True)
+                     " OFF" if last["off"] else "",
+                     f"  best {last['best']:.2f}, {nrev} reverts"
+                     if last.get("best") is not None else ""), flush=True)
 
     print()
     print("  Laps, mean of the last three episodes. START and BEST are the")

@@ -437,10 +437,19 @@ def features(track, s5, opponents=(), v_max: float = 4.0, a_max: float = 4.0,
             avail = float(np.clip(1.0 - a_need / a_lat_max, -1.0, 1.0))
     f += [gap_brake, ttc, avail, gap_m]
 
-    # Named sector ahead, one-hot. Read from the path at the preview distance,
-    # so it is observed rather than inferred.
+    # Named sector ahead, as a SOFT membership rather than a one-hot.
+    #
+    # The one-hot switched in a single tick at every corner boundary. With
+    # the boundaries where they were (79 per lap on T2) the network's input
+    # was a square wave; with them fixed it is still a step. A weight
+    # schedule should ramp into a corner, not jump at a line, so the label is
+    # read at several points around the preview distance and averaged: the
+    # membership rises from 0 to 1 over about two metres of approach. The
+    # user's words: "a light switching depending on the curvature and sector
+    # of some weights, not a lot."
     sec = np.zeros(4)
-    sec[track.sector(float(track.wrap(s + preview[1])))] = 1.0
+    for d in (-1.0, -0.5, 0.0, 0.5, 1.0):
+        sec[track.sector(float(track.wrap(s + preview[1] + d)))] += 0.2
     f += list(sec)
 
     # Corridor width in car widths: "can two cars fit" is a property of the
@@ -591,6 +600,21 @@ class PolicyTuner:
             raise ValueError(f"clock must be 'time' or 'progress', got {clock!r}")
         self.clock, self.ds_ref = clock, float(ds_ref)
         self._acc_r, self._acc_ds = 0.0, 0.0
+        # KEEP-BEST-AND-REVERT, on the network.
+        #
+        # TD(lambda) on V = -J* drifts theta monotonically to a corner of its
+        # box (see TODO 2w), and on the way it passes through weights that
+        # drive better than the anchor: the per-metre learner reached
+        # 2.14-2.54 laps in episodes 1-4 against a fixed 1.81, then saturated
+        # and crashed. What is banked here is the POLICY -- LTC cell
+        # parameters and readout -- at the end of the best episode, and the
+        # policy is restored when a later episode is worse than that by more
+        # than the seed noise, or crashes. The weights stay a function of the
+        # situation; the function is what is kept. The user's words: "we
+        # should not fix the weight, just fix the network after we find a good
+        # policy network."
+        self._best = None
+        self.reverts = 0
         self.clip, self.delta_clip, self.explore = clip, delta_clip, explore
         # Exploration in THETA, not only in the actuator.
         #
@@ -657,6 +681,33 @@ class PolicyTuner:
         self.prev = None
         self.stats = {}
         self._acc_r, self._acc_ds = 0.0, 0.0
+
+    def end_episode(self, score: float, crashed: bool = False,
+                    tol: float = 0.0) -> bool:
+        """Bank the network if this episode is the best; revert if it fell.
+
+        ``score`` is whatever the experiment optimises (laps here). Returns
+        True when a revert happened. ``tol`` is the drop that counts as
+        "worse" -- set it to the spread a fixed controller shows across
+        seeds, so noise does not trigger a revert.
+        """
+        if self._best is None or score > self._best[0]:
+            self._best = (float(score), self.pol.G.copy(),
+                          self.pol.cell.p.copy())
+            return False
+        if crashed or score < self._best[0] - tol:
+            _, G, cp = self._best
+            self.pol.G[...] = G
+            self.pol.cell.p[...] = cp
+            self.eG[...] = 0.0
+            self.ec[...] = 0.0
+            self.reverts += 1
+            return True
+        return False
+
+    @property
+    def best_score(self):
+        return None if self._best is None else self._best[0]
 
     def _explore(self, u):
         if self.explore <= 0:
