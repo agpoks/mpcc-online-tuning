@@ -1169,6 +1169,49 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2r. Validated keep-best, both critics — 2026-09-05
+
+Frozen = banked by construction now. T2, per-metre clock, factor-2 box, soft
+sectors, 3 seeds x 10 episodes; START 2.09, fixed 1.81, BEST 2.65:
+
+    critic     seed0   seed1   seed2    reverts   validations banked
+    MPCC       2.18    2.55    2.66     7/7/3     2/2, 1/2, 4/7
+    fitted     1.76    2.42    2.30     3/2/2     2/4, 3/5, 1/4
+
+**All three MPCC-critic seeds beat START frozen, and seed 2 (2.66) beats the
+hand-tuned BEST (2.65).** This is the first time online tuning has produced a
+policy network that, held fixed, is better than the hand-tuned start. Two of
+three fitted-critic seeds beat START; the third (1.76) is below fixed.
+
+Read carefully: the MPCC critic did BETTER than the fitted critic here, the
+opposite of what 2w predicted. The per-metre MPCC learner walks a fixed
+direction (raise damping and k_v, cut q_v) that happens to pass close to
+BEST, and validation now catches the good networks on the way past; the
+fitted critic's white theta-noise (2s) slows and disturbs its walk. So the
+gain came from VALIDATION, not from the critic. The direction problem of 2w
+is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
+good region as soon as it is allowed to.
+
+## 2q. The boundary is the track now — 2026-09-05
+
+The user, from the GIF and from `paper_icra_t1_boxes_adaptation.png`: the drawn
+boundary had "cuts and edges that are not even there". Three causes:
+widths never smoothed along the lap (T2: 39 steps > 45 deg, 122 reversals in
+0.3 m); `_map_widths` returned min(left, right), clipping to the nearer wall;
+the T1 raycast slipped between an island and the first cone of a row and
+reported 2.5 m on a 0.9 m corridor. Fixed: median + boxcar smoothing of the
+widths, both sides kept (slot convention verified against the grid: the slot
+named `w_right` bounds the geometric LEFT, because e_c = -lateral -- swapped
+at construction with the reason written down), raycast capped at the
+optimiser's margin + 0.6 m. 31 px cone bridging was tried and welded the
+chicane shut (56 centreline points inside an obstacle) -- reverted to 21.
+T2 spikes 39 -> 0; T1 widest 2.42 -> 2.14 m; centreline in free space
+everywhere.
+
+- [ ] T2 has no occupancy grid; its widths are the optimiser's margins x1.35,
+      smoothed. If a T2 map turns up, raycast it.
+- [ ] Re-measure T2 START/BEST on the smoothed corridor (in flight).
+
 ## 2s. Better learning signals than white theta-noise — 2026-09-04
 
 The fitted-critic actor (2t) takes its direction from Gaussian noise on theta,
