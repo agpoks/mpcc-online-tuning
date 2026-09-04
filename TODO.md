@@ -1210,7 +1210,16 @@ everywhere.
 
 - [ ] T2 has no occupancy grid; its widths are the optimiser's margins x1.35,
       smoothed. If a T2 map turns up, raycast it.
-- [ ] Re-measure T2 START/BEST on the smoothed corridor (in flight).
+- [x] Re-measured T2 START/BEST on the smoothed corridor:
+
+          START (k_v 0.40)  1.87  2.01  2.00   -> 1.96 +- 0.06, all clean  (was 2.09)
+          BEST  (k_v 0.60)  2.31x 2.06x 2.83   -> NOT clean, 2 of 3 crash  (was 2.65, all clean)
+
+      Smoothing rounds off the peaks of the wide sections, and BEST at ~3 m/s
+      was using exactly that room. START updated in baselines.py. BEST is
+      being re-found (k_v 0.50 / 0.55 / 0.60, three starts each), and the
+      three banked MPCC-critic networks (2.18 / 2.55 / 2.66, learned on the
+      notched corridor) are being re-driven frozen on the smoothed one.
 
 ## 2s. Better learning signals than white theta-noise — 2026-09-04
 

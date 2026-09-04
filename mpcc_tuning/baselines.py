@@ -111,9 +111,11 @@ START = {
              "almost all the room is upward, toward BEST's 0.50."),
     "icra_t2_raceline": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.40),
-        horizon=25, q_vref=0.20, laps=2.09, clean=True, steps=2500,
-        peak_v=1.57,
-        note="RE-MEASURED 2026-09-03 on the corrected corridor and referee "
+        horizon=25, q_vref=0.20, laps=1.96, clean=True, steps=2500,
+        peak_v=1.40,
+        note="RE-MEASURED 2026-09-05 on the SMOOTHED corridor (1.87, 2.01, "
+             "2.00, all clean; was 2.09 on the notched one). Earlier: "
+             "re-measured 2026-09-03 on the corrected corridor and referee "
              "(both used a scalar half-width before -- see acados_ocp.py and "
              "plant_scuderia.py). Three physically different starts: 2.05, "
              "2.00, 2.21, all clean. Was 1.92 inside the tunnel. Same OCP as "
