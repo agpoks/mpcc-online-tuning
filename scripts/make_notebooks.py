@@ -14,7 +14,7 @@ way, with no second copy to keep in sync. Deliberately not a dependency on
 jupytext: it is forty lines, and a tutorial repo asking you to install a tool
 before you can read it has already lost.
 
-    python scripts/make_notebooks.py          # convert every examples/*.py
+    python scripts/make_notebooks.py          # convert examples/*.py and docs/source/tutorial/*.py
     python scripts/make_notebooks.py --check  # fail if any notebook is stale
 """
 
@@ -58,7 +58,10 @@ def to_notebook(text: str) -> dict:
         if not body:
             continue
         src = [ln + "\n" for ln in body[:-1]] + [body[-1]]
-        nb_cells.append({"cell_type": kind, "metadata": {}, "source": src}
+        # nbformat >= 4.5 wants a stable id per cell; derive it from position
+        # so regenerating the notebook does not churn every id
+        nb_cells.append({"cell_type": kind, "id": f"cell-{len(nb_cells):03d}",
+                         "metadata": {}, "source": src}
                         | ({"outputs": [], "execution_count": None} if kind == "code" else {}))
     return {
         "cells": nb_cells,
@@ -76,7 +79,9 @@ def main() -> None:
     ap.add_argument("--check", action="store_true", help="only report staleness, write nothing")
     args = ap.parse_args()
     stale = []
-    for src in sorted((ROOT / "examples").glob("*.py")):
+    sources = sorted((ROOT / "examples").glob("*.py")) + sorted(
+        (ROOT / "docs" / "source" / "tutorial").glob("*.py"))
+    for src in sources:
         nb_path = src.with_suffix(".ipynb")
         nb = json.dumps(to_notebook(src.read_text()), indent=1) + "\n"
         if args.check:

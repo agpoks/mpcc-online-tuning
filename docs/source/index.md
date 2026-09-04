@@ -21,6 +21,7 @@ where the same TD(λ) outer loop drives a recurrent network instead of a solver.
 :caption: Contents
 
 getting_started
+tutorial/learning_algorithm
 formulation
 influence_through_a_solver
 obstacles
