@@ -69,10 +69,27 @@ from mpcc_tuning.track import Track  # noqa: E402
 OUT = ROOT / "results"
 
 
+def run_frozen(m, pol, t, s0, v0, steps, features):
+    """Drive the CURRENT network with no learning and no noise; one episode."""
+    from mpcc_tuning.plant_scuderia import ScuderiaPlant
+    P = ScuderiaPlant(t, model="std", dt=0.05); P.max_steps = steps
+    s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
+    base = float(s5[4]); off = tr = False
+    th = pol.step(features(t, s5))
+    for _ in range(steps):
+        u = m.value(P.state_dyn(), th)["u0"]
+        s5, r, off, tr = P.step(u)
+        th = pol.step(features(t, s5))
+        if off or tr:
+            break
+    return (float(s5[4]) - base) / t.length, bool(off)
+
+
 def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
-     clock, keep_best, kb_tol, eval_eps) = job
+     clock, keep_best, kb_tol, eval_eps, critic, theta_explore, explore,
+     validate) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -102,8 +119,9 @@ def one(job):
             lo, hi = THETA_LO, THETA_HI
         pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0,
                            lo, hi, seed=seed)
-        tu = PolicyTuner(m, pol, alpha=alpha, explore=0.05, delta_clip=1.0,
-                         seed=seed, trust_region=0.01, clock=clock)
+        tu = PolicyTuner(m, pol, alpha=alpha, explore=explore, delta_clip=1.0,
+                         seed=seed, trust_region=0.01, clock=clock,
+                         critic=critic, theta_explore=theta_explore)
 
     # physical perturbation per seed -- see the module docstring
     s0 = (seed % 4) * (t.length / 4.0)
@@ -157,11 +175,23 @@ def one(job):
             if off or tr:
                 break
         laps = (float(s5[4]) - base) / t.length
-        reverted = False
+        action, val = "none", None
         if learn and keep_best:
-            reverted = tu.end_episode(laps, crashed=bool(off), tol=kb_tol)
+            action = tu.end_episode(laps, crashed=bool(off), tol=kb_tol,
+                                    validate=validate)
+            if action == "validate":
+                # drive the candidate network frozen; bank only if THAT
+                # score beats the validated incumbent
+                with tu.frozen():
+                    val_laps, val_off = run_frozen(m, pol, t, s0, v0, steps,
+                                                   features)
+                val = dict(laps=val_laps, off=val_off)
+                banked = tu.confirm_candidate(-1.0 if val_off else val_laps)
+                action = "banked" if banked else "rejected"
         per_ep.append(dict(ep=ep, laps=laps, off=bool(off),
-                           theta=np.exp(th).tolist(), reverted=reverted,
+                           theta=np.exp(th).tolist(),
+                           reverted=(action == "reverted"), action=action,
+                           validation=val,
                            best=(tu.best_score if (learn and keep_best)
                                  else None)))
         wtrace.append(ep_th)
@@ -174,20 +204,10 @@ def one(job):
     if learn and keep_best and eval_eps > 0 and tu.best_score is not None:
         _, G, cp = tu._best
         pol.G[...] = G; pol.cell.p[...] = cp
-        tu.explore, tu.theta_explore = 0.0, 0.0
-        for k in range(eval_eps):
-            P = ScuderiaPlant(t, model="std", dt=0.05); P.max_steps = steps
-            s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
-            base = float(s5[4]); off = tr = False
-            th = pol.step(features(t, s5))
-            for _ in range(steps):
-                u = m.value(P.state_dyn(), th)["u0"]
-                s5, r, off, tr = P.step(u)
-                th = pol.step(features(t, s5))       # the network still runs
-                if off or tr:
-                    break
-            evals.append(dict(laps=(float(s5[4]) - base) / t.length,
-                              off=bool(off)))
+        with tu.frozen():
+            for k in range(eval_eps):
+                l_, o_ = run_frozen(m, pol, t, s0, v0, steps, features)
+                evals.append(dict(laps=l_, off=o_))
         # keep the network itself, so it can be reloaded and driven again
         np.savez(str(OUT / f"best_policy_{track_name}_{seed}_{clock}.npz"),
                  G=G, cell_p=cp, best_laps=tu.best_score)
@@ -218,6 +238,20 @@ def main(argv=None):
                     help="bank the policy network at the best episode and "
                          "revert to it when an episode is worse by more than "
                          "--keep-best-tol laps, or crashes")
+    ap.add_argument("--critic", choices=("mpcc", "fitted"), default="mpcc",
+                    help="mpcc: V = -J*, envelope gradient (the inherited "
+                         "scheme). fitted: linear critic on the policy's "
+                         "features trained on the actual reward, actor by "
+                         "theta-exploration; theta is nowhere in the critic")
+    ap.add_argument("--theta-explore", type=float, default=0.0,
+                    help="sigma of Gaussian noise on theta, log space; the "
+                         "fitted critic needs it > 0 (0.1 ~ 10%% jitter)")
+    ap.add_argument("--explore", type=float, default=0.05,
+                    help="actuator exploration as a fraction of the input "
+                         "limits; measured to cost 0.28 laps on T2")
+    ap.add_argument("--validate", action="store_true",
+                    help="keep-best banks a candidate only after a FROZEN "
+                         "validation episode beats the incumbent")
     ap.add_argument("--eval-episodes", type=int, default=0,
                     help="after learning, drive the banked best network "
                          "FROZEN (no learning, no exploration) for this many "
@@ -237,7 +271,8 @@ def main(argv=None):
     ap_conds = a.conditions
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
              a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
-             a.eval_episodes)
+             a.eval_episodes, a.critic, a.theta_explore, a.explore,
+             a.validate)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
@@ -250,13 +285,16 @@ def main(argv=None):
                 eval_res["|".join(map(str, key))] = evals
             last = per_ep[-1]
             nrev = sum(1 for e in per_ep if e.get("reverted"))
+            nval = sum(1 for e in per_ep if e.get("validation"))
+            nbank = sum(1 for e in per_ep if e.get("action") == "banked")
             ev = ("  FROZEN best: " + " ".join(
                 f"{e['laps']:.2f}{'x' if e['off'] else ''}" for e in evals)
                   if evals else "")
             print("  [%2d/%2d] %-18s seed %d %-11s  last ep %.2f laps%s%s%s"
                   % (i + 1, len(futs), key[0], key[1], key[2], last["laps"],
                      " OFF" if last["off"] else "",
-                     f"  best {last['best']:.2f}, {nrev} reverts"
+                     f"  best {last['best']:.2f}, {nrev} reverts, "
+                     f"{nbank}/{nval} validations banked"
                      if last.get("best") is not None else "", ev), flush=True)
 
     print()

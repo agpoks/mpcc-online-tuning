@@ -570,7 +570,8 @@ class PolicyTuner:
                  clip=1.0, delta_clip=1.0, explore=0.05, seed=0,
                  trust_region: float | None = None, theta_prior: float = 0.0,
                  theta_explore: float = 0.0, entropy: float = 0.0,
-                 clock: str = "time", ds_ref: float = 0.10):
+                 clock: str = "time", ds_ref: float = 0.10,
+                 critic: str = "mpcc", alpha_c: float = 1e-2):
         from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
         self.mpcc, self.pol = mpcc, policy
         self.gamma, self.lam, self.alpha = gamma, lam, alpha
@@ -615,6 +616,40 @@ class PolicyTuner:
         # policy network."
         self._best = None
         self.reverts = 0
+        # Keep-best with a VALIDATION step. A good episode makes its
+        # end-of-episode network a candidate; the experiment drives that
+        # network frozen for one episode and calls confirm_candidate() with
+        # the result; only then is it banked, at its FROZEN score. Measured
+        # without this: banked 2.32/2.34/2.47, frozen 2.11/2.06x/1.83 -- the
+        # episode's score was noise plus within-episode drift, not the
+        # snapshot's.
+        self._candidate = None
+        # WHICH CRITIC.
+        #
+        # "mpcc": V = -J*(theta), the controller's own optimal cost, and the
+        # actor follows the envelope gradient dJ*/dtheta. Measured (TODO 2w):
+        # that direction is fixed before the car moves -- raise q_v, cut every
+        # penalty -- and the TD error only supplies its sign, which is set by
+        # the units of the reward against the units of J*. Flip the reward
+        # from metres to seconds and the learner reverses.
+        #
+        # "fitted": a linear critic V_w(x) on the policy's own features,
+        # trained by TD(lambda) on the ACTUAL reward, with theta nowhere in
+        # it. The actor gets its direction from theta-exploration instead:
+        # theta = theta_mean + eps, eps ~ N(0, sigma^2) in log space, and
+        # phi moves by delta * (eps / sigma^2) * dtheta_mean/dphi -- the
+        # score-function estimator, RTRRL's pattern with theta as the action.
+        # theta enters the return only through the policy, as asked.
+        if critic not in ("mpcc", "fitted"):
+            raise ValueError(f"critic must be 'mpcc' or 'fitted', got {critic!r}")
+        if critic == "fitted" and theta_explore <= 0:
+            raise ValueError("critic='fitted' needs theta_explore > 0: without "
+                             "theta noise the actor has no direction")
+        self.critic, self.alpha_c = critic, float(alpha_c)
+        self.w = None                    # critic weights, sized on first use
+        self.e_w = None
+        self._last_eps = None
+        self._last_feat = None
         self.clip, self.delta_clip, self.explore = clip, delta_clip, explore
         # Exploration in THETA, not only in the actuator.
         #
@@ -683,27 +718,62 @@ class PolicyTuner:
         self._acc_r, self._acc_ds = 0.0, 0.0
 
     def end_episode(self, score: float, crashed: bool = False,
-                    tol: float = 0.0) -> bool:
-        """Bank the network if this episode is the best; revert if it fell.
+                    tol: float = 0.0, validate: bool = True) -> str:
+        """Decide what to do with this episode's network.
 
-        ``score`` is whatever the experiment optimises (laps here). Returns
-        True when a revert happened. ``tol`` is the drop that counts as
-        "worse" -- set it to the spread a fixed controller shows across
-        seeds, so noise does not trigger a revert.
+        Returns ``"validate"`` when the episode beat the banked score and the
+        experiment should drive the current network FROZEN for one episode,
+        then call :meth:`confirm_candidate` with that score; ``"banked"`` when
+        ``validate`` is off and it was banked directly (the old behaviour,
+        kept for comparison); ``"reverted"`` when the episode was worse than
+        the banked score by more than ``tol`` or crashed, and the banked
+        network was restored; ``"none"`` otherwise.
         """
-        if self._best is None or score > self._best[0]:
-            self._best = (float(score), self.pol.G.copy(),
-                          self.pol.cell.p.copy())
+        best = None if self._best is None else self._best[0]
+        if not crashed and (best is None or score > best):
+            snap = (float(score), self.pol.G.copy(), self.pol.cell.p.copy())
+            if validate:
+                self._candidate = snap
+                return "validate"
+            self._best = snap
+            return "banked"
+        if best is not None and (crashed or score < best - tol):
+            self._restore()
+            return "reverted"
+        return "none"
+
+    def confirm_candidate(self, frozen_score: float) -> bool:
+        """Bank the candidate at its FROZEN score if that beats the incumbent."""
+        if self._candidate is None:
             return False
-        if crashed or score < self._best[0] - tol:
-            _, G, cp = self._best
-            self.pol.G[...] = G
-            self.pol.cell.p[...] = cp
-            self.eG[...] = 0.0
-            self.ec[...] = 0.0
-            self.reverts += 1
+        _, G, cp = self._candidate
+        self._candidate = None
+        if self._best is None or frozen_score > self._best[0]:
+            self._best = (float(frozen_score), G, cp)
             return True
         return False
+
+    def _restore(self):
+        _, G, cp = self._best
+        self.pol.G[...] = G
+        self.pol.cell.p[...] = cp
+        self.eG[...] = 0.0
+        self.ec[...] = 0.0
+        self.reverts += 1
+
+    def frozen(self):
+        """Context manager: no learning signal, no exploration, same network."""
+        tuner = self
+
+        class _Frozen:
+            def __enter__(self_):
+                self_.saved = (tuner.explore, tuner.theta_explore)
+                tuner.explore, tuner.theta_explore = 0.0, 0.0
+                return tuner
+
+            def __exit__(self_, *a):
+                tuner.explore, tuner.theta_explore = self_.saved
+        return _Frozen()
 
     @property
     def best_score(self):
@@ -727,13 +797,23 @@ class PolicyTuner:
             sc = np.maximum(self._rms_c, 1e-8)
         return np.clip(g / sc, -self.clip, self.clip)
 
+    @staticmethod
+    def _x(feat):
+        """Critic input: the policy's features plus a bias."""
+        return np.concatenate([np.asarray(feat, float).ravel(), [1.0]])
+
     def act(self, feat, state5):
         """Emit theta for this tick, solve, and return ``(theta, action)``."""
-        theta = self.pol.step(feat)
+        theta_mean = self.pol.step(feat)
+        theta = theta_mean
         if self.theta_explore > 0:
-            theta = np.clip(theta + self.rng.normal(0.0, self.theta_explore,
-                                                    theta.shape),
+            theta = np.clip(theta_mean + self.rng.normal(0.0, self.theta_explore,
+                                                         theta_mean.shape),
                             self.pol.lo, self.pol.hi)
+        # what was ACTUALLY applied, after clipping -- the score-function
+        # direction must use the realised perturbation
+        self._last_eps = theta - theta_mean
+        self._last_feat = feat
         out = self.mpcc.value(state5, theta)
         action = self._explore(out["u0"])
         q = self.mpcc.action_value(state5, theta, action, v_out=out)
@@ -772,6 +852,43 @@ class PolicyTuner:
             reward = self._acc_r
             g_n, gl_n = self.gamma ** n, (self.gamma * self.lam) ** n
             self._acc_r, self._acc_ds = 0.0, 0.0
+        if self.critic == "fitted":
+            # ---- critic: TD(lambda) on the actual reward, theta absent ----
+            x = self._x(self._last_feat)
+            if self.w is None:
+                self.w = np.zeros(x.size); self.e_w = np.zeros(x.size)
+            x_next = self._x(next_feat)
+            v, v_next = float(self.w @ x), (0.0 if terminated
+                                            else float(self.w @ x_next))
+            delta = float(np.clip(reward + g_n * v_next - v,
+                                  -self.delta_clip, self.delta_clip))
+            self.e_w = gl_n * self.e_w + x
+            self.w += self.alpha_c * delta * self.e_w
+            self._last_r, self._last_td = float(reward), delta
+            # ---- actor: score-function direction from the theta noise ----
+            sig2 = self.theta_explore ** 2
+            dG, dc = self.pol.grads(self._last_eps / sig2)
+            # pol.grads chains a d(.)/dtheta through the policy; here the
+            # "gradient" is +eps/sigma^2, so no sign flip (the mpcc branch
+            # negates because its gQ is dJ*/dtheta and V = -J*)
+            self.eG = gl_n * self.eG + self._norm(dG, "G")
+            self.ec = gl_n * self.ec + self._norm(dc, "c")
+            dG = self.alpha * delta * self.eG
+            dc = self.alpha * delta * self.ec
+            if self.trust_region is not None:
+                n_ = float(np.sqrt((dG ** 2).sum() + (dc ** 2).sum()))
+                if n_ > self.trust_region:
+                    f = self.trust_region / max(n_, 1e-12)
+                    dG, dc = dG * f, dc * f
+            self.pol.G += dG
+            self.pol.cell.p += dc
+            if self.theta_prior > 0:
+                self.pol.G *= (1.0 - self.alpha * self.theta_prior)
+            self.pol.cell.clip()
+            self.stats = {"delta": delta, "v": v}
+            if terminated:
+                return None, None
+            return self.act(next_feat, next_state5)
         gQ = self.mpcc.grad_theta(q, s, theta)
         if self.prev is not None:
             pg, pq = self.prev
