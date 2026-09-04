@@ -209,8 +209,12 @@ def one(job):
                 l_, o_ = run_frozen(m, pol, t, s0, v0, steps, features)
                 evals.append(dict(laps=l_, off=o_))
         # keep the network itself, so it can be reloaded and driven again
-        np.savez(str(OUT / f"best_policy_{track_name}_{seed}_{clock}.npz"),
-                 G=G, cell_p=cp, best_laps=tu.best_score)
+        # the critic and the box are part of the identity of a banked network:
+        # two runs that differed only in the critic overwrote each other here
+        np.savez(str(OUT / f"best_policy_{track_name}_{seed}_{clock}_{critic}"
+                     f"{'_val' if validate else ''}.npz"),
+                 G=G, cell_p=cp, best_laps=tu.best_score, critic=critic,
+                 clock=clock, box=box, factor=factor, validated=validate)
     return (track_name, seed, cond), per_ep, wtrace, evals
 
 

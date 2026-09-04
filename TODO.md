@@ -1192,6 +1192,35 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2p. The banked networks re-driven on the smoothed corridor — 2026-09-05
+
+The 2r results were learned and validated on the notched corridor. Driven
+frozen on the smoothed one (the geometry the controller now sees):
+
+    network (from the .npz)        banked   now      verdict
+    seed 2, MPCC critic            2.66     1.81x    crashes -- the "beats BEST" network does not survive the geometry
+    seed 1, fitted critic          2.42     2.58     holds, improves; above START 1.96
+    seed 0, fitted critic          1.76     1.67     holds, below START
+
+So the 2.66 that beat the hand-tuned BEST was, like the old BEST itself
+(k_v 0.60, 2.65 -> crashes 2 of 3), partly a property of the notches: both
+were fast by using room that the smoothed boundary no longer grants. The
+fitted-critic seed-1 network is the one that generalised, and it is the
+strongest single frozen result on the current geometry (2.58 against START
+1.96). One network each; not a comparison of critics.
+
+Caveat that made this table possible only by luck: both critic runs wrote
+their banked networks to the same filenames, so the files on disk were a mix
+-- seed 2 from the MPCC run, seeds 0 and 1 from the fitted run. Filenames now
+carry the critic and the validation flag.
+
+- [ ] **Every number in baselines.py and every banked network must be
+      re-measured whenever the track geometry changes.** Third time this has
+      bitten (tunnel -> corrected, corrected -> smoothed). Add a geometry
+      hash to `Setting` and to the .npz, and have `check()` warn when the
+      track's width profile no longer matches the hash a result was
+      measured under.
+
 ## 2q. The boundary is the track now — 2026-09-05
 
 The user, from the GIF and from `paper_icra_t1_boxes_adaptation.png`: the drawn
