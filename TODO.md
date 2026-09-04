@@ -1169,6 +1169,51 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2s. Better learning signals than white theta-noise — 2026-09-04
+
+The fitted-critic actor (2t) takes its direction from Gaussian noise on theta,
+resampled every tick. The user's objection: that is aggressive for learning.
+The sharper form of it: sigma = 0.1 in log space is only +-10% per weight, but
+the noise changes every 50 ms while the MPCC plans over 25 steps (1.25 s), so
+a one-tick perturbation is mostly averaged away by the horizon before it can
+change what the car does. The estimator correlates the TD error with a signal
+the controller barely sees -- noisy AND nearly blind, the usual price of a
+zeroth-order method.
+
+Some exploration is unavoidable when the critic is learned from data (it has
+to see counterfactuals), but the DIRECTION of the actor step does not have to
+come from noise. Four options, decided order of testing: **4, then 1, maybe
+2 later; 3 not for now.**
+
+- [ ] **4. Warm-start from the situation grid, then adapt.** The sweep in 2y
+      already says which (q_v, k_v, q_c) win per (sector, entry speed). Fit
+      the network to that table first -- supervised, no noise, minutes --
+      then let online learning refine it. The learning signal becomes a
+      measured target instead of a random poke, and the online phase starts
+      from a policy that is already situation-dependent, which is the paper's
+      story stated directly. FIRST.
+- [ ] **1. Structured exploration instead of white noise.** Coloured
+      (Ornstein-Uhlenbeck) noise with a time constant of a few seconds, or a
+      perturbation held constant for a whole sector, so it outlasts the
+      horizon and its effect on progress is measurable; antithetic pairs
+      (+eps one lap, -eps the next) to halve the variance. Same estimator,
+      far better signal-to-noise, smaller amplitude needed. SECOND.
+- [ ] **2. Perturb per lap, not per tick** (parameter-space exploration,
+      ES / PEPG). Perturb the network parameters once, drive a lap, score the
+      lap. The car sees one smooth policy per lap -- nothing aggressive --
+      and the score is exactly the objective; fewer samples but each clean,
+      and it fits keep-best and validation, which already work per lap.
+      MAYBE LATER.
+- [ ] **3. The pathwise gradient through the controller.** acados' solution
+      sensitivity du0*/dtheta (`with_solution_sens_wrt_params`, already
+      enabled since the dynamics are discrete) chained with the vehicle
+      model's dx'/du and a critic that takes the action: a deterministic
+      gradient of the return in theta, no noise in the direction at all. This
+      is "influence through a solver" (docs) made concrete. Caveat: the
+      sensitivity is discontinuous where the active set changes, i.e. at
+      corridor and keep-out boundaries. Best signal of the four, about a day.
+      NOT FOR NOW, by decision.
+
 ## 2t. Two fixes in flight — 2026-09-04
 
 Both asked for by the user after 2u/2w, both implemented and running on T2
