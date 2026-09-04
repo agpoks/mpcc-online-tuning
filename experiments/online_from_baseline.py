@@ -72,7 +72,7 @@ OUT = ROOT / "results"
 def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
-     clock, keep_best, kb_tol) = job
+     clock, keep_best, kb_tol, eval_eps) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -165,7 +165,33 @@ def one(job):
                            best=(tu.best_score if (learn and keep_best)
                                  else None)))
         wtrace.append(ep_th)
-    return (track_name, seed, cond), per_ep, wtrace
+    # "Fix the network after we find a good policy network." Restore the
+    # banked best, switch off learning AND exploration, and drive it for
+    # eval_eps more episodes. This is the deliverable the user described: not
+    # a weight vector, a policy network that is then held. If it does not hold
+    # here, keep-best found a fluke rather than a policy.
+    evals = []
+    if learn and keep_best and eval_eps > 0 and tu.best_score is not None:
+        _, G, cp = tu._best
+        pol.G[...] = G; pol.cell.p[...] = cp
+        tu.explore, tu.theta_explore = 0.0, 0.0
+        for k in range(eval_eps):
+            P = ScuderiaPlant(t, model="std", dt=0.05); P.max_steps = steps
+            s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
+            base = float(s5[4]); off = tr = False
+            th = pol.step(features(t, s5))
+            for _ in range(steps):
+                u = m.value(P.state_dyn(), th)["u0"]
+                s5, r, off, tr = P.step(u)
+                th = pol.step(features(t, s5))       # the network still runs
+                if off or tr:
+                    break
+            evals.append(dict(laps=(float(s5[4]) - base) / t.length,
+                              off=bool(off)))
+        # keep the network itself, so it can be reloaded and driven again
+        np.savez(str(OUT / f"best_policy_{track_name}_{seed}_{clock}.npz"),
+                 G=G, cell_p=cp, best_laps=tu.best_score)
+    return (track_name, seed, cond), per_ep, wtrace, evals
 
 
 def main(argv=None):
@@ -192,6 +218,10 @@ def main(argv=None):
                     help="bank the policy network at the best episode and "
                          "revert to it when an episode is worse by more than "
                          "--keep-best-tol laps, or crashes")
+    ap.add_argument("--eval-episodes", type=int, default=0,
+                    help="after learning, drive the banked best network "
+                         "FROZEN (no learning, no exploration) for this many "
+                         "episodes -- the 'fix the network' step")
     ap.add_argument("--keep-best-tol", type=float, default=0.15,
                     help="drop in laps that counts as worse (the fixed "
                          "controller's seed spread is about 0.12)")
@@ -206,22 +236,28 @@ def main(argv=None):
 
     ap_conds = a.conditions
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
-             a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol)
+             a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
+             a.eval_episodes)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
-    res, traces = {}, {}
+    res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
         futs = [ex.submit(one, j) for j in jobs]
         for i, f in enumerate(as_completed(futs)):
-            key, per_ep, wt = f.result()
+            key, per_ep, wt, evals = f.result()
             res[key] = per_ep
             traces["|".join(map(str, key))] = wt
+            if evals:
+                eval_res["|".join(map(str, key))] = evals
             last = per_ep[-1]
             nrev = sum(1 for e in per_ep if e.get("reverted"))
-            print("  [%2d/%2d] %-18s seed %d %-11s  last ep %.2f laps%s%s"
+            ev = ("  FROZEN best: " + " ".join(
+                f"{e['laps']:.2f}{'x' if e['off'] else ''}" for e in evals)
+                  if evals else "")
+            print("  [%2d/%2d] %-18s seed %d %-11s  last ep %.2f laps%s%s%s"
                   % (i + 1, len(futs), key[0], key[1], key[2], last["laps"],
                      " OFF" if last["off"] else "",
                      f"  best {last['best']:.2f}, {nrev} reverts"
-                     if last.get("best") is not None else ""), flush=True)
+                     if last.get("best") is not None else "", ev), flush=True)
 
     print()
     print("  Laps, mean of the last three episodes. START and BEST are the")
@@ -255,7 +291,16 @@ def main(argv=None):
     p.write_text(json.dumps(dict(
         summary=summary, weight_names=list(WEIGHT_NAMES),
         episodes={"|".join(map(str, k)): v for k, v in res.items()},
-        traces=traces, config=vars(a)), indent=1))
+        traces=traces, evals=eval_res, config=vars(a)), indent=1))
+    if eval_res:
+        print()
+        print("  Banked best network, driven FROZEN (no learning, no noise):")
+        for k, ev in sorted(eval_res.items()):
+            v = [e["laps"] for e in ev]
+            print("    %-30s %s  -> %.2f +- %.2f%s"
+                  % (k, " ".join(f"{e['laps']:.2f}{'x' if e['off'] else ' '}" for e in ev),
+                     np.mean(v), np.std(v),
+                     "" if not any(e["off"] for e in ev) else "  (crashes)"))
     print(f"  wrote {p}")
     return 0
 

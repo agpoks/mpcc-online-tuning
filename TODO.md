@@ -1169,6 +1169,35 @@ The defensible claim, narrower and more useful than "scheduling helps":
 - [ ] Two tracks is not many, and the conclusion **reversed** between them.
       Treat any third track as capable of reversing it again.
 
+## 2u. Keep-best on the network: the bank works, the learner re-walks the cliff — 2026-09-04
+
+`--box adapt --clock progress --keep-best`, T2, soft sectors, 3 seeds x 10 ep:
+
+    seed  banked best   last ep   reverts   crashes
+    0        2.32        1.88        5        2/10
+    1        2.34        2.20        5        4/10
+    2        2.47        2.29        5        4/10
+    (START 2.09, fixed 1.81, BEST 2.65)
+
+**Every seed banks a network above fixed and above START** -- 60-70% of the
+headroom to BEST, on every seed. That is the first configuration that does.
+
+**But after every revert the learner walks the same way off the same cliff.**
+Each restore is followed by one or two good episodes (2.31, 2.34, 2.45), then
+TD drives the network to the corner again and it crashes; 5 reverts in 10
+episodes. Nothing about the gradient changed (2w), so nothing stops it
+repeating. Reverting is a safety net, not a cure.
+
+- [ ] **Frozen evaluation of the banked network** -- in flight
+      (`--eval-episodes 3`): restore the best, switch off learning AND
+      exploration, drive it. If it holds ~2.3-2.5 clean this is the paper's
+      deliverable -- online tuning found a policy NETWORK that beats the
+      hand-tuned start by half a lap, and fixing it keeps it. If it does not
+      hold, keep-best found a fluke. Networks saved as
+      `results/best_policy_<track>_<seed>_<clock>.npz`.
+- [ ] After N reverts, stop learning (or anneal alpha): the "fix the network"
+      step made automatic. The data above says N = 2-3 would have done.
+
 ## 2v. Three ideas from the user, 2026-09-03 — and what was found checking them
 
 1. **Keep-best-and-revert, on the NETWORK, not on the weights.** "we also
