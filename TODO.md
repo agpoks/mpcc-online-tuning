@@ -1266,7 +1266,28 @@ to see counterfactuals), but the DIRECTION of the actor step does not have to
 come from noise. Four options, decided order of testing: **4, then 1, maybe
 2 later; 3 not for now.**
 
-- [ ] **4. Warm-start from the situation grid, then adapt.** The sweep in 2y
+- [~] **4. Warm-start from the situation grid, then adapt.** IN PROGRESS.
+      `scripts/fit_policy_to_grid.py`. Two findings on the way:
+      (a) SGD through the recurrent cell plateaus at RMSE ~0.30 (log theta)
+          and never captures the 10x q_v swing between the two entry speeds.
+      (b) The reason is structural, and it explains more than the fit: **the
+          LTC hidden state barely varies with the input** -- per-dimension std
+          0.01-0.15 over a lap, the two entry speeds' mean states 0.025 apart
+          against 0.055 within-speed scatter. A readout of h alone cannot
+          express sector- or speed-dependence however it is trained, which is
+          also why no online learner here ever grew any. `WeightPolicy` now
+          has a DIRECT PATH: the readout sees [h; features; 1], so sector
+          membership, speed and curvature reach theta directly (`direct=True`
+          default; the .npz networks banked before this have the old G shape
+          and do not load -- they were on the old geometry anyway).
+      With the direct path a closed-form ridge readout fits the grid at
+      RMSE 0.67 and separates the speeds (q_v 1.9 / 0.28 for targets 2.0 /
+      0.2). The grid itself is being re-measured on the smoothed corridor
+      before the real fit; then frozen evaluation, then online adaptation
+      from the fitted network (`--init-policy`).
+      **Naming:** `critic="fitted"` is now `critic="return"` (alias kept): a
+      critic fitted to the measured return. The MPCC drives the car in every
+      variant; the critic is only the learner's yardstick. The sweep in 2y
       already says which (q_v, k_v, q_c) win per (sector, entry speed). Fit
       the network to that table first -- supervised, no noise, minutes --
       then let online learning refine it. The learning signal becomes a

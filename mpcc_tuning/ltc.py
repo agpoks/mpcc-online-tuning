@@ -202,6 +202,7 @@ class WeightPolicy:
     COST_IDX = (0, 1, 2, 3, 4, 5)
 
     def __init__(self, cell, theta0, lo, hi, out_scale: float = 0.5, seed: int = 0,
+                 direct: bool = True,
                  influence: str = "rflo", gauge_fix: bool = False):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
@@ -220,8 +221,18 @@ class WeightPolicy:
                 f"the policy gradient there is identically zero on one side. "
                 f"Widen the box so every anchor is strictly interior.")
         rng = np.random.default_rng(seed + 7919)
+        # DIRECT PATH. Measured: the LTC hidden state barely varies with the
+        # input (per-dimension std 0.01-0.15 over a lap; the two entry speeds'
+        # mean states differ by 0.025, less than the within-speed scatter), so a
+        # readout of h alone cannot express sector- or speed-dependence however
+        # it is trained -- which is also why the online learner never grew any.
+        # The readout therefore sees [h; features; 1]: the sector membership,
+        # the speed and the curvature preview reach theta directly, and the
+        # recurrence adds what needs memory.
+        self.direct = bool(direct)
+        self.n_in = cell.n + ((cell.n_in + 1) if self.direct else 0)
         self.G = rng.normal(0.0, out_scale / np.sqrt(cell.n),
-                            (len(self.theta0), cell.n))
+                            (len(self.theta0), self.n_in))
         if influence not in ("rflo", "exact"):
             raise ValueError("influence must be 'rflo' or 'exact'")
         self.influence = influence
@@ -281,7 +292,9 @@ class WeightPolicy:
         # Anchoring the squash at theta0 puts the reference at tanh(0) -- the
         # steepest point -- so the policy starts maximally responsive and
         # deviates from a controller that works.
-        z = self.G @ h
+        u = np.concatenate([h, np.asarray(feat, float).ravel(), [1.0]]) if self.direct else h
+        self._u = u
+        z = self.G @ u
         t = np.tanh(z)
         # ASYMMETRIC span: as much room as the box allows on each side
         # separately. A symmetric min(theta0-lo, hi-theta0) collapses to ZERO
@@ -340,8 +353,9 @@ class WeightPolicy:
         # Through the squash: d(theta)/dz = span * (1 - tanh^2 z), already
         # folded into _sq because span depends on the sign of tanh(z).
         g = g * self._sq
-        dG = np.outer(g, self._h)
-        dcell = (g @ self.G)[:, None] * self.P
+        dG = np.outer(g, self._u)
+        # only the recurrent part of the readout feeds back into the cell
+        dcell = (g @ self.G[:, :self.cell.n])[:, None] * self.P
         return dG, dcell
 
 
@@ -633,17 +647,23 @@ class PolicyTuner:
         # the units of the reward against the units of J*. Flip the reward
         # from metres to seconds and the learner reverses.
         #
-        # "fitted": a linear critic V_w(x) on the policy's own features,
+        # "return" (alias "fitted"): a linear critic V_w(x) on the policy's own features,
         # trained by TD(lambda) on the ACTUAL reward, with theta nowhere in
         # it. The actor gets its direction from theta-exploration instead:
         # theta = theta_mean + eps, eps ~ N(0, sigma^2) in log space, and
         # phi moves by delta * (eps / sigma^2) * dtheta_mean/dphi -- the
         # score-function estimator, RTRRL's pattern with theta as the action.
         # theta enters the return only through the policy, as asked.
-        if critic not in ("mpcc", "fitted"):
-            raise ValueError(f"critic must be 'mpcc' or 'fitted', got {critic!r}")
-        if critic == "fitted" and theta_explore <= 0:
-            raise ValueError("critic='fitted' needs theta_explore > 0: without "
+        # "return" is the name that says what it is: a critic fitted to the
+        # measured return. "fitted" is kept as an alias for the runs already on
+        # disk. In BOTH cases the MPCC solves the control problem and drives
+        # the car every tick; the critic is only the learner's yardstick.
+        if critic == "fitted":
+            critic = "return"
+        if critic not in ("mpcc", "return"):
+            raise ValueError(f"critic must be 'mpcc' or 'return', got {critic!r}")
+        if critic == "return" and theta_explore <= 0:
+            raise ValueError("critic='return' needs theta_explore > 0: without "
                              "theta noise the actor has no direction")
         self.critic, self.alpha_c = critic, float(alpha_c)
         self.w = None                    # critic weights, sized on first use
@@ -852,7 +872,7 @@ class PolicyTuner:
             reward = self._acc_r
             g_n, gl_n = self.gamma ** n, (self.gamma * self.lam) ** n
             self._acc_r, self._acc_ds = 0.0, 0.0
-        if self.critic == "fitted":
+        if self.critic == "return":
             # ---- critic: TD(lambda) on the actual reward, theta absent ----
             x = self._x(self._last_feat)
             if self.w is None:
@@ -905,9 +925,9 @@ class PolicyTuner:
                 # d/dG of -sum(tanh(z)^2) with z = G h, which is
                 # -2 tanh(z) (1 - tanh^2 z) h^T -- zero in the middle of the
                 # curve and strongest exactly where the output is saturating.
-                t = np.tanh(self.pol.G @ self.pol._h)
+                t = np.tanh(self.pol.G @ self.pol._u)
                 dG = dG - (self.alpha * self.entropy
-                           * np.outer(2.0 * t * (1.0 - t ** 2), self.pol._h))
+                           * np.outer(2.0 * t * (1.0 - t ** 2), self.pol._u))
             if self.trust_region is not None:
                 n = float(np.sqrt((dG ** 2).sum() + (dc ** 2).sum()))
                 if n > self.trust_region:

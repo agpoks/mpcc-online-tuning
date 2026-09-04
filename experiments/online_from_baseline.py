@@ -89,7 +89,7 @@ def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
      clock, keep_best, kb_tol, eval_eps, critic, theta_explore, explore,
-     validate) = job
+     validate, init_policy) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -117,8 +117,17 @@ def one(job):
             lo, hi = B.adaptation_box(track_name, factor)
         else:
             lo, hi = THETA_LO, THETA_HI
+        init = np.load(init_policy) if init_policy else None
+        if init is not None:
+            # idea 4: start from the network fitted to the situation grid,
+            # inside the data-driven box it was fitted in. theta_0 stays
+            # START -- the anchor of the squash -- the network's parameters
+            # are what carries the situation-dependence in.
+            lo, hi = init["lo"], init["hi"]
         pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0,
                            lo, hi, seed=seed)
+        if init is not None:
+            pol.G[...] = init["G"]; pol.cell.p[...] = init["cell_p"]
         tu = PolicyTuner(m, pol, alpha=alpha, explore=explore, delta_clip=1.0,
                          seed=seed, trust_region=0.01, clock=clock,
                          critic=critic, theta_explore=theta_explore)
@@ -242,11 +251,13 @@ def main(argv=None):
                     help="bank the policy network at the best episode and "
                          "revert to it when an episode is worse by more than "
                          "--keep-best-tol laps, or crashes")
-    ap.add_argument("--critic", choices=("mpcc", "fitted"), default="mpcc",
-                    help="mpcc: V = -J*, envelope gradient (the inherited "
-                         "scheme). fitted: linear critic on the policy's "
-                         "features trained on the actual reward, actor by "
-                         "theta-exploration; theta is nowhere in the critic")
+    ap.add_argument("--critic", choices=("mpcc", "return", "fitted"), default="mpcc",
+                    help="where the learner's value estimate comes from. The MPCC "
+                         "drives the car in BOTH cases. mpcc: V = -J*, the "
+                         "controller's own optimal cost, envelope gradient. "
+                         "return: a linear critic on the policy's features fitted "
+                         "to the measured return, actor by theta-exploration "
+                         "('fitted' is an alias)")
     ap.add_argument("--theta-explore", type=float, default=0.0,
                     help="sigma of Gaussian noise on theta, log space; the "
                          "fitted critic needs it > 0 (0.1 ~ 10%% jitter)")
@@ -256,6 +267,10 @@ def main(argv=None):
     ap.add_argument("--validate", action="store_true",
                     help="keep-best banks a candidate only after a FROZEN "
                          "validation episode beats the incumbent")
+    ap.add_argument("--init-policy", default=None,
+                    help="path to a fitted_policy_*.npz from "
+                         "scripts/fit_policy_to_grid.py: start the learner "
+                         "from that network and its box (idea 4)")
     ap.add_argument("--eval-episodes", type=int, default=0,
                     help="after learning, drive the banked best network "
                          "FROZEN (no learning, no exploration) for this many "
@@ -276,7 +291,7 @@ def main(argv=None):
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
              a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
              a.eval_episodes, a.critic, a.theta_explore, a.explore,
-             a.validate)
+             a.validate, a.init_policy)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
