@@ -1188,13 +1188,37 @@ TD drives the network to the corner again and it crashes; 5 reverts in 10
 episodes. Nothing about the gradient changed (2w), so nothing stops it
 repeating. Reverting is a safety net, not a cure.
 
-- [ ] **Frozen evaluation of the banked network** -- in flight
-      (`--eval-episodes 3`): restore the best, switch off learning AND
-      exploration, drive it. If it holds ~2.3-2.5 clean this is the paper's
-      deliverable -- online tuning found a policy NETWORK that beats the
-      hand-tuned start by half a lap, and fixing it keeps it. If it does not
-      hold, keep-best found a fluke. Networks saved as
-      `results/best_policy_<track>_<seed>_<clock>.npz`.
+- [x] **Frozen evaluation of the banked network: it does NOT hold.**
+      Restore the best, switch off learning and exploration, drive it:
+
+          seed   banked episode   frozen network
+          0         2.32            2.11  clean
+          1         2.34            2.06  then off
+          2         2.47            1.83  clean
+          (START 2.09, fixed 1.81)
+
+      No frozen network beats START; one is below fixed; one crashes, and
+      deterministically (three identical runs). The 2.3-2.5 credited to those
+      networks was produced by the PROCESS -- exploration noise plus the
+      network changing through the episode -- not by the end-of-episode
+      snapshot that was banked. **Keep-best kept the wrong object**: it
+      credited a snapshot with a score the snapshot did not earn. Networks are
+      in `results/best_policy_icra_t2_raceline_<seed>_progress.npz` for
+      anyone who wants to drive them.
+
+      So the per-metre learner's early good episodes (2w) were partly real
+      driving and partly a favourable interaction of noise and drift that no
+      fixed network reproduces. The honest statement for the paper: online
+      tuning has not yet produced a policy network that, held fixed, beats the
+      hand-tuned start on T2.
+- [ ] **Bank only what survives a frozen validation.** After a candidate
+      episode scores well, drive its end-of-episode network for one episode
+      with learning and noise OFF; bank it only if that score is also above
+      the incumbent. One extra episode per candidate, and the banked score
+      then means what it says.
+- [ ] Comparing the per-tick and per-metre banked networks is moot until the
+      above is in place; per-tick banked 1.75 / 1.65 / 1.92, none above
+      fixed, so there was nothing to evaluate there.
 - [ ] After N reverts, stop learning (or anneal alpha): the "fix the network"
       step made automatic. The data above says N = 2-3 would have done.
 
