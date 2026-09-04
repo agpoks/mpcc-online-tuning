@@ -128,14 +128,23 @@ BEST = {
         weights=dict(q_c=1.0, q_l=50.0, q_v=1.0, r_d=0.5, r_a=0.05, k_v=0.50),
         horizon=12, q_vref=0.05, laps=12.55, clean=True, steps=2500,
         peak_v=2.90,
-        note="Note the tracks disagree about k_v -- the oval wants 0.50 and "
-             "T2 wants 0.85, which is the situation-dependence this project "
-             "is about, visible in hand-tuned data before any learning."),
+        note="k_v 0.50. An earlier note here said the tracks disagree about "
+             "k_v (oval 0.50, T2 0.85); on the corrected, smoothed T2 corridor "
+             "T2's robust BEST is 0.50 as well, so that disagreement was partly "
+             "an artefact of the tunnel holding a high grip claim on the line. "
+             "Situation-dependence is measured per sector in TODO 2y instead."),
     "icra_t2_raceline": Setting(
-        weights=dict(q_c=1.0, q_l=50.0, q_v=1.0, r_d=0.5, r_a=6.0, k_v=0.60),
-        horizon=25, q_vref=0.20, laps=2.65, clean=True, steps=2500,
-        peak_v=2.70,
-        note="RE-TUNED 2026-09-03 on the corrected corridor and referee. The "
+        weights=dict(q_c=1.0, q_l=50.0, q_v=1.0, r_d=0.5, r_a=6.0, k_v=0.50),
+        horizon=25, q_vref=0.20, laps=2.35, clean=True, steps=2500,
+        peak_v=1.85,
+        note="RE-TUNED 2026-09-05 on the SMOOTHED corridor: k_v 0.50 is clean "
+             "from all three starts (2.32, 2.33, 2.40); 0.55 crashes from two, "
+             "0.60 -- the previous BEST at 2.65 -- from two. Smoothing rounds "
+             "off the peaks of the wide sections, and the faster settings were "
+             "using exactly that room. Note the oval's BEST is also k_v 0.50 "
+             "now, so the earlier 'the tracks disagree about k_v' rested partly "
+             "on the notched corridor. History: "
+             "RE-TUNED 2026-09-03 on the corrected corridor and referee. The "
              "previous BEST (k_v = 0.85, 3.05 laps) was hand-tuned inside the "
              "constant-width tunnel, which held the car near the centre "
              "regardless of the weights; with the real width it is FRAGILE -- "
