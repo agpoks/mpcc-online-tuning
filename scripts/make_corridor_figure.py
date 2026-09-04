@@ -58,7 +58,7 @@ def main(track_name="icra_t2_raceline"):
     ax.plot([], [], "-", color=C_RL, lw=1.7, label="optimiser's racing line")
     ax.set_aspect("equal"); ax.axis("off")
     ax.legend(frameon=False, fontsize=8.5, loc="upper left", ncol=1)
-    ax.set_title("ICRA T2 — the corridor the solver is given",
+    ax.set_title(f"{track_name} — the corridor the solver is given",
                  fontsize=12, fontweight="bold", loc="left", color=INK)
 
     # -- right: the same thing as numbers, along the lap --------------------
@@ -84,9 +84,9 @@ def main(track_name="icra_t2_raceline"):
                   f"corridor forbade\n({frac:.0f}% of the lap)",
                   fontsize=11, fontweight="bold", loc="left", color=INK)
 
-    fig.savefig(OUT / "corridor_width.png", dpi=190, bbox_inches="tight",
-                facecolor="white")
-    print("  wrote", OUT / "corridor_width.png")
+    name = "corridor_width.png" if track_name == "icra_t2_raceline" else f"corridor_width_{track_name}.png"
+    fig.savefig(OUT / name, dpi=190, bbox_inches="tight", facecolor="white")
+    print("  wrote", OUT / name)
     print("  racing line outside the OLD corridor on %.0f%% of the lap" % frac)
     print("  old corridor %.3f m constant; new %.3f-%.3f m" %
           (old, new_l.min(), new_l.max()))

@@ -437,13 +437,16 @@ class Track:
                                map_stem="icra2026_t1")
 
     @staticmethod
-    def _map_widths(centre, stem, max_m: float = 3.0):
-        """Perpendicular half-width along ``centre``, from the occupancy grid.
+    def _map_widths(centre, stem, max_m: float = 3.0, both_sides: bool = False,
+                    dilate_m: float = 0.10, bridge_px: int = 31):
+        """Perpendicular room along ``centre``, from the occupancy grid.
 
-        Returns the symmetric usable half-width -- min(left, right) at each
-        point, since the corridor the controller may use is bounded by whichever
-        wall is nearer. ``None`` if the map is not present, so a missing grid
-        degrades to the raceline's own margins rather than failing.
+        By default the symmetric usable half-width, min(left, right) at each
+        point. With ``both_sides`` the pair ``(left, right)`` -- geometric left
+        and right of the direction of travel -- so a corridor that is wider on
+        one side keeps that room instead of being clipped to the nearer wall.
+        ``None`` if the map is not present, so a missing grid degrades to the
+        raceline's own margins rather than failing.
         """
         import importlib.util
         here = Path(__file__).resolve().parent / "tracks"
@@ -457,7 +460,24 @@ class Track:
         spec.loader.exec_module(cl)
         im, res, org = cl.load(str(pgm), str(yml))
         H, W = im.shape
-        occ = cl.connect_cone_rows(im <= 50)
+        # bridge_px=21 (1.05 m) joins the MEDIAN cone spacing; the row along
+        # T1's middle straight has a gap of about 1.2 m centre-to-centre and
+        # the default left it open, so the ray slipped between two cones and
+        # reported 2.3 m of room on a 1.4 m corridor. 31 px (1.55 m) closes
+        # it; the guard below checks nothing drivable got walled off.
+        occ = cl.connect_cone_rows(im <= 50, bridge_px=bridge_px)
+        # Close the gaps between cones BEFORE raycasting. The rows are drawn
+        # as dots; where connect_cone_rows leaves a gap the ray slips through
+        # and reports the far side of the infield as track -- on T1 a 2.5 m
+        # "widening" over eight metres of a 0.9 m corridor. A binary dilation
+        # by about one cone spacing (dilate_m) turns the dots into a wall. A
+        # plain 3x3 max filter, applied k times, so there is no scipy here.
+        k = max(int(round(dilate_m / res)), 0)
+        for _ in range(k):
+            o = occ.copy()
+            o[1:, :] |= occ[:-1, :]; o[:-1, :] |= occ[1:, :]
+            o[:, 1:] |= occ[:, :-1]; o[:, :-1] |= occ[:, 1:]
+            occ = o
 
         def blocked(x, y):
             c = int((x - org[0]) / res)
@@ -469,17 +489,18 @@ class Track:
         g = np.gradient(centre, axis=0)
         n = np.stack([g[:, 1], -g[:, 0]], axis=1) / np.linalg.norm(
             g, axis=1)[:, None]
-        out = np.empty(len(centre))
+        # n = (g_y, -g_x) is the RIGHT-hand normal of the direction of travel
+        right = np.empty(len(centre)); left = np.empty(len(centre))
         for i, (pt, nv) in enumerate(zip(centre, n)):
-            side = []
-            for sgn in (+1, -1):
+            for sgn, dst in ((+1, right), (-1, left)):
                 d = 0.0
                 while d < max_m and not blocked(pt[0] + sgn * d * nv[0],
                                                 pt[1] + sgn * d * nv[1]):
                     d += res
-                side.append(d)
-            out[i] = min(side)
-        return out
+                dst[i] = d
+        if both_sides:
+            return left, right
+        return np.minimum(left, right)
 
     @staticmethod
     def icra_t2_raceline(scale: float = 1.0, ds: float = 0.1,
@@ -572,6 +593,7 @@ class Track:
         centre = np.stack([np.convolve(pad[:, 0], k, "valid"),
                            np.convolve(pad[:, 1], k, "valid")], axis=1)
         vehicle_adjusted = True
+        got = None
         if map_stem is not None:
             # Measure the corridor from the OCCUPANCY GRID instead.
             #
@@ -583,17 +605,66 @@ class Track:
             # against 0.35 m, which is 57% more room exactly where the car
             # needs it. The map is the track; the raceline margins are one
             # optimiser's opinion about how much of it to use.
-            got = Track._map_widths(centre, map_stem)
+            got = Track._map_widths(centre, map_stem, both_sides=True)
             if got is not None:
-                half = got
+                w_l, w_r = got
                 vehicle_adjusted = False      # these ARE distances to the wall
+                # A raycast LEAKS wherever the cone rows have a gap: on T1 it
+                # shoots through at three points and reports 2.5 m of room on
+                # a 0.9 m track, drawing the corridor into the infield. Two
+                # guards. (1) The optimiser's own margin is conservative but
+                # never wrong about which side of the wall the track is on,
+                # so the raycast may not exceed twice it. (2) An isolated
+                # excursion above 1.6x the rolling median over +-1.5 m is a
+                # leak, not a widening, and is clamped to that median.
+                def _guard(w, ref):
+                    w = np.minimum(np.asarray(w, float), 2.0 * np.asarray(ref, float))
+                    m = max(int(round(3.0 / max(step, 1e-9))) | 1, 5)
+                    pad = np.concatenate([w[-(m // 2):], w, w[:m // 2]])
+                    med = np.array([np.median(pad[i:i + m]) for i in range(len(w))])
+                    return np.where(w > 1.6 * med, med, w)
+                w_l, w_r = _guard(w_l, half), _guard(w_r, half)
+        if got is None or map_stem is None:
+            w_l = w_r = half
         if widen != 1.0:
             # Scale the corridor toward what an occupancy grid would show. See
             # icra_t2_raceline: measured 1.58x tightest / 1.17x median on the
             # one track where both are available.
-            half = half * float(widen)
+            w_l, w_r = w_l * float(widen), w_r * float(widen)
+        # SMOOTH THE WIDTHS along the lap, the way the centre already is.
+        #
+        # They never were. The raceline optimiser's margins carry its own
+        # point-to-point noise, and a raycast into a 5 cm grid carries pixel
+        # quantisation; both draw a boundary with notches that are not in the
+        # track (T2: 39 steps steeper than 45 degrees, 122 sign reversals
+        # within 0.3 m; the user: "cuts and edges in the border that are not
+        # even there"). A running median first, so a single-sample notch is
+        # removed rather than averaged into its neighbours, then the same
+        # metre-based boxcar the centre gets, then a floor.
+        def _smooth_w(a, med_m=0.5, box_m=1.0, floor=0.25):
+            a = np.asarray(a, float)
+            m = max(int(round(med_m / max(step, 1e-9))) | 1, 3)
+            padm = np.concatenate([a[-(m // 2):], a, a[:m // 2]])
+            a = np.array([np.median(padm[i:i + m]) for i in range(len(a))])
+            b = max(int(round(box_m / max(step, 1e-9))) | 1, 3)
+            padb = np.concatenate([a[-(b // 2):], a, a[:b // 2]])
+            a = np.convolve(padb, np.ones(b) / b, "valid")
+            return np.maximum(a, floor)
+        if got is not None:
+            # raycast into a 5 cm grid is rougher than the optimiser's margins
+            w_l, w_r = _smooth_w(w_l, 0.8, 1.2), _smooth_w(w_r, 0.8, 1.2)
+        else:
+            w_l, w_r = _smooth_w(w_l), _smooth_w(w_r)
+        # SLOT CONVENTION, verified against the occupancy grid rather than
+        # reasoned out: the corridor rows are `w_left - e_c >= 0` and
+        # `e_c + w_right >= 0` with e_c = sin(phi) dx - cos(phi) dy, which is
+        # MINUS the geometric lateral offset (positive = left of travel). So the
+        # slot called w_right bounds displacement to the geometric LEFT, and
+        # w_left bounds the geometric RIGHT. Symmetric widths never exposed
+        # this; asymmetric ones from the map would have put the room on the
+        # wrong side. Hence the swap.
         t = Track(centre[:, 0], centre[:, 1], ds=ds,
-                  w_left=half, w_right=half)
+                  w_left=w_r, w_right=w_l)
         t.width_vehicle_adjusted = vehicle_adjusted
         t.raceline = xy
         # The optimiser's reference speed, for comparison rather than for use.
