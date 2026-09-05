@@ -1,11 +1,22 @@
 # Frozen summary v1 — the paper's result table, archived and reproducible
 
-**Best result so far:** online adaptation with the MPCC critic, started from the
-grid-fitted network, validated keep-best, per-metre clock — banked networks that
-drive **2.72 / 2.78 / 2.99 laps frozen, all clean**, on ICRA T2 from three
-physically different starts. Against the safe baseline START (1.87 / 2.01 / 2.00)
-that is +0.85 laps at zero departures; it is also above the best *constant* any
-search found (2.32 / 2.33 / 2.40).
+**Best result (corrected 2026-09-05):** the **grid-fitted network with k_v
+capped at 0.50** drives **2.48 / 2.49 / 2.76 laps frozen, all clean**, on ICRA
+T2 from three physically different starts -- reproduced cold with
+`drive_policy.py`, so it is real and rerunnable. Against the safe baseline
+START (1.87 / 2.01 / 2.00) that is +0.53 laps at zero departures, and above the
+best *constant* any search found (2.32 / 2.33 / 2.40). The gain over the
+constant is the sector-dependent q_v/q_c schedule at the same grip claim.
+
+> **The online-adaptation numbers were wrong.** They were reported as
+> 2.72 / 2.78 / 2.99, but that frozen evaluation ran on an acados solver warmed
+> by ten preceding learning episodes, and `sv.reset()` does not fully clear
+> that state. Re-driven COLD (a fresh solver, `drive_policy.py`) the same
+> networks do far worse -- seed 2 gives ~1.0-1.5 and leaves the track. The
+> grid-fitted network reproduces cold exactly (2.48 / 2.49 / 2.76), which is
+> how the contamination was localized: only the runs whose eval solver was
+> warmed by online learning are affected. Online adaptation did NOT beat the
+> supervised fit. See TODO 2k.
 
 Git tag: `paper-frozen-summary-v1`. Figure: `frozen_summary.png` in this folder.
 
