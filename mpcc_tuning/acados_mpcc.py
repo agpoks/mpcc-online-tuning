@@ -42,7 +42,8 @@ class AcadosMPCC:
 
     def __init__(self, track, horizon=25, dt=0.05, vehicle="dynamic",
                  variant="fqp_soft_funnel", max_obstacles=0,
-                 export_dir=None, name=None, **build_kw):
+                 export_dir=None, name=None, solver_fallback=True,
+                 fallback_brake=1.0, **build_kw):
         from acados_template import AcadosOcpSolver
         from mpcc_tuning.acados_grad import AcadosEnvelopeGradient
         from mpcc_tuning.acados_ocp import build_ocp
@@ -78,6 +79,26 @@ class AcadosMPCC:
         self._nx = self.ocp.model.x.shape[0]
         self._n_theta = 8
         self._model = DynamicBicycle(dt=self.dt)
+        # SOLVER-FAILURE FALLBACK.
+        #
+        # On a failed solve (status 1 = NaN, 4 = QP failure) acados returns its
+        # last INFEASIBLE iterate. Applying it thrashes the actuators -- 39
+        # ticks of it steered a car off the track in the hairpin (see TODO
+        # 2i/2g). A controller must never act on a failed solve. So on failure
+        # we hold the last FEASIBLE steering and command a GENTLE brake, to
+        # shed the speed that made the corner infeasible. Measured on the
+        # aggressive online network, cold standing start: 1.01 -> 2.81 laps,
+        # peak speed 4.06 -> 2.03 m/s. A HARD brake is worse (a violent decel
+        # unsettles the drift car), hence a modest fallback_brake.
+        #
+        # FOR THE REAL CAR: this guard is CONTROL-LOOP logic, not part of the
+        # generated OCP. The acados C solver returns the status; the deployed
+        # control loop (ROS node / embedded main) must replicate this check --
+        # never send the actuators a control from a solve whose status is not
+        # 0 or 2. This Python path is the reference implementation.
+        self.solver_fallback = bool(solver_fallback)
+        self.fallback_brake = float(fallback_brake)
+        self._last_good_u = None
         self._seeded = False
         # the solver's own bounds, so a pinned action can be released again
         self._lbu = np.array(self.ocp.constraints.lbu, float)
@@ -139,6 +160,7 @@ class AcadosMPCC:
         except Exception:      # older acados without reset(): seed only
             pass
         self._seeded = False
+        self._last_good_u = None
 
     def _seed(self, state, theta):
         """Roll the model forward for the first solve.
@@ -195,8 +217,19 @@ class AcadosMPCC:
         # usable, not converged: MAX_ITER and MIN_STEP return the best iterate
         # and a bounded-iteration controller reports them constantly.
         ok = bool(np.isfinite(u0).all()) and status not in (1, 4)
-        return dict(u0=u0, value=float(self.sv.get_cost()), ok=ok,
-                    status=int(status), _p=p)
+        cost = float(self.sv.get_cost())
+        used_fallback = False
+        if self.solver_fallback:
+            if ok:
+                self._last_good_u = u0.copy()
+            elif self._last_good_u is not None:
+                # do NOT apply the failed iterate; hold last feasible steering,
+                # brake gently to recover feasibility (see __init__)
+                u0 = self._last_good_u.copy()
+                u0[1] = min(float(u0[1]), -self.fallback_brake)
+                used_fallback = True
+        return dict(u0=u0, value=cost, ok=ok, status=int(status),
+                    fallback=used_fallback, _p=p)
 
     def action_value(self, state, theta, action, v_out=None):
         """``Q(s, a)``. Identical to ``V(s)`` when ``a`` is the policy action."""

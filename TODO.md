@@ -2621,6 +2621,24 @@ controller node), `race_stack` (30 packages; the full stack layout),
 `datmo` (detection and tracking of moving objects -- this is what feeds the
 keep-out), `f1tenth_gym_ros` (the sim-side bridge and its Docker setup).
 
+### The solver-failure guard MUST be in the deployed control loop
+
+`AcadosMPCC.value` now implements it (2026-09-05, `solver_fallback=True`): on a
+solve whose status is not 0 or 2, do NOT send the actuators the returned
+iterate -- it is the failed, infeasible solution and it thrashes the steering
+(measured: 39 such ticks steered a car off the track). Hold the last feasible
+steering and command a gentle brake to recover feasibility. Cold standing
+start on the aggressive network: 1.01 -> 2.81 laps.
+
+This is CONTROL-LOOP logic, not part of the generated OCP. The acados C solver
+returns the status code; the deployed node (the C/C++ main or ROS node that
+reads the status and writes the actuators) must replicate the guard exactly,
+or the first infeasible corner puts the real car into a wall. The Python
+`value()` is the reference. Do not ship the controller without it. The gentle
+brake, not a hard one (a hard brake unsettles the drift car); consider
+feasibility restoration (re-solve at a lower speed target) as the complete
+version.
+
 ### What actually has to be exported
 
 - [ ] **The solver, as generated C.** This is item 3, not a separate task:
