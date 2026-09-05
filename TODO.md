@@ -1192,6 +1192,39 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2e. Grip cap WITHOUT the k_v^2 division — also REVERTED — 2026-09-05
+
+The user's next try: a plain lateral-accel cap `a_lat_grip - v^2*kappa >= 0`
+(soft, no k_v division), go back if it fails. Measured (grip ON, fallback OFF):
+
+    aggressive MPCC net   0.81 laps OFF, peak 1.88 m/s   (was 1.01 off -- WORSE)
+    grid-fitted seed 0    2.31 laps clean, peak 1.73 m/s
+    grid-fitted seed 1/2  1.06/1.20 OFF,  peak ~1.8 m/s   (were ~2.5 clean -- BROKEN)
+
+It caps corner speed on physics (peaks ~1.8 m/s, no k_v inversion) but still
+fails: the aggressive net crashes earlier, and two grid-fitted seeds that were
+clean now crash. Reverted to pre-grip-dynamic.
+
+**The real lesson (both grip attempts):** the policies were FITTED / TRAINED on
+the controller WITHOUT the grip constraint. Adding a constraint changes how the
+MPCC responds to the same weights, so the fitted weights no longer drive well --
+the network was optimised for a different controller. ANY change to the OCP
+invalidates the policies trained on it. A cause-side grip constraint is not a
+drop-in; it requires re-fitting the grid and re-training every policy on the
+grip-constrained controller (a full rerun).
+
+So, decided by measurement:
+- Both soft grip variants (with / without k_v^2): break the fitted policies,
+  because they were trained on the no-grip controller. Reverted.
+- Blind-brake fallback: saves standing/grid, breaks flying. Kept as-is at the
+  user's earlier request but its default (=1) is questionable.
+
+Path forward, if the crash is to be fixed at the cause: add the grip constraint
+AND re-fit/re-train all policies on it -- one consistent controller end to end.
+Otherwise stay with the current controller and treat the crash as a deployment
+robustness item (safety.py filter, or feasibility restoration), accepting that
+the aggressive policy needs a flying start until then.
+
 ## 2f. Tried (a) the soft grip constraint for the dynamic model — REVERTED — 2026-09-05
 
 The user's plan: save (tag pre-grip-dynamic), try re-enabling the grip row for
