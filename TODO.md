@@ -1192,7 +1192,40 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
-## 2h. Does the real race procedure (warm-up lap, stop on grid, race) fix it? NO — 2026-09-05
+## 2g. CORRECTION: the grid crash was a test artefact, not a stopping effect — 2026-09-05
+
+2h below claimed a warm-up + stop crashes because the car re-accelerates into an
+over-speed. Measured (scratchpad/gvf.py), that is WRONG. Peak speeds:
+
+    cold standing        4.06 m/s -> crash (genuine over-speed at the hairpin)
+    flying (continuous)  2.12 m/s -> clean, 2.84 laps
+    grid (my test)       2.04 m/s -> CRASH   <-- does NOT over-speed, yet crashes
+
+Both flying and grid stay ~2 m/s, so the grid crash is not the over-speed
+mechanism. The difference between them is that my grid scenario TELEPORTS the
+car to the start line (`P.reset(s0, v0=0.3)` after the warm-up), which breaks
+the continuity of the solver's warm-start and the network's hidden state -- an
+artefact of the test, not a real stopping effect. A genuine formation lap that
+DECELERATES into the grid continuously was never tested. So the grid number
+(1.81) is meaningless and 2h's mechanism claim is retracted.
+
+The user was right to doubt it ("in both the car already drove"). The valid
+comparison is cold (over-speeds, crashes) vs flying (stays slow, clean, 5.75
+laps in the long run). The online-MPCC network is fast; its cold crash is the
+over-speed feasibility failure, fixable by the solver-failure fallback below,
+not by a warm-up trick.
+
+- [ ] Either fix `racing_check.py` grid-start to decelerate into the grid
+      continuously (no teleport, no m.reset), or drop the grid scenario. The
+      teleport makes it a broken proxy.
+- [x] **A solver-failure fallback WORKS.** On status not in (0,2), reuse the
+      last feasible steering and brake: cold standing 1.01 -> 2.81 laps, peak
+      speed held 4.06 -> 2.03 m/s (braking stops the runaway). Nearly matches
+      flying (2.84) from a COLD start, no warm-up needed. Hard-brake variant
+      measuring now. This is the honest fix: the network is fast, and the
+      controller must not act on a failed QP.
+
+## 2h. Does the real race procedure (warm-up lap, stop on grid, race) fix it? — RETRACTED, see 2g — 2026-09-05
 
 The user's question: a warm-up lap then a brief stop on the grid then racing is
 the normal race start; does it solve the aggressive network's cold crash? The
