@@ -31,6 +31,19 @@ the grid, then race. It answers whether the moderate regime survives the brief
 stop (it lives in the policy's memory) or is lost with the momentum. See the
 table in `scenario_summary.json` / the figure for the measured answer.
 
+## Measured table (ICRA T2, laps in 2500 steps; x = left the track)
+
+| policy | standing (cold) | grid (warm-up + stop) | flying (moving) |
+|---|---|---|---|
+| grid-fitted network (deliverable) | 2.58 clean | 2.08 clean | 2.51 clean |
+| online MPCC critic (seed 2) | 1.01 x | 1.81 x | 2.84 clean |
+
+The grid-fitted network is clean from every start scenario -- it never
+over-speeds the hairpin -- so it needs no warm-up procedure. The aggressive
+online-MPCC network is fast only from a flying (moving) start; a stop on the
+grid loses the moderate speed regime and it crashes (see TODO 2h/2i and the
+GIF `docs/source/_static/anim/scenario_cold_vs_warm.gif`).
+
 ## Files
 
 | file | what |
