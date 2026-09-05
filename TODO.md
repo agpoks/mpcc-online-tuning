@@ -1243,8 +1243,23 @@ straight before its numbers mean anything.
       crash, and it is a controller property, not a warm-up trick or a tuning
       of the weights. NOT YET IMPLEMENTED (changes the core loop; propose to
       the user first).
+- [x] **Mechanism finally MEASURED (why_crash.py, full run).** Same MPCC
+      network, same start: COLD it reaches 4.06 m/s and crashes at the hairpin
+      (39 consecutive status-4 solves), 1.01 laps; WARMED by a warm-up lap
+      under START it never exceeds 2.94 m/s and drives 5.75 clean laps (hit
+      the 4000-tick limit), 24 scattered non-fatal solver failures. So the
+      difference is the SPEED REGIME the recurrent network settles into, set by
+      its HIDDEN STATE, which the warm-up lap initialises -- NOT the solver's
+      warm-start (warm both times; it just cannot solve a corner entered too
+      fast). The user's warm-up-lap intuition is correct; the mechanism is the
+      policy's memory, a standard recurrent-controller property.
+- [x] So the banked ~2.99 was the first 2500 steps of exactly such a warmed
+      5.75-lap run: a real racing number, gated by the policy needing a warm-up
+      lap to settle its memory.
 - [x] The one robust, repeatedly-reproduced result stands: the grid-fitted
-      network drives clean from a standing start, 2.48/2.49/2.76.
+      network drives clean from a standing start (2.48/2.49/2.76) because it was
+      fitted to safe per-sector targets, so its memory settles into a safe
+      regime without a warm-up.
 
 ## 2j. Standing vs flying start is a solver-init scenario, not a tuning result — the user, 2026-09-05
 
