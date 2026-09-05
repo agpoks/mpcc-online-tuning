@@ -1218,12 +1218,30 @@ not by a warm-up trick.
 - [ ] Either fix `racing_check.py` grid-start to decelerate into the grid
       continuously (no teleport, no m.reset), or drop the grid scenario. The
       teleport makes it a broken proxy.
-- [x] **A solver-failure fallback WORKS.** On status not in (0,2), reuse the
-      last feasible steering and brake: cold standing 1.01 -> 2.81 laps, peak
-      speed held 4.06 -> 2.03 m/s (braking stops the runaway). Nearly matches
-      flying (2.84) from a COLD start, no warm-up needed. Hard-brake variant
-      measuring now. This is the honest fix: the network is fast, and the
-      controller must not act on a failed QP.
+- [x] **A solver-failure fallback helps a lot but is not complete, and must
+      be GENTLE.** On status not in (0,2), reuse the last feasible steering and
+      brake. Measured, cold standing start:
+
+          no fallback     1.01 laps, peak 4.06 m/s, 39 solver-fails
+          gentle brake    2.81 laps, peak 2.03 m/s, 16 fails   <- best
+          hard brake      0.81 laps, peak 1.87 m/s,  3 fails   <- WORSE
+
+      Gentle braking (cap accel at -1.0) nearly matches the flying start (2.84)
+      from a COLD start with no warm-up -- it stops the runaway over-speed. But
+      HARD braking (-ACCEL_MAX) is counterproductive: on the drift car a violent
+      max-decel unsettles it and it leaves the track early. And even the gentle
+      brake still crashes at 2.81: reusing STALE steering from a different
+      position while braking works for a while then mismatches.
+- [ ] **The complete fix is feasibility restoration, not a blind brake.** When
+      the QP fails, re-solve with a LOWER speed target (reduce k_v or the v_s
+      reference) so the problem stays feasible and the solver returns a real
+      control, instead of holding stale steering. More work than the brake, but
+      it addresses the cause (an infeasible corner-entry command) rather than
+      the symptom. The gentle brake is a good cheap first line; feasibility
+      restoration is the real one.
+- [ ] Implement the gentle fallback in `AcadosMPCC` (a few lines: track the
+      last status-0 control; on failure return it with a capped brake) behind a
+      flag, and re-measure the standing/flying table with it on.
 
 ## 2h. Does the real race procedure (warm-up lap, stop on grid, race) fix it? — RETRACTED, see 2g — 2026-09-05
 
