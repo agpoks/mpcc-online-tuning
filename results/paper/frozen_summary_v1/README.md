@@ -42,9 +42,18 @@ the reproduction script regenerates them on the current geometry.
 
 ## Re-drive a saved network (minutes)
 
-    python3 scripts/drive_policy.py results/paper/frozen_summary_v1/best_policy_icra_t2_raceline_2_progress_mpcc_val.npz
+    python3 scripts/drive_policy.py results/paper/frozen_summary_v1/best_policy_icra_t2_raceline_2_progress_mpcc_val.npz \
+        --box-from results/paper/frozen_summary_v1/fitted_policy_icra_t2_raceline_kv0.50.npz
 
 drives it frozen on the three standard starts and prints laps and clean/off.
+
+**The v1 `best_policy_*.npz` files do not carry the box they were trained in or
+the LTC seed** (files written after 2026-09-05 do). Without `--box-from` the
+tool falls back to the factor-2 box, which is the wrong squash for these
+networks -- measured: the 2.99 network then drove 1.31x / 2.89 / 0.81x. The
+box is the fitted start network's (`fitted_policy_..._kv0.50.npz`, the same
+for all six online-from-fitted networks); the seed is the number before
+`_progress` in the filename and is inferred automatically.
 Use this after ANY change to `mpcc_tuning/track.py`: a policy learned on one
 boundary does not transfer to another (the 2.66 network of the notched
 corridor crashed on the smoothed one).

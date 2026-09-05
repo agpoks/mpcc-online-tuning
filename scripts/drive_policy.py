@@ -36,12 +36,29 @@ from mpcc_tuning.ltc import LTCCell, N_FEATURES, WeightPolicy, features  # noqa:
 from mpcc_tuning.track import Track  # noqa: E402
 
 
-def load_policy(path, track_name, hidden=12, seed=0):
+def load_policy(path, track_name, hidden=12, seed=None, box_from=None):
+    """Rebuild the policy exactly as it was trained.
+
+    Files written after 2026-09-05 carry the box and the seed. For the
+    archived v1 files (which do not), the box comes from ``--box-from`` (the
+    fitted start network they were adapted from) and the seed from the
+    ``_<seed>_progress`` part of the filename; both are printed so the
+    reconstruction is visible.
+    """
     z = np.load(path, allow_pickle=False)
     st = B.start(track_name)
     th0 = np.asarray(st.theta(), float)
-    lo = z["lo"] if "lo" in z else B.adaptation_box(track_name, 2.0)[0]
-    hi = z["hi"] if "hi" in z else B.adaptation_box(track_name, 2.0)[1]
+    name = Path(path).name
+    if seed is None:
+        seed = int(z["seed"]) if "seed" in z else int(name.split("_progress")[0].rsplit("_", 1)[-1])
+    hidden = int(z["hidden"]) if "hidden" in z else hidden
+    if "lo" in z and "hi" in z:
+        lo, hi, box_src = z["lo"], z["hi"], "file"
+    elif box_from:
+        b = np.load(box_from, allow_pickle=False); lo, hi, box_src = b["lo"], b["hi"], f"--box-from {Path(box_from).name}"
+    else:
+        lo, hi = B.adaptation_box(track_name, 2.0); box_src = "DEFAULT factor-2 box (probably wrong for this file)"
+    print(f"  reconstruction: LTC seed {seed}, hidden {hidden}, box from {box_src}")
     pol = WeightPolicy(LTCCell(N_FEATURES, hidden, seed=seed), th0, lo, hi, seed=seed)
     G = z["G"]
     if G.shape != pol.G.shape:
@@ -63,6 +80,10 @@ def main(argv=None):
     ap.add_argument("--track", default="icra_t2_raceline")
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2])
     ap.add_argument("--steps", type=int, default=0, help="0 = the track's baseline step budget")
+    ap.add_argument("--seed", type=int, default=None, help="LTC seed, if the file does not carry it")
+    ap.add_argument("--box-from", default=None,
+                    help="an .npz with lo/hi to use when the file does not carry its box "
+                         "(for the v1 archive: the fitted_policy_*_kv0.50.npz it was adapted from)")
     a = ap.parse_args(argv)
 
     from mpcc_tuning.acados_mpcc import AcadosMPCC
@@ -71,7 +92,7 @@ def main(argv=None):
     t = getattr(Track, a.track)()
     st = B.start(a.track)
     steps = a.steps or st.steps
-    pol, banked, meta = load_policy(a.npz, a.track)
+    pol, banked, meta = load_policy(a.npz, a.track, seed=a.seed, box_from=a.box_from)
     print(f"  {Path(a.npz).name}: {meta}" + (f"  banked frozen laps {banked:.2f}" if banked is not None else ""))
     m = AcadosMPCC(t, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref,
                    name=f"drive_{a.track}")

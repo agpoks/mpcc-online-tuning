@@ -235,10 +235,19 @@ def one(job):
         # keep the network itself, so it can be reloaded and driven again
         # the critic and the box are part of the identity of a banked network:
         # two runs that differed only in the critic overwrote each other here
+        # EVERYTHING needed to drive this network again must be in the file:
+        # the readout and cell parameters are useless without the box they
+        # were trained in (the squash spans depend on it) and the LTC seed
+        # (the cell's fixed structure depends on it). Measured without them:
+        # the 2.99-lap network re-driven with the default box and seed 0 gave
+        # 1.31x / 2.89 / 0.81x -- on its own start it left the track.
         np.savez(str(OUT / f"best_policy_{track_name}_{seed}_{clock}_{critic}"
                      f"{'_val' if validate else ''}.npz"),
                  G=G, cell_p=cp, best_laps=tu.best_score, critic=critic,
-                 clock=clock, box=box, factor=factor, validated=validate)
+                 clock=clock, box=box, factor=factor, validated=validate,
+                 lo=np.asarray(pol.lo, float), hi=np.asarray(pol.hi, float),
+                 theta0=th0, seed=seed, hidden=12,
+                 init_policy=str(init_policy or ""))
     return (track_name, seed, cond), per_ep, wtrace, evals
 
 

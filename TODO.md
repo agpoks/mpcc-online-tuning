@@ -1214,6 +1214,12 @@ methods we tried should also be saved to rerun this experiment."
 - The figure `paper/figures/frozen_summary.png` is the paper's result table.
   Rows evaluated on the pre-smoothing corridor are marked; the script puts
   every row on the current geometry.
+- Found by the first re-drive: the v1 `.npz` files did NOT carry the box or
+  the LTC seed, and the tool rebuilt the 2.99 network with the default box and
+  seed 0 -- 1.31x / 2.89 / 0.81x, off the track on its own start. The save
+  format now includes lo, hi, theta0, seed, hidden and the init file;
+  `drive_policy.py --box-from <fitted npz>` recovers the v1 files. A result is
+  only "saved" if everything needed to drive it again is in the file.
 - Caveat that stands: a policy learned on one boundary does not transfer to
   another. Any change to `mpcc_tuning/track.py` invalidates the archive as a
   claim about the current geometry -- re-drive with `drive_policy.py` first.
