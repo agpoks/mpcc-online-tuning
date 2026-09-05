@@ -1192,6 +1192,37 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2f. Tried (a) the soft grip constraint for the dynamic model — REVERTED — 2026-09-05
+
+The user's plan: save (tag pre-grip-dynamic), try re-enabling the grip row for
+the dynamic model as a SOFT constraint, revert if it does not work. Measured
+(grip ON, fallback OFF, to isolate it):
+
+    aggressive MPCC net   2.09 laps clean, peak 1.89 m/s   (was 1.01 off, 4.06 m/s -- over-speed FIXED)
+    grid-fitted seed 0    0.19 laps,       peak 1.15 m/s   (was ~2.5 -- CRIPPLED)
+    grid-fitted seed 1/2  0.45/0.22 off,   peak ~1.2 m/s   (was ~2.5 -- CRIPPLED)
+
+It fixes the aggressive net's over-speed but DESTROYS the grid-fitted
+deliverable. Cause is structural: the row is `a_lat_grip - v^2 kappa / k_v^2`,
+so the allowed lateral accel is `a_lat_grip * k_v^2`. The grid-fitted net has
+k_v = 0.50, giving 6.0 * 0.25 = 1.5 m/s^2 -- it is capped to ~1 m/s in corners
+and crawls. A LOW grip claim (meant to be conservative) is punished into
+crawling by the k_v^2 division. A threshold tweak cannot cleanly separate the
+two policies because the division inverts the meaning. REVERTED to
+pre-grip-dynamic.
+
+So neither cause-side fix tried is clean:
+- soft grip row: cripples low-k_v policies (this).
+- blind-brake fallback (2h/2i): saves standing/grid but BREAKS the flying case
+  (2.84 -> 1.96 off) by braking on transient failures.
+
+Open options, none yet validated: (i) a grip row WITHOUT the k_v^2 division (a
+plain a_lat cap, so k_v does not invert it); (ii) wire in the unused
+`safety.py` predictive filter; (iii) feasibility restoration (re-solve at a
+lower speed target on failure); (iv) gate the fallback to not fire on the
+policies that are already clean. The fallback default (=1) should probably be
+reconsidered given it breaks flying.
+
 ## 2g. CORRECTION: the grid crash was a test artefact, not a stopping effect — 2026-09-05
 
 2h below claimed a warm-up + stop crashes because the car re-accelerates into an
