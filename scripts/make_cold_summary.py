@@ -33,7 +33,7 @@ def main(track="icra_t2_raceline"):
         ax.axvline(val, color=c, lw=1.0, ls=(0, (4, 3)), zorder=1)
         ax.text(val, len(rows) - 0.45 + 0.3 * k, f" {lab} {val:.2f}", fontsize=8, color=c, va="bottom")
     ax.set_yticks([]); ax.set_xlim(0, 3.1); ax.set_ylim(-0.7, len(rows) + 0.2)
-    ax.set_xlabel("laps in 2500 steps, driven COLD on a fresh solver (learning off, noise off); hollow = left the track", color=MUT, fontsize=9.5)
+    ax.set_xlabel("laps in 2500 steps, driven COLD on a fresh solver (learning off, noise off); hollow = left the track", color=MUT, fontsize=9.5, labelpad=8)
     ax.grid(True, axis="x", color=GRID, lw=0.7); ax.set_axisbelow(True)
     for sp in ("top","right","left"): ax.spines[sp].set_visible(False)
     ax.tick_params(colors=MUT, labelsize=8.5)
