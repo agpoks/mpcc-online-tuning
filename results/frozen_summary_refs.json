@@ -1,0 +1,56 @@
+{
+ "icra_t2_raceline": {
+  "START (constant, k_v 0.40)": {
+   "laps": [
+    1.87,
+    2.01,
+    2.0
+   ],
+   "off": [
+    false,
+    false,
+    false
+   ],
+   "source": "remeasure2.log 2026-09-05, smoothed corridor"
+  },
+  "hand-tuned BEST (constant, k_v 0.50)": {
+   "laps": [
+    2.32,
+    2.33,
+    2.4
+   ],
+   "off": [
+    false,
+    false,
+    false
+   ],
+   "source": "robust2.log kv50, smoothed corridor"
+  },
+  "grid-fitted network, uncapped": {
+   "laps": [
+    1.31,
+    0.1,
+    1.81
+   ],
+   "off": [
+    true,
+    true,
+    true
+   ],
+   "source": "fitgrid.log --eval"
+  },
+  "grid-fitted network, k_v capped 0.50": {
+   "laps": [
+    2.48,
+    2.49,
+    2.76
+   ],
+   "off": [
+    false,
+    false,
+    false
+   ],
+   "source": "fitgrid_cap.log --eval"
+  }
+ }
+}

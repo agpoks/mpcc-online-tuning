@@ -128,6 +128,16 @@ def one(job):
                            lo, hi, seed=seed)
         if init is not None:
             pol.G[...] = init["G"]; pol.cell.p[...] = init["cell_p"]
+            # The bank must not start empty when we start from a network that
+            # already drives: otherwise the first candidate is accepted
+            # whatever its score, and a regression from the start gets
+            # "banked" (measured: return critic banked 2.30 and 2.34 from a
+            # start that drives 2.49 frozen). Seed the incumbent with the
+            # init network at its own frozen score, so only an improvement
+            # on it can ever be banked and every revert goes back to it.
+            init_seeded = True
+        else:
+            init_seeded = False
         tu = PolicyTuner(m, pol, alpha=alpha, explore=explore, delta_clip=1.0,
                          seed=seed, trust_region=0.01, clock=clock,
                          critic=critic, theta_explore=theta_explore)
@@ -135,6 +145,11 @@ def one(job):
     # physical perturbation per seed -- see the module docstring
     s0 = (seed % 4) * (t.length / 4.0)
     v0 = 1.0 + 0.1 * (seed % 3)
+    if learn and keep_best and init_seeded:
+        with tu.frozen():
+            l0, o0 = run_frozen(m, pol, t, s0, v0, steps, features)
+        tu._best = (-1.0 if o0 else float(l0), pol.G.copy(), pol.cell.p.copy())
+        pol.reset(); m.reset()
 
     per_ep, wtrace = [], []
     for ep in range(episodes):

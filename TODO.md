@@ -1332,6 +1332,22 @@ come from noise. Four options, decided order of testing: **4, then 1, maybe
       best T2 lap count measured on any geometry. And 5-7 reverts per seed
       with the LAST episode crashing on all three: the bank holds the gains,
       the learner still walks off the cliff (2w). Return critic in flight.
+      **Online from the fitted network, RETURN critic (theta-noise 0.05),
+      validated:** banked = frozen 2.34 / 2.30 / 2.57, 0-2 reverts, no crash in
+      any final episode -- it HOLDS but does not improve; two seeds ended
+      below the fitted start. That exposed a flaw: the bank started EMPTY when
+      starting from an init network, so the first candidate was accepted
+      whatever its score. Fixed: the incumbent is now the init network at its
+      own frozen score (one validation episode before learning), so only an
+      improvement can be banked and every revert returns to the start network.
+      The return-critic run above predates the fix and should be re-run.
+
+      **The summary figure is `paper/figures/frozen_summary.png`**: every
+      approach as a FIXED policy, three starts each. Reading it: supervised
+      fit to the grid + the k_v cap beats the hand-tuned constant; online
+      adaptation with the MPCC critic from that start reaches 2.72-2.99 and
+      is the best result here; the return critic with small noise holds but
+      does not gain; everything from START stays near or below BEST.
       **Naming:** `critic="fitted"` is now `critic="return"` (alias kept): a
       critic fitted to the measured return. The MPCC drives the car in every
       variant; the critic is only the learner's yardstick. The sweep in 2y

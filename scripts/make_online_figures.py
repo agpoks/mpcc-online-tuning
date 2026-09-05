@@ -132,8 +132,8 @@ def fig_learning(d):
         ax.tick_params(colors=MUT, labelsize=8.5)
 
     h, l = axes[0][0].get_legend_handles_labels()
-    fig.legend(h, l, frameon=False, fontsize=9, ncol=len(l), loc="lower center",
-               bbox_to_anchor=(0.5, -0.10))
+    fig.legend(h, l, frameon=False, fontsize=9, ncol=3, loc="lower center",
+               bbox_to_anchor=(0.5, -0.06 - 0.05 * ((len(l) - 1) // 3)))
     fig.suptitle("Online tuning from a verified baseline. Thick = mean, thin "
                  "= individual seeds: where runs are bimodal the mean "
                  "describes no actual run.",
@@ -310,8 +310,63 @@ def fig_sectors(d, cond="tuner", suffix=""):
     print("  wrote", OUT / f"online_sectors{suffix}.png")
 
 
+def fig_frozen(d):
+    """What each approach delivers as a FIXED policy: frozen laps per seed.
+
+    Learning curves answer "what happened while learning"; the paper's
+    question is what you can hand to the car afterwards. Every point here is
+    a network (or constant) driven with learning and noise off, three
+    physically different starts. Crashed runs are drawn hollow at the laps
+    they covered before leaving the track.
+    """
+    t = "icra_t2_raceline"
+    rows = []
+    refs = json.loads((ROOT / "results" / "frozen_summary_refs.json").read_text()).get(t, {})
+    for lab, r in refs.items():
+        rows.append((lab, r["laps"], r["off"], MUT if "constant" in lab else "#1098AD"))
+    # the three from-START runs finished before the corridor was smoothed and
+    # their frozen evaluations are on the NOTCHED geometry; say so on the row
+    # rather than let the title imply otherwise
+    LAB = {"tuner_progress_kb": ("online from START, MPCC critic, unvalidated  [notched corridor]", C_TUNER_P),
+           "tuner_mpcc_val": ("online from START, MPCC critic, validated  [notched corridor]", C_TUNER_P),
+           "tuner_fitted_val": ("online from START, RETURN critic, validated  [notched corridor]", "#1098AD"),
+           "tuner_init_mpcc": ("online from FITTED network, MPCC critic, validated", C_TUNER_P),
+           "tuner_init_return": ("online from FITTED network, RETURN critic, validated", "#1098AD")}
+    ev = d.get("evals", {})
+    for cond, (lab, c) in LAB.items():
+        laps, off = [], []
+        for sd in range(3):
+            e = ev.get(f"{t}|{sd}|{cond}")
+            if e:
+                laps.append(e[0]["laps"]); off.append(e[0]["off"])
+        if laps:
+            rows.append((lab, laps, off, c))
+    fig, ax = plt.subplots(figsize=(11.5, 0.55 * len(rows) + 1.6)); fig.patch.set_facecolor("white")
+    for i, (lab, laps, off, c) in enumerate(rows):
+        y = len(rows) - 1 - i
+        for l_, o_ in zip(laps, off):
+            ax.plot(l_, y, "o", ms=8, color=c, mfc="white" if o_ else c, mew=1.6, zorder=3)
+        ok = [l_ for l_, o_ in zip(laps, off) if not o_]
+        if ok:
+            ax.plot([min(ok), max(ok)], [y, y], "-", color=c, lw=2, alpha=0.5, zorder=2)
+        ax.text(-0.02, y, lab, transform=ax.get_yaxis_transform(), ha="right", va="center", fontsize=9, color=INK)
+    for val, c, lab in ((1.96, C_START, "START"), (2.35, C_BEST, "BEST"), (2.58, "#1098AD", "fitted")):
+        ax.axvline(val, color=c, lw=1.0, ls=(0, (4, 3)), zorder=1)
+        ax.text(val, len(rows) - 0.4, f" {lab} {val:.2f}", fontsize=8, color=c, va="bottom")
+    ax.set_yticks([]); ax.set_xlim(0, 3.2); ax.set_ylim(-0.7, len(rows) - 0.3)
+    ax.set_xlabel("laps in 2500 steps, driven FROZEN (learning off, noise off); hollow = left the track", color=MUT, fontsize=9.5)
+    ax.grid(True, axis="x", color=GRID, lw=0.7); ax.set_axisbelow(True)
+    for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)
+    ax.tick_params(colors=MUT, labelsize=8.5)
+    ax.set_title("ICRA T2: what each approach delivers as a fixed policy (3 starts each; smoothed corridor unless marked)",
+                 loc="left", fontsize=11, fontweight="bold", color=INK)
+    fig.savefig(OUT / "frozen_summary.png", dpi=190, bbox_inches="tight", facecolor="white"); plt.close(fig)
+    print("  wrote", OUT / "frozen_summary.png")
+
+
 if __name__ == "__main__":
     d = _load()
+    fig_frozen(d)
     fig_learning(d)
     fig_weights(d)
     fig_sectors(d)

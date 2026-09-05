@@ -28,7 +28,7 @@ def main(argv):
     if len(argv) < 3:
         raise SystemExit("usage: merge_online_results.py OUT.json IN.json ...")
     out = RES / argv[1]
-    eps, traces, names, cfg = {}, {}, None, None
+    eps, traces, evals, names, cfg = {}, {}, {}, None, None
     for spec in argv[2:]:
         # "file.json" or "file.json:old=new" to rename a condition on the
         # way in -- the progress-clock run writes its learner as "tuner" like
@@ -50,6 +50,8 @@ def main(argv):
             eps[_key(k)] = v
         for k, v in d.get("traces", {}).items():
             traces[_key(k)] = v
+        for k, v in d.get("evals", {}).items():
+            evals[_key(k)] = v
         print(f"  {p.name}: {len(d['episodes'])} runs"
               + (f"  ({ren})" if ren else ""))
 
@@ -74,7 +76,7 @@ def main(argv):
                 d[c + "_sd"] = float(np.std(vals))
         summary[t] = d
     out.write_text(json.dumps(dict(summary=summary, weight_names=names,
-                                   episodes=eps, traces=traces,
+                                   episodes=eps, traces=traces, evals=evals,
                                    config=cfg), indent=1))
     print(f"  wrote {out}")
 
