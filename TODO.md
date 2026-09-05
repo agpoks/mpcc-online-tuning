@@ -1309,6 +1309,13 @@ come from noise. Four options, decided order of testing: **4, then 1, maybe
       0.2). The grid itself is being re-measured on the smoothed corridor
       before the real fit; then frozen evaluation, then online adaptation
       from the fitted network (`--init-policy`).
+      **Fitted to the smoothed-corridor grid (RMSE 0.38) and driven frozen
+      on three starts: 1.31x / 0.10x / 1.81x -- crashes every time.** The
+      grid's favourite weights (k_v 0.85, q_v 2.0) are lap-fragile (2x), and
+      the network is a faithful copy of them (fitted k_v 0.6-1.0). A grid of
+      20-second bursts is not a safe target for a lap. Next: `--kv-cap 0.50`
+      keeps the sector-dependent q_v/q_c schedule at the grip claim known to
+      survive a lap; and a grid scored over longer horizons.
       **Naming:** `critic="fitted"` is now `critic="return"` (alias kept): a
       critic fitted to the measured return. The MPCC drives the car in every
       variant; the critic is only the learner's yardstick. The sweep in 2y

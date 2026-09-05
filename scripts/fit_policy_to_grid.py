@@ -56,8 +56,16 @@ SEC_NAME = ("straight", "long curve", "90-deg", "180-deg")
 IDX = {n: i for i, n in enumerate(WEIGHT_NAMES)}
 
 
-def targets_from_grid(path, track_name):
-    """{(sector, v0): log-theta target (8,)} with non-grid weights at START."""
+def targets_from_grid(path, track_name, kv_cap=None):
+    """{(sector, v0): log-theta target (8,)} with non-grid weights at START.
+
+    ``kv_cap`` clamps the target grip claim. The grid's cells are 20-second
+    bursts and do not see lap-scale fragility: its favourite k_v (0.85)
+    crashes from two of three starts over a full lap, and a network fitted to
+    it faithfully crashed on all three (1.31x / 0.10x / 1.81x). The robust
+    full-lap BEST is k_v 0.50. Capping keeps the grid's sector-dependent q_v
+    and q_c schedule at a grip claim that is known to survive a lap.
+    """
     d = json.loads(Path(path).read_text())
     s = d["summary"][track_name]
     th0 = np.asarray(B.start(track_name).theta(), float)
@@ -65,7 +73,8 @@ def targets_from_grid(path, track_name):
     for k, bv in s["best_vec"].items():
         sec, v0 = k.split("|"); sec, v0 = int(sec), float(v0)
         th = th0.copy()
-        th[IDX["q_v"]] = np.log(bv[0]); th[IDX["k_v"]] = np.log(bv[1])
+        kv = min(bv[1], kv_cap) if kv_cap else bv[1]
+        th[IDX["q_v"]] = np.log(bv[0]); th[IDX["k_v"]] = np.log(kv)
         if len(bv) > 2 and bv[2] > 0:
             th[IDX["q_c"]] = np.log(bv[2])
         out[(sec, v0)] = th; speeds.add(v0)
@@ -123,9 +132,9 @@ def ridge_readout(pol, walks, targets, speeds, ridge=1e-2, t_max=0.95):
 
 
 def fit(track_name, grid_path, epochs=60, lr=2e-2, seed=0, hidden=12, verbose=True,
-        readout="ridge"):
+        readout="ridge", kv_cap=None):
     track = getattr(Track, track_name)()
-    targets, speeds, cfg = targets_from_grid(grid_path, track_name)
+    targets, speeds, cfg = targets_from_grid(grid_path, track_name, kv_cap)
     th0 = np.asarray(B.start(track_name).theta(), float)
     lo, hi = data_box(targets, th0)
     pol = WeightPolicy(LTCCell(N_FEATURES, hidden, seed=seed), th0, lo, hi, seed=seed)
@@ -229,6 +238,8 @@ def main(argv=None):
     ap.add_argument("--epochs", type=int, default=0,
                     help="SGD fine-tuning epochs after the ridge readout (0 = none)")
     ap.add_argument("--readout", choices=("ridge", "sgd"), default="ridge")
+    ap.add_argument("--kv-cap", type=float, default=None,
+                    help="clamp the target grip claim k_v (0.50 = the robust full-lap BEST)")
     ap.add_argument("--lr", type=float, default=2e-2)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--eval", action="store_true", help="drive the fitted network frozen on 3 starts (needs acados)")
@@ -236,12 +247,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
     th0 = np.asarray(B.start(a.track).theta(), float)
     pol, targets, speeds, lo, hi, hist, walks = fit(a.track, RES / a.grid, a.epochs, a.lr, a.seed,
-                                                    readout=a.readout)
+                                                    readout=a.readout, kv_cap=a.kv_cap)
     print("\n  data-driven box (values):")
     for i, n in enumerate(WEIGHT_NAMES):
         print("    %-6s %7.3f .. %7.3f   (theta_0 %.3f)" % (n, np.exp(lo[i]), np.exp(hi[i]), np.exp(th0[i])))
-    report(pol, targets, speeds, walks, lo, hi, th0, a.track, FIG / f"fitted_policy_{a.track}.png")
-    out = Path(a.out) if a.out else RES / f"fitted_policy_{a.track}.npz"
+    report(pol, targets, speeds, walks, lo, hi, th0, a.track,
+           FIG / (f"fitted_policy_{a.track}" + (f"_kv{a.kv_cap:.2f}" if a.kv_cap else "") + ".png"))
+    out = Path(a.out) if a.out else RES / (f"fitted_policy_{a.track}" + (f"_kv{a.kv_cap:.2f}" if a.kv_cap else "") + ".npz")
     np.savez(str(out), G=pol.G, cell_p=pol.cell.p, lo=lo, hi=hi, th0=th0, rmse=hist,
              grid=str(a.grid), seed=a.seed)
     print("  wrote", out)
