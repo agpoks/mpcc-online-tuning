@@ -96,6 +96,43 @@ def flying(m, pol, t, s0, v0, steps, warm_theta, warm_steps):
     return (float(s5[4]) - base) / t.length, bool(off), "ok"
 
 
+def grid_start(m, pol, t, s0, v0, steps, warm_theta, warm_steps):
+    """The real race procedure: a warm-up lap, then a standing start at the grid.
+
+    Warm-up under the safe baseline settles the solver AND the recurrent
+    policy's hidden state. Then the car is placed at the start line s0 at rest
+    and the race policy takes over -- WITHOUT resetting the policy's memory or
+    the solver. This isolates whether the moderate-speed regime the warm-up
+    established lives in the policy's MEMORY (which survives a brief stop, so
+    this works and matches how races actually start) or only in the car's
+    momentum (lost at the stop, so it would not).
+
+    The handoff is at s0, on the grid, never mid-corner -- so this is also free
+    of the flying-start handoff artefact.
+    """
+    from mpcc_tuning.plant_scuderia import ScuderiaPlant
+    P = ScuderiaPlant(t, model="std", dt=0.05); P.max_steps = warm_steps + steps
+    s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
+    for _ in range(warm_steps):                 # formation lap: safe weights, policy + solver warm up
+        pol.step(features(t, s5))
+        u = m.value(P.state_dyn(), warm_theta)["u0"]
+        s5, r, off, tr = P.step(u)
+        if off or tr:
+            return 0.0, True, "formation lap crashed (the safe baseline should not)"
+    # line up on the grid: car at rest at s0, but KEEP the warm policy memory and solver
+    P.reset(s0=s0, v0=0.3)                       # standstill on the grid (0.3 m/s, essentially stopped)
+    s5 = P.state5()
+    base = float(s5[4]); off = tr = False
+    th = pol.step(features(t, s5))
+    for _ in range(steps):
+        u = m.value(P.state_dyn(), th)["u0"]
+        s5, r, off, tr = P.step(u)
+        th = pol.step(features(t, s5))
+        if off or tr:
+            break
+    return (float(s5[4]) - base) / t.length, bool(off), "ok"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("npz")
@@ -118,18 +155,22 @@ def main(argv=None):
 
     print(f"  {Path(a.npz).name}" + (f"  (banked {float(z['best_laps']):.2f})" if "best_laps" in z else ""))
     print(f"  warm-up lap driven by baselines.START; race policy engages at the grid")
-    print(f"  {'seed':>4} {'s0':>6} {'STANDING start':>16} {'FLYING start (racing)':>24}")
+    print(f"  {'seed':>4} {'s0':>6} {'STANDING (cold)':>16} {'GRID (warm-up + stop)':>22} {'FLYING (moving)':>18}")
     m = AcadosMPCC(t, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref, name=f"race_{os.getpid()}")
     rows = []
     for seed in a.seeds:
         s0 = (seed % 4) * t.length / 4.0; v0 = 1.0 + 0.1 * (seed % 3)
         s_laps, s_off = standing(m, _pol(z, box, th0, seed), t, s0, v0, st.steps)
-        f_laps, f_off, note = flying(m, _pol(z, box, th0, seed), t, s0, v0, st.steps, warm_theta, a.warm_steps)
-        rows.append((seed, s_laps, s_off, f_laps, f_off))
+        g_laps, g_off, gnote = grid_start(m, _pol(z, box, th0, seed), t, s0, v0, st.steps, warm_theta, a.warm_steps)
+        f_laps, f_off, fnote = flying(m, _pol(z, box, th0, seed), t, s0, v0, st.steps, warm_theta, a.warm_steps)
+        rows.append((seed, s_laps, s_off, g_laps, g_off, f_laps, f_off))
         print(f"  {seed:>4} {s0:>6.1f} {s_laps:>10.2f} {'OFF' if s_off else 'ok':>4} "
-              f"{f_laps:>16.2f} {(('OFF' if f_off else 'ok') if note=='ok' else note):>7}", flush=True)
-    print(f"  standing: {sum(1 for r in rows if not r[2])}/{len(rows)} clean, mean {np.mean([r[1] for r in rows]):.2f}; "
-          f"flying: {sum(1 for r in rows if not r[4])}/{len(rows)} clean, mean {np.mean([r[3] for r in rows]):.2f}")
+              f"{g_laps:>14.2f} {(('OFF' if g_off else 'ok') if gnote=='ok' else gnote):>7} "
+              f"{f_laps:>12.2f} {(('OFF' if f_off else 'ok') if fnote=='ok' else fnote):>6}", flush=True)
+    n = len(rows)
+    print(f"  standing: {sum(1 for r in rows if not r[2])}/{n} clean, mean {np.mean([r[1] for r in rows]):.2f}; "
+          f"grid: {sum(1 for r in rows if not r[4])}/{n} clean, mean {np.mean([r[3] for r in rows]):.2f}; "
+          f"flying: {sum(1 for r in rows if not r[6])}/{n} clean, mean {np.mean([r[5] for r in rows]):.2f}")
     return 0
 
 
