@@ -1192,6 +1192,30 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2o. The situation grid re-measured on the smoothed corridor — 2026-09-05
+
+Same 27 (q_v, k_v, q_c) vectors x 8 (sector, entry speed) cells, 400 steps:
+
+                         best constant                       per-situation   prize
+    notched corridor     q_v 0.20 k_v 0.70 q_c 1.00  27.08 m     30.05 m     +2.97 m (11.0%)
+    smoothed corridor    q_v 2.00 k_v 0.85 q_c 0.30  34.92 m     36.27 m     +1.35 m ( 3.9%)
+
+**The prize shrank from 11% to 3.9%, and the best single constant flipped
+from the timid vector to the aggressive one.** On the notched corridor the
+aggressive vector crashed in the straight/2.0 cell (a notch), which is what
+made a timid constant "best" and left room for per-situation gains; smoothing
+removed that notch and the aggressive constant now covers 45 m there. Most of
+what remains is one cell: the straight entered slowly wants k_v 0.50 and
+q_c 0.10 (+5.7 m). Sector-dependence on T2 is REAL BUT SMALL once the
+boundary is right -- which is consistent with the frozen-network result in 2p
+(+-10% weight swings around the lap) and with the user's expectation of "a
+light switching, not a lot".
+
+Caveat on using the grid as a target: its cells are 400-step (20 s) bursts
+from inside a sector. They do not see lap-scale fragility -- k_v 0.85 is the
+grid's favourite and crashes from two of three starts over a full lap (2x).
+The fitted policy's frozen evaluation over full episodes is the check.
+
 ## 2p. The banked networks re-driven on the smoothed corridor — 2026-09-05
 
 The 2r results were learned and validated on the notched corridor. Driven
