@@ -1192,6 +1192,35 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2h. Does the real race procedure (warm-up lap, stop on grid, race) fix it? NO — 2026-09-05
+
+The user's question: a warm-up lap then a brief stop on the grid then racing is
+the normal race start; does it solve the aggressive network's cold crash? The
+grid-start scenario (`racing_check.py`, warm-up under START -> car placed at the
+start line at rest, warm memory + solver kept -> race) measures it. MPCC seed 2:
+
+    standing (cold)            1.01 laps  OFF
+    grid (warm-up + stop)      1.81 laps  OFF   <- further than cold, but still crashes
+    flying (warm-up + moving)  2.84 laps  clean
+
+So NO: the stop loses it. Measured reason: when the car re-accelerates from the
+grid standstill it climbs back into the fast regime and over-speeds the hairpin
+again -- the moderate regime the warm-up established needs the car to stay
+MOVING through the handoff (momentum), not just the warmed memory. Only the
+flying (moving) handoff is clean. The warm memory helps a little (1.81 vs 1.01)
+but not enough.
+
+Consequence: the aggressive online-MPCC network is only safe with a genuine
+flying start; a stop-and-go grid start is not enough. The honest options are
+(a) the robust grid-fitted network, which needs none of this; (b) a flying
+start; or (c) the controller-side fix (solver-failure fallback / entry-speed
+constraint, TODO 2i) which removes the crash regardless of start type.
+
+GIF of the mechanism: `docs/source/_static/anim/scenario_cold_vs_warm.gif` --
+cold builds to 4 m/s and crashes at the hairpin (X); warmed stays ~2.5 m/s and
+drives clean, with live speed traces. Scenario README:
+`results/paper/scenarios/README.md`.
+
 ## 2i. The crash is a feasibility failure at the hairpin, NOT a cold solver — 2026-09-05
 
 The user asked why a standing start would trouble the solver, when a warm start

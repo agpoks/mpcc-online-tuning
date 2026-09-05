@@ -139,7 +139,7 @@ def main(argv=None):
         for sp in ("top", "right"): ax.spines[sp].set_visible(False)
     (spc,) = axsc.plot([], [], "-", color=RED, lw=1.8)
     (spw,) = axsw.plot([], [], "-", color="#0CA678", lw=1.8)
-    lab = fig.text(0.5, 0.965, "", ha="center", fontsize=10, color=INK)
+    lab = fig.text(0.5, 0.92, "", ha="center", fontsize=9, color=INK)
 
     def frame(k):
         kc, kw = min(k, len(C) - 1), min(k, len(W) - 1)
@@ -149,7 +149,7 @@ def main(argv=None):
         lab.set_text(f"cold {C[kc,2]:.1f} m/s   |   warmed {W[kw,2]:.1f} m/s     (dotted line = 4 m/s, where the hairpin QP fails)")
         return [trc, carc, trw, carw, spc, spw, lab]
 
-    fig.suptitle(f"{a.track}: the same policy, cold vs after a warm-up lap", fontsize=12, fontweight="bold", color=INK, x=0.01, ha="left")
+    fig.suptitle(f"{a.track}: the same policy, cold vs after a warm-up lap", fontsize=12, fontweight="bold", color=INK, x=0.01, ha="left", y=1.0)
     an = FuncAnimation(fig, frame, frames=n, interval=50, blit=False)
     ANIM.mkdir(parents=True, exist_ok=True)
     out = Path(a.out) if a.out else ANIM / "scenario_cold_vs_warm.gif"
