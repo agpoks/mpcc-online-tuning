@@ -29,6 +29,7 @@ behaviour_policy
 plant
 safety
 filters
+policies_in_the_table
 results
 animations
 references
