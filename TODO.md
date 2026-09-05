@@ -1316,6 +1316,18 @@ come from noise. Four options, decided order of testing: **4, then 1, maybe
       20-second bursts is not a safe target for a lap. Next: `--kv-cap 0.50`
       keeps the sector-dependent q_v/q_c schedule at the grip claim known to
       survive a lap; and a grid scored over longer horizons.
+      **With k_v capped at 0.50 the fitted network, driven FROZEN, does
+      2.48 / 2.49 / 2.76 laps, all clean** (RMSE 0.35). On the same geometry:
+      START 1.96, robust hand-tuned BEST 2.35 (a CONSTANT k_v 0.50). Same grip
+      claim, so the +0.23 laps (~10%) over the best constant is the
+      sector-dependent q_v / q_c schedule and nothing else. This is the
+      strongest frozen policy measured in this project, it was produced
+      without a critic and without noise, and it is the paper's claim in one
+      table: at a safe grip claim, situation-dependent weights beat the best
+      constant on every start. File:
+      `results/fitted_policy_icra_t2_raceline_kv0.50.npz`.
+      Online adaptation FROM this network (validated keep-best, both critics)
+      is the next run.
       **Naming:** `critic="fitted"` is now `critic="return"` (alias kept): a
       critic fitted to the measured return. The MPCC drives the car in every
       variant; the critic is only the learner's yardstick. The sweep in 2y
