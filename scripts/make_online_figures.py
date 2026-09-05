@@ -66,7 +66,12 @@ CONDS = (("fixed", C_FIXED, "-", "fixed (START held)"),
          ("tuner_mpcc_val", C_TUNER_P, (0, (6, 2, 1, 2)),
           "per metre, MPCC critic, validated keep-best"),
          ("tuner_fitted_val", "#1098AD", "-",
-          "per metre, FITTED critic, validated keep-best"))
+          "per metre, RETURN critic, validated keep-best"),
+         # started from the grid-fitted network (idea 4): dotted
+         ("tuner_init_mpcc", C_TUNER_P, (0, (1.5, 2)),
+          "from fitted network, MPCC critic, validated"),
+         ("tuner_init_return", "#1098AD", (0, (1.5, 2)),
+          "from fitted network, RETURN critic, validated"))
 
 
 def _curves(d, track, cond):
@@ -104,9 +109,14 @@ def fig_learning(d):
             ax.plot(x, y.mean(1), color=c, lw=2.2, ls=ls, zorder=3, label=lab,
                     marker="o", ms=4.5, mec="white", mew=1.0)
         s = d["summary"][t]
-        for val, c, lab, dash in ((s["start"], C_START, "START", (0, (5, 3))),
-                                  (s["best"], C_BEST, "BEST (hand-tuned)",
-                                   (0, (1.5, 2)))):
+        refs = [(s["start"], C_START, "START", (0, (5, 3))),
+                (s["best"], C_BEST, "BEST (hand-tuned)", (0, (1.5, 2)))]
+        fr = ROOT / "results" / "fitted_refs.json"
+        if fr.exists():
+            j = json.loads(fr.read_text()).get(t)
+            if j:
+                refs.append((j["laps"], "#1098AD", j["label"], (0, (3, 1, 1, 1))))
+        for val, c, lab, dash in refs:
             ax.axhline(val, color=c, lw=1.5, ls=dash, zorder=1)
             ax.text(0.985, val, f" {lab} {val:.2f}", transform=
                     ax.get_yaxis_transform(), ha="right", va="bottom",
@@ -308,7 +318,9 @@ if __name__ == "__main__":
     for cond, suf in (("tuner_progress", "_progress"), ("tuner_kb", "_kb"),
                       ("tuner_progress_kb", "_progress_kb"),
                       ("tuner_mpcc_val", "_mpcc_val"),
-                      ("tuner_fitted_val", "_fitted_val")):
+                      ("tuner_fitted_val", "_fitted_val"),
+                      ("tuner_init_mpcc", "_init_mpcc"),
+                      ("tuner_init_return", "_init_return")):
         if any(k.endswith("|" + cond) for k in d["episodes"]):
             fig_weights(d, cond, suf)
             fig_sectors(d, cond, suf)

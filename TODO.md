@@ -1326,8 +1326,12 @@ come from noise. Four options, decided order of testing: **4, then 1, maybe
       table: at a safe grip claim, situation-dependent weights beat the best
       constant on every start. File:
       `results/fitted_policy_icra_t2_raceline_kv0.50.npz`.
-      Online adaptation FROM this network (validated keep-best, both critics)
-      is the next run.
+      **Online adaptation FROM this network, MPCC critic, validated keep-best,
+      per-metre clock:** banked = frozen 2.72 / 2.78 / 2.99 -- every seed
+      above the fitted start (2.48 / 2.49 / 2.76), above BEST 2.35; 2.99 is the
+      best T2 lap count measured on any geometry. And 5-7 reverts per seed
+      with the LAST episode crashing on all three: the bank holds the gains,
+      the learner still walks off the cliff (2w). Return critic in flight.
       **Naming:** `critic="fitted"` is now `critic="return"` (alias kept): a
       critic fitted to the measured return. The MPCC drives the car in every
       variant; the critic is only the learner's yardstick. The sweep in 2y
