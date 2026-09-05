@@ -49,9 +49,12 @@ def main(track="icra_t2_raceline"):
         ax.tick_params(colors=MUT, labelsize=8.5)
     axes[0].set_yticks(range(len(rows)))
     axes[0].set_yticklabels([lab for lab, _ in rows][::-1], fontsize=9.5, color=INK)
-    fig.suptitle(f"{track}: what each policy delivers, by start scenario (3 starts each)\\n"
-                 "warm/cold is solver initialisation, not tuning; a race gives every policy the warm-up lap",
-                 fontsize=11.5, fontweight="bold", color=INK, x=0.01, ha="left")
+    fig.suptitle(f"{track}: what each policy delivers, by start scenario (3 starts each)",
+                 fontsize=12, fontweight="bold", color=INK, x=0.01, ha="left", y=1.02)
+    fig.text(0.01, 0.965, "A warm-up lap settles a recurrent policy's memory into a moderate speed regime. The grid-fitted network needs "
+             "none (clean cold). The MPCC network needs it (cold it over-speeds the hairpin and the QP fails). The two RETURN-critic "
+             "flying crashes are a handoff artefact of racing_check (warm-up ends mid-hairpin), not a policy property.",
+             fontsize=8, color=MUT, ha="left")
     fig.savefig(OUT / "scenario_summary.png", dpi=190, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print("  wrote", OUT / "scenario_summary.png")
