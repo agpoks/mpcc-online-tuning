@@ -1192,6 +1192,32 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2j. Standing vs flying start is a solver-init scenario, not a tuning result — the user, 2026-09-05
+
+> "this is rather a solver topic which has nothing to do with the tuning. even a
+> hand tuned version would have the same problem. ... normally we make a warm-up
+> round to the starting position before the race starts so the mpcc solver
+> should be already initialised correctly."
+
+Correct, and it reframes 2k below. Warm vs cold is the acados warm-start, a
+property of the solver, not the weights. The deployment condition is a FLYING
+start: a warm-up lap to the grid initialises the solver (and the recurrent
+policy's hidden state) before the race. `scripts/racing_check.py` measures that
+-- a warm-up lap under `baselines.START` with the target network watching, then
+the target engages at the grid -- alongside the STANDING start
+(`drive_policy.py`).
+
+- [ ] Report both scenarios per policy. The online-MPCC networks that "failed
+      cold" should be fine flying; the grid-fitted network is fine both, so it
+      needs no warm-up. The banked numbers were REAL racing numbers.
+- [ ] Add the standing / flying / racing scenario to the paper as the user
+      suggested; a policy could even be trained for the standing start, but the
+      standard answer is the warm-up lap.
+- [x] The earlier `warm_cold_check.py` warm protocol reset the network's hidden
+      state at the handoff and warmed with the wrong policy -- an artefact that
+      made the robust fitted network look like it crashed warm. `racing_check.py`
+      fixes both.
+
 ## 2k. The online numbers were warm-solver artefacts — corrected 2026-09-05
 
 The user asked for the best result to be rerunnable; the first re-drive with
