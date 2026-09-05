@@ -43,7 +43,7 @@ class AcadosMPCC:
     def __init__(self, track, horizon=25, dt=0.05, vehicle="dynamic",
                  variant="fqp_soft_funnel", max_obstacles=0,
                  export_dir=None, name=None, solver_fallback=True,
-                 fallback_brake=1.0, **build_kw):
+                 fallback_brake=1.0, fallback_after=1, **build_kw):
         from acados_template import AcadosOcpSolver
         from mpcc_tuning.acados_grad import AcadosEnvelopeGradient
         from mpcc_tuning.acados_ocp import build_ocp
@@ -98,6 +98,24 @@ class AcadosMPCC:
         # 0 or 2. This Python path is the reference implementation.
         self.solver_fallback = bool(solver_fallback)
         self.fallback_brake = float(fallback_brake)
+        # Intervene after N consecutive failures. There is a real tradeoff,
+        # measured (cold standing start):
+        #
+        #   fallback_after   aggressive network   grid-fitted network
+        #   1 (immediate)    2.64 clean (SAVED)   2.25 clean (slowed from 2.58)
+        #   3 (wait)         1.16 OFF (crashes)   2.44 clean
+        #
+        # Braking EARLY is what stops the over-speed, and braking early also
+        # brakes on the transient blips a clean policy would ride through -- so
+        # no threshold gives both a saved runaway and an unslowed clean policy.
+        # For a CAR, safety wins: N=1 keeps everything on the track (nothing
+        # crashes) at the cost of ~13% lap time on policies that occasionally
+        # graze the QP limit; a genuinely clean policy never triggers it and
+        # pays nothing. Raise N only if you accept a crash risk for lap time.
+        # The cost is removed properly by feasibility restoration (re-solve at
+        # a lower speed target), TODO 6b.
+        self.fallback_after = int(fallback_after)
+        self._fail_streak = 0
         self._last_good_u = None
         self._seeded = False
         # the solver's own bounds, so a pinned action can be released again
@@ -161,6 +179,7 @@ class AcadosMPCC:
             pass
         self._seeded = False
         self._last_good_u = None
+        self._fail_streak = 0
 
     def _seed(self, state, theta):
         """Roll the model forward for the first solve.
@@ -222,12 +241,16 @@ class AcadosMPCC:
         if self.solver_fallback:
             if ok:
                 self._last_good_u = u0.copy()
-            elif self._last_good_u is not None:
-                # do NOT apply the failed iterate; hold last feasible steering,
-                # brake gently to recover feasibility (see __init__)
-                u0 = self._last_good_u.copy()
-                u0[1] = min(float(u0[1]), -self.fallback_brake)
-                used_fallback = True
+                self._fail_streak = 0
+            else:
+                self._fail_streak += 1
+                # act only once the failure is SUSTAINED, and never on the
+                # solver's failed iterate itself
+                if (self._fail_streak >= self.fallback_after
+                        and self._last_good_u is not None):
+                    u0 = self._last_good_u.copy()
+                    u0[1] = min(float(u0[1]), -self.fallback_brake)
+                    used_fallback = True
         return dict(u0=u0, value=cost, ok=ok, status=int(status),
                     fallback=used_fallback, _p=p)
 
