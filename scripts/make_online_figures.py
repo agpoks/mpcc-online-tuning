@@ -351,10 +351,14 @@ def fig_frozen(d):
         if ok:
             ax.plot([min(ok), max(ok)], [y, y], "-", color=c, lw=2, alpha=0.5, zorder=2)
         ax.text(-0.02, y, lab, transform=ax.get_yaxis_transform(), ha="right", va="center", fontsize=9, color=INK)
-    for val, c, lab in ((1.96, C_START, "START (the safe baseline)"), (2.35, C_BEST, "best CONSTANT by search"), (2.58, "#1098AD", "fitted")):
+    # staggered so three labels a quarter-lap apart do not overprint
+    for k, (val, c, lab) in enumerate(((1.96, C_START, "START (safe baseline)"),
+                                       (2.35, C_BEST, "best constant by search"),
+                                       (2.58, "#1098AD", "grid-fitted, frozen"))):
         ax.axvline(val, color=c, lw=1.0, ls=(0, (4, 3)), zorder=1)
-        ax.text(val, len(rows) - 0.4, f" {lab} {val:.2f}", fontsize=8, color=c, va="bottom")
-    ax.set_yticks([]); ax.set_xlim(0, 3.2); ax.set_ylim(-0.7, len(rows) - 0.3)
+        ax.text(val, len(rows) - 0.55 + 0.32 * (2 - k), f" {lab} {val:.2f}", fontsize=8, color=c, va="bottom")
+    ax.set_ylim(-0.7, len(rows) + 0.5)
+    ax.set_yticks([]); ax.set_xlim(0, 3.2)
     ax.set_xlabel("laps in 2500 steps, driven FROZEN (learning off, noise off); hollow = left the track", color=MUT, fontsize=9.5)
     ax.grid(True, axis="x", color=GRID, lw=0.7); ax.set_axisbelow(True)
     for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)

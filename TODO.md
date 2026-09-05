@@ -1192,6 +1192,50 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2m. The second experiment series: the opponent — the user, 2026-09-05
+
+> "we wanted to learn in a second experiment the opponent and learned to stay
+> behind or follow in sectors where it is hard to overtake depending on how
+> the opponent behaves. I didn't see this in any of the experiments."
+
+Correct: everything since the corridor fix has been the solo car. The
+opponent series is the second half of the paper and it has not been run on
+the current stack (corrected corridor, soft sectors, direct-path policy,
+validated keep-best). What exists: `mpcc_tuning/opponents.py` (Opponent with
+speed classes static / slower / equal / faster, `keepout()`), the keep-out
+row in the OCP with `d_obs` in theta (and the native gradient that carries its
+multiplier term -- TODO "FOR THE PAPER"), the opponent-class features (4 of
+the 18), `experiments/overtaking_dynamic.py` (3 clean passes at 0.55x pace,
+acados, measured 2026-09-03) and `experiments/race_matrix.py` (old stack).
+
+The behaviour to show, as SEPARATE experiments, each with a fixed control and
+three physically different opponent starts:
+
+- [ ] **Follow where a pass is not on.** Opponent slightly slower (0.85-0.95x)
+      through a 180-deg / narrow sector: the adapted policy should raise
+      `d_obs` and lower `q_v` there -- sit behind -- and drop them again on the
+      following straight. Measure: gap held, no contact, no departure, and the
+      weights in the corner vs the straight. The soft sector feature and the
+      "gap" / "closing rate" features are what the network has to use.
+- [ ] **Pass where it is.** Same opponent, wide straight or long curve: the
+      policy should lower `d_obs` and raise `q_v` and take the pass. Measure:
+      pass rate, min gap (must clear the keep-out), laps.
+- [ ] **Opponent classes.** Static / slower / equal / faster at the same
+      point of the track; the correct behaviours differ (go round / pass /
+      hold / do not try). Show the emitted weights differ by class -- this is
+      what the recurrence is for (catching vs being caught is the same gap
+      with opposite closing rate; TODO under `OPPONENT_CLASSES`).
+- [ ] **Behaviour switch within a lap.** One episode, opponent slower: follow
+      through the hairpins, pass on the straight. GIF: track with sectors,
+      opponent drawn, weights on the right (the `anim_learn_then_freeze`
+      layout).
+- [ ] Prerequisites: the situation grid with an opponent column
+      (`situation_demands_acados.py` already documents the opponent classes
+      and why the reference speed must be relative to the ego's measured
+      pace); the frozen-validation and bank-seeding fixes apply unchanged;
+      `d_obs` needs the native gradient (`theta_global=True`) whenever an
+      opponent is present.
+
 ## 2n. We do not compare to BEST — the user, 2026-09-05
 
 > "in a real scenario we never start with the best. our baseline is normally a
