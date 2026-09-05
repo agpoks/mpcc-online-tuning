@@ -1,0 +1,69 @@
+{
+ "icra_t2_raceline": {
+  "START (constant, k_v 0.40)": {
+   "laps": [
+    1.87,
+    2.01,
+    2.0
+   ],
+   "off": [
+    false,
+    false,
+    false
+   ],
+   "kind": "constant"
+  },
+  "best constant by search (k_v 0.50)": {
+   "laps": [
+    2.32,
+    2.33,
+    2.4
+   ],
+   "off": [
+    false,
+    false,
+    false
+   ],
+   "kind": "constant"
+  },
+  "grid-fitted network, k_v capped 0.50": {
+   "laps": [
+    2.48,
+    2.49,
+    2.76
+   ],
+   "off": [
+    false,
+    false,
+    false
+   ],
+   "kind": "fit"
+  },
+  "online from fitted, RETURN critic": {
+   "laps": [
+    2.42,
+    2.33,
+    2.74
+   ],
+   "off": [
+    false,
+    false,
+    false
+   ],
+   "kind": "online"
+  },
+  "online from fitted, MPCC critic": {
+   "laps": [
+    2.31,
+    1.06,
+    1.01
+   ],
+   "off": [
+    true,
+    true,
+    true
+   ],
+   "kind": "online"
+  }
+ }
+}

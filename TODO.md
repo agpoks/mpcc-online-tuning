@@ -1192,13 +1192,49 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
-## 2l. BEST RESULT SO FAR — archived, tagged, reproducible — 2026-09-05
+## 2k. The online numbers were warm-solver artefacts — corrected 2026-09-05
 
-**Online adaptation, MPCC critic, validated keep-best, per-metre clock, started
-from the grid-fitted network: banked networks that drive 2.72 / 2.78 / 2.99
-laps frozen, all clean, ICRA T2, three physically different starts.** Against
-START 1.87 / 2.01 / 2.00 that is +0.85 laps at zero departures, and above the
-best constant any search found (2.32 / 2.33 / 2.40). The user: "mark ... as
+The user asked for the best result to be rerunnable; the first re-drive with
+`drive_policy.py` did not reproduce, and tracking that down overturned the
+result. Banked (the in-experiment frozen eval) vs COLD (a freshly built solver):
+
+    policy                              banked      cold
+    grid-fitted network (k_v cap 0.50)  2.48/2.49/2.76   2.48/2.49/2.76  clean  <- reproduces
+    online from fitted, RETURN critic   2.34/2.30/2.57   2.42/2.33/2.74  clean  <- reproduces
+    online from fitted, MPCC critic     2.72/2.78/2.99   2.31/1.06/1.01  ALL OFF <- collapses
+
+The in-experiment frozen evaluation ran on the acados solver that had just
+done ten learning episodes, and `sv.reset()` does NOT clear that state fully.
+The MPCC critic does extra solves per tick (value, action-value, envelope
+gradient) so it warms the solver hard AND drifts to aggressive weights that
+only stay feasible from a warm start -- 2.99 warm, 1.01 cold, off the track.
+The return critic uses the solver for control only and barely leaves the
+fitted network, so it reproduces cold.
+
+**Corrected conclusion, all cold:**
+- **Best deliverable: the grid-fitted network, 2.48 / 2.49 / 2.76 clean, mean
+  2.58** -- supervised fit to the situation grid at a safe grip claim, +0.53
+  over START, above the best constant, REPRODUCIBLE. This is the paper result.
+- Online return-critic adaptation holds it (mean 2.50) but does not improve.
+- Online MPCC-critic "adaptation" is a trap: solver-fragile weights that fail
+  cold. Another mark against V = -J* (2w), and a reason the eval must be cold.
+
+Fixes:
+- [x] `run_frozen(..., cold=True)` builds a fresh solver; validation, final
+      eval and the init-seed now use it, so keep-best can no longer bank a
+      warm-only network. Figure: `paper/figures/cold_summary.png`.
+- [x] `scripts/drive_policy.py` (fresh process) is the authoritative frozen
+      measure; the archive README and TODO now quote cold numbers.
+- [ ] Re-run the online-from-fitted comparison with the cold-eval fix, to see
+      whether either critic improves on the fit when the bank is honest. The
+      MPCC-critic bank should now stop keeping warm-only networks.
+
+## 2l. Archived and reproducible — 2026-09-05
+
+**CORRECTED (see 2k): the best deliverable is the grid-fitted network,
+2.48 / 2.49 / 2.76 laps frozen, all clean, reproduced COLD.** The
+online-adaptation numbers first archived here (2.72 / 2.78 / 2.99) were
+warm-solver artefacts and do not reproduce. The user: "mark ... as
 best version, save the version as a good result and that we can rerun it. the
 methods we tried should also be saved to rerun this experiment."
 
