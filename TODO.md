@@ -1226,9 +1226,25 @@ straight before its numbers mean anything.
       or a solver-failure fallback (hold last feasible control) would turn a
       crash into a slow corner. That is the honest fix, and it is about the
       controller, not the warm-up.
-- [x] The robust deliverable is unchanged: the grid-fitted network drives clean
-      from a standing start because it does not over-speed the hairpin
-      (confirming measurement in flight).
+- [~] The "aggressive network over-speeds the hairpin" hypothesis was ALSO
+      wrong. Started fresh right before the hairpin (s=25, v0=1.5), BOTH the
+      grid-fitted and the MPCC network take it slowly and cleanly (1.53 and
+      1.68 m/s, 0 solver failures). So neither over-speeds it from a settled
+      approach; the 4 m/s in the crash built up over a full continuous lap. The
+      whole-lap speed-buildup cause is NOT isolated -- stop guessing.
+- [x] **The actionable defect, independent of the cause: the loop applies the
+      solver's output even when the QP FAILED.** `AcadosMPCC.value` computes
+      `ok = status not in (1,4)` but every driving loop (run_frozen, drive,
+      the experiment) uses `out["u0"]` regardless. On status 4 that is a
+      garbage control, and 39 ticks of it thrash the car off the track. A
+      controller must not act on a failed solve. Fix: on `not ok`, hold the
+      last feasible control (or command a brake / v_s=0). This turns any
+      infeasibility -- whatever its cause -- into a slow corner instead of a
+      crash, and it is a controller property, not a warm-up trick or a tuning
+      of the weights. NOT YET IMPLEMENTED (changes the core loop; propose to
+      the user first).
+- [x] The one robust, repeatedly-reproduced result stands: the grid-fitted
+      network drives clean from a standing start, 2.48/2.49/2.76.
 
 ## 2j. Standing vs flying start is a solver-init scenario, not a tuning result — the user, 2026-09-05
 
