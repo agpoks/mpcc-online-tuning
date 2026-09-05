@@ -1192,6 +1192,44 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2i. The crash is a feasibility failure at the hairpin, NOT a cold solver — 2026-09-05
+
+The user asked why a standing start would trouble the solver, when a warm start
+converges in 1-2 iterations, and noted that 1.01 laps means the car drove a
+full lap before crashing. Both points are right, and the instrumented run
+(scratchpad/why_crash.py) settles it. The MPCC seed-2 network, standing start:
+
+- completes a full clean lap, then in the s=34-43 **180-degree hairpin**, at
+  **~4 m/s**, acados returns **status 4 (QP failure) for 39 consecutive
+  ticks**; the returned control thrashes the steering (lateral -0.05 -> -0.57
+  -> +1.9 m) and the car wobbles off. Crash at tick 968, s=42 m.
+
+So the solver had solved 900+ times and was warm; it failed anyway. The cause
+is entering the tightest corner too fast: the aggressive weights carry ~4 m/s
+into the hairpin and the grip + corridor constraints go infeasible. This is a
+**weights-vs-corner feasibility** failure -- partly a tuning matter -- not the
+cold-solver-init story I gave in 2j/2k. Correcting that framing.
+
+Also found: the full standing-vs-flying table does NOT support "flying always
+helps". Flying rescues the three MPCC networks (off -> 2.74-2.84) but BREAKS
+two return-critic networks that were clean standing (2.33 -> 0.21 off, 2.74 ->
+1.96 off). Cause: `racing_check.py`'s warm-up is ~1 lap (1100 steps), which
+returns to the SAME arc length, so for a start inside/near the hairpin the race
+policy takes over MID-CORNER -- a bad handoff, an artefact of the protocol, not
+a property of the policy. The flying protocol needs the handoff forced onto a
+straight before its numbers mean anything.
+
+- [ ] Fix `racing_check.py`: hand off on a straight (e.g. warm up to the START
+      line, not for a fixed step count that lands in a corner).
+- [ ] The real question this raises: should the aggressive weights be penalised
+      for commanding an infeasible corner entry? A grip/entry-speed constraint
+      or a solver-failure fallback (hold last feasible control) would turn a
+      crash into a slow corner. That is the honest fix, and it is about the
+      controller, not the warm-up.
+- [x] The robust deliverable is unchanged: the grid-fitted network drives clean
+      from a standing start because it does not over-speed the hairpin
+      (confirming measurement in flight).
+
 ## 2j. Standing vs flying start is a solver-init scenario, not a tuning result — the user, 2026-09-05
 
 > "this is rather a solver topic which has nothing to do with the tuning. even a
