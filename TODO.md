@@ -1192,6 +1192,34 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2n. We do not compare to BEST — the user, 2026-09-05
+
+> "in a real scenario we never start with the best. our baseline is normally a
+> good parameter set that is not too aggressive, mostly boundaries are not
+> good fitted. ... the hand tuned is never the best. it doesn't crash but is
+> not the BEST. in the real race we then try to fit thresholds how the
+> adaptive values shall change and try to make the car faster and stable."
+
+So the comparison the paper makes is **START -> adapted**, on two axes:
+faster (laps) AND still clean (no departure from the track, three physically
+different starts). "BEST" in `baselines.py` and in the figures is a constant
+found by exhaustive search on the same geometry; it is an upper bound on what
+a CONSTANT can do, shown for context, not a competitor and not the target.
+Nobody has it at the start of a race. Figures label it that way from now on.
+
+The per-track START itself is chosen the way a team would: stable, not
+aggressive, clean from every start, with obvious room left.
+
+- [ ] Re-read every "closed X% of the headroom to BEST" phrase in TODO and
+      docs in this light; the honest metric is laps over START at zero
+      crashes.
+- [x] **Sectors are selected automatically for any loaded track.**
+      `Track.sector(s)` / `Track.corners()` threshold at a fraction of the
+      track's OWN peak curvature and classify by total turn, so nothing is
+      hand-set per track. `Track.sectors()` returns the table for whatever
+      track is loaded and `scripts/show_sectors.py --track <name>` prints and
+      plots it.
+
 ## 2o. The situation grid re-measured on the smoothed corridor — 2026-09-05
 
 Same 27 (q_v, k_v, q_c) vectors x 8 (sector, entry speed) cells, 400 steps:

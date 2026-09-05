@@ -19,12 +19,13 @@ mechanism in the learner.
     Clean, stable, and deliberately NOT the fastest. This is theta_0: the
     online tuner begins here.
 ``BEST``
-    The best clean result found by hand. This is the target, not the start.
-
-The experiment is whether the tuner moves START toward BEST on its own, per
-track and per situation. Recording both up front means that question has an
-answer rather than an impression -- and if the tuner overshoots BEST, that is
-a result too.
+    The best clean CONSTANT found by search on the same geometry. Context,
+    not the target. The user's framing (TODO 2n): in a real race nobody
+    starts with the best parameters; the team starts from a good, not too
+    aggressive set and adapts. The question the experiment answers is whether
+    adaptation from START gets FASTER and STAYS CLEAN. BEST is drawn in the
+    figures as an upper bound on what a constant can do, so an adaptive policy
+    that beats it has demonstrably done something no constant can.
 
 ## START and BEST must be the SAME OCP
 

@@ -290,6 +290,31 @@ class Track:
     #: 0 straight, 1 long curve, 2 ninety, 3 one-eighty.
     SECTOR_NAMES = ("straight", "long curve", "90-deg", "180-deg")
 
+    def sectors(self, kappa_frac: float = 0.10, ds: float = 0.05):
+        """The sector table of THIS track, detected automatically.
+
+        Nothing here is set per track: :meth:`corners` thresholds at a
+        fraction of the track's own peak curvature and classifies each corner
+        by its total heading change, and :meth:`sector` absorbs sub-metre
+        straights. Load any track and call this to see what the policy will be
+        told about it. Returns a list of ``(s_start, s_end, length_m, id,
+        name)``, in lap order.
+        """
+        ss = np.arange(0.0, self.length, ds)
+        lab = np.array([self.sector(float(v), kappa_frac) for v in ss])
+        out, start = [], 0
+        for i in range(1, len(lab) + 1):
+            if i == len(lab) or lab[i] != lab[start]:
+                out.append((float(ss[start]), float(ss[min(i, len(ss) - 1)]),
+                            float((i - start) * ds), int(lab[start]),
+                            self.SECTOR_NAMES[int(lab[start])]))
+                start = i
+        # a sector straddling the start/finish line is one sector, not two
+        if len(out) > 1 and out[0][3] == out[-1][3]:
+            a, b = out.pop(), out[0]
+            out[0] = (a[0], b[1], a[2] + b[2], b[3], b[4])
+        return out
+
     def sector(self, s, kappa_frac: float = 0.10) -> int:
         """Named sector at arc length ``s``: 0 straight, 1 long, 2 ninety, 3 one-eighty.
 

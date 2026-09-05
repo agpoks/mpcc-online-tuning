@@ -109,8 +109,8 @@ def fig_learning(d):
             ax.plot(x, y.mean(1), color=c, lw=2.2, ls=ls, zorder=3, label=lab,
                     marker="o", ms=4.5, mec="white", mew=1.0)
         s = d["summary"][t]
-        refs = [(s["start"], C_START, "START", (0, (5, 3))),
-                (s["best"], C_BEST, "BEST (hand-tuned)", (0, (1.5, 2)))]
+        refs = [(s["start"], C_START, "START (the safe baseline)", (0, (5, 3))),
+                (s["best"], C_BEST, "best CONSTANT by search (context, not target)", (0, (1.5, 2)))]
         fr = ROOT / "results" / "fitted_refs.json"
         if fr.exists():
             j = json.loads(fr.read_text()).get(t)
@@ -323,7 +323,8 @@ def fig_frozen(d):
     rows = []
     refs = json.loads((ROOT / "results" / "frozen_summary_refs.json").read_text()).get(t, {})
     for lab, r in refs.items():
-        rows.append((lab, r["laps"], r["off"], MUT if "constant" in lab else "#1098AD"))
+        lab = lab.replace("hand-tuned BEST (constant, k_v 0.50)", "best CONSTANT by search (k_v 0.50) -- context, not target")
+        rows.append((lab, r["laps"], r["off"], MUT if "constant" in lab.lower() else "#1098AD"))
     # the three from-START runs finished before the corridor was smoothed and
     # their frozen evaluations are on the NOTCHED geometry; say so on the row
     # rather than let the title imply otherwise
@@ -350,7 +351,7 @@ def fig_frozen(d):
         if ok:
             ax.plot([min(ok), max(ok)], [y, y], "-", color=c, lw=2, alpha=0.5, zorder=2)
         ax.text(-0.02, y, lab, transform=ax.get_yaxis_transform(), ha="right", va="center", fontsize=9, color=INK)
-    for val, c, lab in ((1.96, C_START, "START"), (2.35, C_BEST, "BEST"), (2.58, "#1098AD", "fitted")):
+    for val, c, lab in ((1.96, C_START, "START (the safe baseline)"), (2.35, C_BEST, "best CONSTANT by search"), (2.58, "#1098AD", "fitted")):
         ax.axvline(val, color=c, lw=1.0, ls=(0, (4, 3)), zorder=1)
         ax.text(val, len(rows) - 0.4, f" {lab} {val:.2f}", fontsize=8, color=c, va="bottom")
     ax.set_yticks([]); ax.set_xlim(0, 3.2); ax.set_ylim(-0.7, len(rows) - 0.3)
