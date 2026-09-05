@@ -1,0 +1,7 @@
+{
+ "icra_t2_raceline": {
+  "laps": 2.58,
+  "label": "grid-fitted network, frozen",
+  "file": "fitted_policy_icra_t2_raceline_kv0.50.npz"
+ }
+}

@@ -1192,6 +1192,32 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2l. BEST RESULT SO FAR — archived, tagged, reproducible — 2026-09-05
+
+**Online adaptation, MPCC critic, validated keep-best, per-metre clock, started
+from the grid-fitted network: banked networks that drive 2.72 / 2.78 / 2.99
+laps frozen, all clean, ICRA T2, three physically different starts.** Against
+START 1.87 / 2.01 / 2.00 that is +0.85 laps at zero departures, and above the
+best constant any search found (2.32 / 2.33 / 2.40). The user: "mark ... as
+best version, save the version as a good result and that we can rerun it. the
+methods we tried should also be saved to rerun this experiment."
+
+- Archive: `results/paper/frozen_summary_v1/` -- the three networks (.npz),
+  the fitted start network, every run's JSON, the grid, the reference rows,
+  the figures, and a README with the table, the file list and the method.
+- Tag: `paper-frozen-summary-v1` on the commit that produced it.
+- Re-drive a network in minutes: `python3 scripts/drive_policy.py <file.npz>`
+  (three standard starts, frozen; refuses networks whose readout shape
+  predates the direct path).
+- Regenerate the whole table (~6 h): `bash scripts/reproduce_frozen_summary.sh`
+  (`--from N` to resume). Every method in the table is one line of it.
+- The figure `paper/figures/frozen_summary.png` is the paper's result table.
+  Rows evaluated on the pre-smoothing corridor are marked; the script puts
+  every row on the current geometry.
+- Caveat that stands: a policy learned on one boundary does not transfer to
+  another. Any change to `mpcc_tuning/track.py` invalidates the archive as a
+  claim about the current geometry -- re-drive with `drive_policy.py` first.
+
 ## 2m. The second experiment series: the opponent — the user, 2026-09-05
 
 > "we wanted to learn in a second experiment the opponent and learned to stay
