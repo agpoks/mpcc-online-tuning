@@ -2830,3 +2830,41 @@ settles it. So:
 
 Real cause-side fix remains TODO 6b (feasibility restoration: re-solve at a
 lower speed target), which removes the over-speed without braking blind.
+
+## 2h. The MPCC-critic cold crash is over-claimed k_v — FIXED by a launch schedule — 2026-09-06
+
+Probed what the nets actually emit (scratchpad probe_speed.py, no solver): at the
+hairpin BOTH the grid-fitted and MPCC-critic nets emit near-flat, speed- and
+state-independent weights (the LTC output barely moves with input). So the
+earlier "recurrent memory drifts to a fast regime / warm-up settles it gentle"
+story is WRONG at the weight level. Weights are in log space (exp(-1.61)=0.20 =
+START q_v). The one real difference between the nets:
+
+    at the hairpin      grid-fitted   MPCC-critic(seed2)
+    q_v                 0.17          0.14
+    k_v (grip claim)    0.50          0.69   <-- the crux
+    q_c                 1.49          1.51
+
+k_v is the grip claim and enters the CONSTRAINT; 0.69 lets the plan carry ~4 m/s
+into the hairpin -> QP infeasible -> crash. Decisive tests (cold, 3 seeds):
+
+    MPCC-critic, k_v uncapped (0.69)        1/3 clean, mean 1.76, peak 4.06 m/s
+    MPCC-critic, k_v clamped to 0.50        3/3 clean, mean 2.26, peak <=1.85 m/s
+    MPCC-critic, k_v cap 0.50 for lap 1
+      then RELEASED to 0.69 (a schedule)    3/3 clean, mean 2.57, released ~lap 1.0
+
+So the fix for JUST the MPCC-critic is a **k_v launch schedule**: cap the grip
+claim for the launch lap, release it once up to speed. 3/3 clean cold, mean 2.57
+(= grid-fitted's 2.58). Why it works where the brake/2s-switch/grip-constraint
+failed: it shapes the PLAN (a valid, gentler grip claim), not the control loop,
+so it never distorts the launch the way blind braking did; and after lap 1 the
+car is in the already-clean flying regime where k_v=0.69 is fine. It also
+generalises to stop/restart/recovery for free (cap grip whenever slow/just
+started). Wired reproducibly as `run_frozen(..., kv_launch=0.50)` /
+`drive_policy.py --kv-launch 0.50 [--kv-launch-laps N]`, default off so all
+existing results are unchanged.
+
+Caveat: over the bounded 2500-step metric the scheduled MPCC-critic (2.57) ties
+the grid-fitted deliverable (2.58); its speed edge (2.79 flying, 5.75 long-run)
+is a PACE-over-many-laps property, measured separately with --steps 8000.
+Supersedes the guard work in 2g (no control-loop guard needed for this).

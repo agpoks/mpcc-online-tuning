@@ -69,17 +69,40 @@ from mpcc_tuning.track import Track  # noqa: E402
 OUT = ROOT / "results"
 
 
-def run_frozen(m, pol, t, s0, v0, steps, features):
-    """Drive the CURRENT network with no learning and no noise; one episode."""
+def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
+               kv_launch_laps=1.0):
+    """Drive the CURRENT network with no learning and no noise; one episode.
+
+    ``kv_launch`` (>0) is a **launch schedule on the grip claim**: cap the
+    emitted ``k_v`` to this value until the car has covered ``kv_launch_laps``
+    laps, then release it to whatever the network asks for. Measured 2026-09-06
+    (TODO 2h): the online MPCC-critic net over-claims grip (k_v drifted 0.50 ->
+    0.69) and from a COLD standstill plans ~4 m/s into the hairpin, the QP goes
+    infeasible, it crashes (1/3 clean). Capping k_v to 0.50 for the launch lap
+    then releasing it -> 3/3 clean, mean 2.57, because once moving it is in the
+    already-clean flying regime. Unlike a control-loop brake this shapes the
+    PLAN (a valid, gentler grip claim), so it does not distort the launch the
+    way braking did. Default 0.0 = off, so every existing result is unchanged.
+    """
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
+    from mpcc_tuning.mpcc import WEIGHT_NAMES
+    ik = WEIGHT_NAMES.index("k_v")
+    cap = float(np.log(kv_launch)) if kv_launch and kv_launch > 0 else None
     P = ScuderiaPlant(t, model="std", dt=0.05); P.max_steps = steps
     s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
     base = float(s5[4]); off = tr = False
-    th = pol.step(features(t, s5))
+
+    def emit():
+        th = np.asarray(pol.step(features(t, s5)), float)
+        if cap is not None and (float(s5[4]) - base) < kv_launch_laps * t.length:
+            th[ik] = min(th[ik], cap)          # launch: cap the grip claim
+        return th
+
+    th = emit()
     for _ in range(steps):
         u = m.value(P.state_dyn(), th)["u0"]
         s5, r, off, tr = P.step(u)
-        th = pol.step(features(t, s5))
+        th = emit()
         if off or tr:
             break
     return (float(s5[4]) - base) / t.length, bool(off)

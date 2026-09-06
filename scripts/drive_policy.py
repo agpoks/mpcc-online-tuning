@@ -81,6 +81,12 @@ def main(argv=None):
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2])
     ap.add_argument("--steps", type=int, default=0, help="0 = the track's baseline step budget")
     ap.add_argument("--seed", type=int, default=None, help="LTC seed, if the file does not carry it")
+    ap.add_argument("--kv-launch", type=float, default=0.0,
+                    help="cap the emitted k_v (grip claim) to this value for the "
+                         "launch lap(s), then release it -- fixes the MPCC-critic "
+                         "cold crash without a brake (0 = off). Try 0.50.")
+    ap.add_argument("--kv-launch-laps", type=float, default=1.0,
+                    help="how many laps the k_v launch cap stays on (default 1)")
     ap.add_argument("--box-from", default=None,
                     help="an .npz with lo/hi to use when the file does not carry its box "
                          "(for the v1 archive: the fitted_policy_*_kv0.50.npz it was adapted from)")
@@ -100,7 +106,8 @@ def main(argv=None):
     for seed in a.seeds:
         s0 = (seed % 4) * t.length / 4.0
         v0 = 1.0 + 0.1 * (seed % 3)
-        laps, off = run_frozen(m, pol, t, s0, v0, steps, features)
+        laps, off = run_frozen(m, pol, t, s0, v0, steps, features,
+                               kv_launch=a.kv_launch, kv_launch_laps=a.kv_launch_laps)
         out.append((seed, laps, off))
         print(f"  start {seed} (s0 {s0:5.1f} m, v0 {v0:.1f} m/s): {laps:.2f} laps {'OFF' if off else 'clean'}", flush=True)
     clean = [l for _, l, o in out if not o]
