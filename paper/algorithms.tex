@@ -1,0 +1,117 @@
+% Pseudo-algorithms for the online MPCC weight-tuning paper.
+% Requires: \usepackage{algorithm} \usepackage{algpseudocode} \usepackage{amsmath}
+% Drop into the paper with \input{algorithms}.
+%
+% Notation
+%   x_t        vehicle state at tick t
+%   phi        parameters of the weight policy pi_phi (LTC cell + readout G)
+%   theta_t    = pi_phi(f_t): the eight MPCC cost weights, emitted per tick
+%   f_t        features (sector membership, speed, curvature preview, gap, width)
+%   J*(x,theta) the MPCC's optimal cost; u_0*(x,theta) its first control
+%   V_w        critic; two variants: V = -J* (MPCC critic) or a fitted V_w(f)
+%   r_t        reward; progress per tick, or -Delta t under the progress clock
+
+% ----------------------------------------------------------------------
+% 1. The offline warm start: fit the policy to the situation grid.
+% ----------------------------------------------------------------------
+\begin{algorithm}[t]
+\caption{Offline warm start: fit the weight policy to the situation grid}
+\label{alg:gridfit}
+\begin{algorithmic}[1]
+\Require track $\mathcal{T}$; grid $\mathcal{G}=\{(c,\theta^\star_c)\}$ of the
+  winning weights $\theta^\star_c$ for each cell $c=(\text{sector},v_0)$;
+  anchor $\theta_0$; grip-claim cap $\bar k_v$
+\State build a data-driven box $[\theta_{lo},\theta_{hi}]$ enclosing all
+  $\theta^\star_c$ with margin
+\For{each cell $c$} \Comment{cap the lap-fragile grip claim}
+  \State $\theta^\star_c[k_v] \gets \min(\theta^\star_c[k_v],\ \bar k_v)$
+\EndFor
+\For{each speed $v_0$} \Comment{drive the track, collect hidden states}
+  \State reset the LTC state; walk $\mathcal{T}$ at $v_0$, recording
+    $(h_t,f_t)$ and the target $\theta^\star_{c(t)}$ per point
+\EndFor
+\State \textbf{ridge readout:} invert the squash,
+  $z^\star=\operatorname{atanh}\!\big((\theta^\star-\theta_0)/\text{span}\big)$,
+  and solve $G=\arg\min_G \lVert Z^\star-G\,[h;f;1]\rVert^2+\lambda\lVert G\rVert^2$
+\State \textbf{fine-tune:} a few SGD epochs of
+  $\min_\phi \sum_t \lVert \pi_\phi(f_t)-\theta^\star_{c(t)}\rVert^2$
+  through the recurrence
+\State \Return $\phi$, box $[\theta_{lo},\theta_{hi}]$
+  \Comment{the deployable situation-dependent policy}
+\end{algorithmic}
+\end{algorithm}
+
+% ----------------------------------------------------------------------
+% 2. The online tuner: TD(lambda) on the policy, with keep-best + validate.
+% ----------------------------------------------------------------------
+\begin{algorithm}[t]
+\caption{Online MPCC weight tuning: TD($\lambda$) on the weight policy}
+\label{alg:online}
+\begin{algorithmic}[1]
+\Require policy $\pi_\phi$ (from Alg.~\ref{alg:gridfit}); box
+  $[\theta_{lo},\theta_{hi}]$; critic mode $\in\{\textsc{mpcc},\textsc{fitted}\}$;
+  rates $\alpha,\alpha_c$; discount $\gamma$; trace $\lambda$; noise $\sigma$;
+  clock $\in\{\text{tick},\text{progress}\}$, step $\Delta s_{\mathrm{ref}}$
+\State validated incumbent $\phi^\star \gets \phi$, score $L^\star \gets
+  \textsc{DriveFrozen}(\phi)$ \Comment{one no-learning, no-noise lap}
+\For{episode $=1,2,\dots$}
+  \State reset traces $e_\phi\!\gets\!0,\ e_w\!\gets\!0$; reset LTC state
+  \For{each control tick $t$ of the episode}
+    \State $\theta_t \gets \operatorname{clip}\big(\pi_\phi(f_t)+\varepsilon_t,\
+      \theta_{lo},\theta_{hi}\big)$, \ $\varepsilon_t\sim\mathcal N(0,\sigma^2)$
+      \Comment{$\sigma{=}0$ for the \textsc{mpcc} critic}
+    \State solve the MPCC: $u_0^\ast,\,J^\ast \gets \arg\min J(x_t,\theta_t)$;
+      apply $u_0^\ast$ \Comment{{\bf and} the solver-failure guard, Alg.~\ref{alg:guard}}
+    \State observe $r_t$, next state $x_{t+1}$, features $f_{t+1}$, progress
+      $\Delta s_t$
+    \If{clock $=$ progress \textbf{and} $\sum \Delta s < \Delta s_{\mathrm{ref}}$}
+      \State accumulate $r$, $\Delta s$; \textbf{continue} \Comment{semi-Markov step}
+    \EndIf
+    \State $n \gets \max(1,\ \Delta s / \Delta s_{\mathrm{ref}})$;
+      \ $g \gets \gamma^{\,n}$, \ $g\lambda \gets (\gamma\lambda)^{\,n}$
+    \If{critic $=$ \textsc{mpcc}}
+      \State $V\gets -J^\ast_{\text{prev}}$,\ $V'\gets -J^\ast$;\quad
+        $\delta \gets \operatorname{clip}(r+g\,V'-V)$
+      \State direction $\gets -\,\partial J^\ast/\partial\theta$
+        \Comment{envelope gradient; fixed by cost units (see paper \S critic)}
+    \Else \Comment{\textsc{fitted}: critic on the return, $\theta$ absent}
+      \State $\delta \gets \operatorname{clip}(r+g\,V_w(f_{t+1})-V_w(f_t))$;\quad
+        $e_w \gets g\lambda\,e_w+\nabla_w V_w$;\quad $w \gets w+\alpha_c\,\delta\,e_w$
+      \State direction $\gets \varepsilon_t/\sigma^2$
+        \Comment{score-function estimator}
+    \EndIf
+    \State $e_\phi \gets g\lambda\,e_\phi
+      + \dfrac{\partial\theta}{\partial\phi}\,(\text{direction})$;\quad
+      $\phi \gets \phi + \alpha\,\delta\,e_\phi$;\quad clip $\phi$ to the box
+  \EndFor
+  \State $L \gets$ laps this episode
+  \If{$L>L^\star$ and not crashed} \Comment{keep-best, {\bf validated}}
+    \State $L_{\mathrm{frozen}} \gets \textsc{DriveFrozen}(\phi)$
+      \Comment{no learning, no noise}
+    \If{$L_{\mathrm{frozen}} > L^\star$}\ \ $\phi^\star\gets\phi$,\
+      $L^\star\gets L_{\mathrm{frozen}}$ \EndIf
+  \ElsIf{$L < L^\star-\tau$ \textbf{or} crashed}
+    \State $\phi \gets \phi^\star$ \Comment{revert to the validated best}
+  \EndIf
+\EndFor
+\State \Return $\phi^\star$ \Comment{banked at its {\em frozen} score}
+\end{algorithmic}
+\end{algorithm}
+
+% ----------------------------------------------------------------------
+% 3. The solver-failure guard in the control loop (for hardware).
+% ----------------------------------------------------------------------
+\begin{algorithm}[t]
+\caption{Solver-failure guard (control loop; required on hardware)}
+\label{alg:guard}
+\begin{algorithmic}[1]
+\Require solve status $s$, returned control $u_0$, last feasible control
+  $u^{\mathrm{good}}$, gentle brake $a_b$
+\If{$s \in \{0,2\}$} \Comment{converged or max-iter: usable}
+  \State $u^{\mathrm{good}} \gets u_0$; \Return $u_0$
+\Else \Comment{NaN or QP failure: the iterate is infeasible, do not apply it}
+  \State $u \gets u^{\mathrm{good}}$;\ \ $u[\text{accel}] \gets \min(u[\text{accel}],\,-a_b)$
+  \State \Return $u$ \Comment{hold last feasible steering, brake gently}
+\EndIf
+\end{algorithmic}
+\end{algorithm}
