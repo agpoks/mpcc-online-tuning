@@ -1192,6 +1192,27 @@ gain came from VALIDATION, not from the critic. The direction problem of 2w
 is unchanged -- 7 reverts in 10 episodes says the learner still leaves the
 good region as soon as it is allowed to.
 
+## 2d. Full re-fit on the grip-constrained controller — 2026-09-06 (in progress)
+
+The user's decision: add the soft grip cap to the controller and re-measure /
+re-fit EVERYTHING on it, one consistent controller end to end. Grip cap now
+permanent (plain lateral-accel limit, a_lat_grip=6.0, dynamic model, soft;
+commit 91f88b1; restore tag pre-grip-dynamic).
+
+Measured on the grip controller so far:
+- Baselines (fallback off): START 2.03 all clean (6 QP-fails total), BEST 2.12
+  all clean (23) -- the constants transfer clean, BEST slower (2.35 -> 2.12)
+  because the cap slows corners. `baselines.py` updated (commit da84673).
+- Situation grid (--with-qc): best constant q_v 2.0 k_v 0.70 q_c 0.30 -> 32.4 m;
+  per-situation 34.5 m; prize +6.4% (was +3.9% on the no-grip smoothed grid).
+  `results/situation_demands_qc_grip.json`.
+- Policy fitted to the grip grid, NO k_v cap (the grip constraint handles the
+  over-speed now, so the lap-fragility cap may be unnecessary), frozen eval
+  with fallback OFF: RESULT PENDING. The test: is it clean from a cold standing
+  start with few/no QP failures? If yes, the grip controller + a policy fitted
+  on it is the clean cause-side fix -- fast enough, safe from any start, no
+  fallback, no warm-up trick.
+
 ## 2e. Grip cap WITHOUT the k_v^2 division — also REVERTED — 2026-09-05
 
 The user's next try: a plain lateral-accel cap `a_lat_grip - v^2*kappa >= 0`
