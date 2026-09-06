@@ -2868,3 +2868,31 @@ Caveat: over the bounded 2500-step metric the scheduled MPCC-critic (2.57) ties
 the grid-fitted deliverable (2.58); its speed edge (2.79 flying, 5.75 long-run)
 is a PACE-over-many-laps property, measured separately with --steps 8000.
 Supersedes the guard work in 2g (no control-loop guard needed for this).
+
+## 2i. Look-ahead friction CONSTRAINT in the OCP — MEASURED NEGATIVE — 2026-09-06
+
+Goal: decouple safety from k_v by a soft look-ahead row v^2*kappa(s) <= a_lat_hat
+at every horizon node (brake before a corner the tyres cannot hold), a_lat_hat a
+fixed grip estimate (no k_v^2 division). Added to the dynamic controller, soft
+(idxsh), slack penalty 500/10 (= corridor). Measured cold, seed 2:
+
+    a_lat_hat  MPCC-crit s2            grid-fitted s2
+    9.0        0.81 OFF, peak 1.92     2.45 ok,  peak 1.74
+    7.0        2.79 ok,  peak 2.07     0.81 OFF, peak 1.71
+    5.5        1.20 OFF, peak 1.93     0.81 OFF, peak 1.71
+
+The row DOES kill the over-speed (every peak ~1.7-2.1 m/s, was 4.06), but the
+cars then crash anyway AT LOW SPEED, and the pattern is erratic/non-monotonic:
+a_lat_hat=9 grid ok / MPCC off; =7 grid off / MPCC ok. It even breaks a
+previously-clean policy (grid s2 was 2.76 clean; now 0.81 off at 2.45 laps at
+best). Peak <2.1 m/s + off-track = the constraint distorts the PLAN (steals
+slack budget, corridor tracking degrades, car wanders off), not a slip. This is
+the same documented fragility as holding the corridor hard ("solve rate collapsed,
+the car stopped turning"): adding rows to THIS acados setup destabilises it.
+
+Conclusion: a friction CONSTRAINT is the wrong lever for this controller. Pivot
+to a per-sector learned k_v CEILING (clamp the grip claim the policy emits, no
+OCP change so no solver strain) -- same physics (bound the planned corner speed
+to available grip), learned online, look-ahead via the sector membership feature
+and the k_v-scaled curvature reference-speed profile. See [[mpcc-critic-cold-crash-is-kv]].
+Checkpoint before this work: tag pre-lookahead-friction.
