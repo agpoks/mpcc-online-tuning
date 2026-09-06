@@ -1206,12 +1206,24 @@ Measured on the grip controller so far:
 - Situation grid (--with-qc): best constant q_v 2.0 k_v 0.70 q_c 0.30 -> 32.4 m;
   per-situation 34.5 m; prize +6.4% (was +3.9% on the no-grip smoothed grid).
   `results/situation_demands_qc_grip.json`.
-- Policy fitted to the grip grid, NO k_v cap (the grip constraint handles the
-  over-speed now, so the lap-fragility cap may be unnecessary), frozen eval
-  with fallback OFF: RESULT PENDING. The test: is it clean from a cold standing
-  start with few/no QP failures? If yes, the grip controller + a policy fitted
-  on it is the clean cause-side fix -- fast enough, safe from any start, no
-  fallback, no warm-up trick.
+- Policy fitted to the grip grid and frozen-evaluated cold: FAILS.
+      no k_v cap:  0.21x / 2.45x / 0.39x   (all off)
+      k_v cap 0.50: 1.31x / 2.51 / 0.81x   (2 of 3 off)
+  vs the SAME cap on the pre-grip controller: 2.48 / 2.49 / 2.76, all clean.
+  So the grip constraint makes the deliverable WORSE. Why: it is SOFT, so
+  aggressive weights override it (uncapped crashes); with the cap it is
+  redundant AND perturbs the controller enough that the fitted policy, trained
+  on it, still crashes; and it slows the clean constants (BEST 2.35 -> 2.12)
+  for no benefit.
+
+**VERDICT: the grip constraint does not work. Reverted acados_ocp.py and
+baselines.py to pre-grip-dynamic.** A SOFT grip constraint cannot hard-prevent
+over-speed, and a HARD one causes infeasibility (why it was soft). The real
+safety levers remain what they were: (1) the k_v cap on the fit targets (clean
+on the pre-grip controller, 2.58); (2) the gated solver-failure guard for the
+aggressive-policy edge case. The paper stays on the pre-grip results. The grip
+grid / baselines are kept as `results/situation_demands_qc_grip.json` and in
+this entry for the record.
 
 ## 2e. Grip cap WITHOUT the k_v^2 division — also REVERTED — 2026-09-05
 
