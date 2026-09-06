@@ -2896,3 +2896,38 @@ OCP change so no solver strain) -- same physics (bound the planned corner speed
 to available grip), learned online, look-ahead via the sector membership feature
 and the k_v-scaled curvature reference-speed profile. See [[mpcc-critic-cold-crash-is-kv]].
 Checkpoint before this work: tag pre-lookahead-friction.
+
+## 2j. Per-sector learned k_v ceiling — MEASURED NEGATIVE (structural) — 2026-09-07
+
+Pivot from 2i: enforce the grip limit as a per-sector CEILING on the emitted k_v
+(clamp by the sector ahead, learn each ceiling online), no OCP change. Built
+mpcc_tuning/grip_learner.py (GripCeiling: per-pass AIMD + crash ratchet).
+
+Two learning runs both failed, and a control test found why:
+
+  Learning v1 (per-tick AIMD): LIMIT-CYCLES. Hairpin ceiling creeps to ~0.82,
+  over-speeds (peak 4.06), crashes, resets to floor, creeps back -> repeat. The
+  k_v->corner-speed map has a cliff (~0.50 clean, ~0.69 crash) the creep overshoots.
+
+  Learning v2 (per-pass + crash ratchet): hairpin cap ratchets to the floor 0.40
+  and the car STILL crashes -- at LOW speed (peak 1.9, not over-speed).
+
+  Control (static ceilings, no learning, MPCC-critic seed 0/1/2 cold):
+    uniform 0.50 (via the clamp)            3/3 clean, 2.26, peaks 1.65-1.85
+    varied 0.90/0.90/0.90/0.50 (hairpin low) 1/3 clean, 2.02, peaks 2.07-2.13
+
+The control is decisive: a STATIC, sensible per-sector shape (straights 0.9,
+hairpin 0.5) crashes 2/3 at LOW speed. So it is not the learning dynamics -- it
+is the spatial DISCONTINUITY in k_v. k_v is a GLOBAL multiplier on the reference-
+speed profile v_ref(s) = k_v * v_grip(s); stepping it 0.9 -> 0.5 approaching a
+corner shocks the reference and the car loses the corridor. The clamp mechanism
+itself is sound (uniform 0.50 via clamp == flat cap, 2.26).
+
+Conclusion: k_v is the WRONG knob for PER-CORNER grip (it is global; per-location
+steps break the plan). Only a smooth/uniform k_v works. Per-corner grip must be
+encoded where it is already per-location -- the reference-speed profile
+track_speed_profile(a_lat_max=...) inside the OCP -- with a_lat_max learned per
+sector. That is a controller change requiring a full re-fit of every policy
+(Stage 4). Robust options that work TODAY: a smooth uniform k_v cap (a learnable
+SCALAR grip level), or the grid-fitted net (never over-claims). See
+[[mpcc-critic-cold-crash-is-kv]]. Checkpoint: tag pre-lookahead-friction.
