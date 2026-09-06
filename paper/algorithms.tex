@@ -61,7 +61,7 @@
       \theta_{lo},\theta_{hi}\big)$, \ $\varepsilon_t\sim\mathcal N(0,\sigma^2)$
       \Comment{$\sigma{=}0$ for the \textsc{mpcc} critic}
     \State solve the MPCC: $u_0^\ast,\,J^\ast \gets \arg\min J(x_t,\theta_t)$;
-      apply $u_0^\ast$ \Comment{{\bf and} the solver-failure guard, Alg.~\ref{alg:guard}}
+      apply $u_0^\ast$ \Comment{optionally via the solver-failure guard, Alg.~\ref{alg:guard}}
     \State observe $r_t$, next state $x_{t+1}$, features $f_{t+1}$, progress
       $\Delta s_t$
     \If{clock $=$ progress \textbf{and} $\sum \Delta s < \Delta s_{\mathrm{ref}}$}
@@ -102,11 +102,15 @@
 % 3. The solver-failure guard in the control loop (for hardware).
 % ----------------------------------------------------------------------
 \begin{algorithm}[t]
-\caption{Solver-failure guard (control loop; required on hardware)}
+\caption{Solver-failure guard (control loop; optional hardware safety net)}
 \label{alg:guard}
 \begin{algorithmic}[1]
 \Require solve status $s$, returned control $u_0$, last feasible control
   $u^{\mathrm{good}}$, gentle brake $a_b$
+  \Statex \textit{Off in every reported run: it rescues no aggressive policy without
+    also slowing a clean one (measured), so the deliverable ships without it and an
+    aggressive policy uses a warm-up lap instead. Kept as a hardware guard against a
+    non-finite or infeasible solve.}
 \If{$s \in \{0,2\}$} \Comment{converged or max-iter: usable}
   \State $u^{\mathrm{good}} \gets u_0$; \Return $u_0$
 \Else \Comment{NaN or QP failure: the iterate is infeasible, do not apply it}

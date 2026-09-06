@@ -2789,3 +2789,44 @@ version.
   0. That is not a scheduling failure — 1.76 m minimum radius against the
   oval's 2.46 m, and the default weights do not survive a lap however they are
   scheduled. Same failure as item 4.
+
+## 2g. Tried the cold-start guard (a state machine, not always-on) — MEASURED NEGATIVE — 2026-09-06
+
+The idea (user's option 2): brake on solver failure only during the COLD phase,
+then release the guard once the solver has solved cleanly for a continuous
+stretch (40 ticks = 2 s at 20 Hz), on the theory that the crash is a cold-start
+transient the network grows out of. Built as a `_warm`/`_clean_streak` state
+machine in `acados_mpcc.py` (`value()`), reset per run.
+
+Measured (ICRA T2, box from the fitted net):
+
+    policy                 standing (cold)   grid (warm+stop)   flying (moving)
+    grid-fitted            2.44 clean        2.08 clean         2.51 clean
+    online MPCC (seed 2)   0.81 OFF          1.81 OFF           2.84 clean
+
+Verdict: it does BOTH things wrong. (1) It does not save the aggressive net
+(0.81, worse than the 1.01 it crashes at with no guard) -- because braking mid-
+run distorts the trajectory the recurrent policy warms its memory on, so it
+never settles into a clean regime the way a real warm-up lap does; when the
+guard releases at 2 s it re-over-speeds and crashes. (2) It still nicks the
+grid-fitted deliverable (2.58 -> 2.44) because that net has a few early solver
+blips that keep resetting the clean-streak and hold it in the braked cold phase.
+
+Conclusion, consistent across every guard tried (always-on brake, cold-start
+switch, grip constraint): no control-loop guard fixes the aggressive net's cold
+crash without a cost to the clean net. The crash is genuine -- the aggressive
+net wants to over-drive the hairpin every lap, and only a clean warm-up lap
+settles it. So:
+
+- Guard DEFAULTED OFF (`solver_fallback=False`). The grid-fitted deliverable is
+  its true 2.58 again, matching the paper table and the frozen-summary archive.
+  (Before this, the committed default was `True`, silently giving 2.44/2.25 --
+  a real inconsistency with the docs, now fixed.)
+- The guard stays available as an OPT-IN hardware safety net (guard against a
+  non-finite / infeasible solve), tradeoff documented at the flag.
+- The aggressive MPCC-critic policy is deployed with a warm-up lap (the normal
+  race procedure), as already documented in policies_in_the_table.md and
+  results/paper/scenarios/README.md.
+
+Real cause-side fix remains TODO 6b (feasibility restoration: re-solve at a
+lower speed target), which removes the over-speed without braking blind.
