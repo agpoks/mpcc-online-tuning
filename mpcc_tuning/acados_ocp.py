@@ -301,9 +301,28 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     h.append(v + 0.5 - v_s)
 
     kap = None
-    if spline_mode == "spline" and not dyn:
+    if spline_mode == "spline":
         kap = ca.fabs(track.curvature_sym(track.wrap(s)))
-        h.append(a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
+        if dyn:
+            # SOFT grip cap for the dynamic model: a plain lateral-accel limit
+            # a_lat_grip - v^2*kappa >= 0, NO k_v division (2026-09-06).
+            #
+            # Without a grip constraint the policy could command ~4 m/s into a
+            # 0.7 m hairpin, the tyres saturate, the QP linearisation goes
+            # ill-conditioned and acados returns status 4 -- 39 such ticks
+            # steered a car off the track (TODO 2i). The k_v-divided form (the
+            # kinematic one) crippled low-k_v policies (allowed accel =
+            # a_lat_grip*k_v^2, so k_v=0.5 -> ~1 m/s corners). This plain cap
+            # limits corner speed on physics alone, sqrt(a_lat_grip/kappa) ~=
+            # 2 m/s in the hairpin, huge on the straights, independent of k_v.
+            # a_lat_grip=6.0 matches A_LAT_MAX (the reference profile) and is
+            # conservative vs the (D_F+D_R)/MASS ~= 10.8 m/s^2 physical limit,
+            # so it discourages the over-speed with margin before saturation.
+            # SOFT (in idxsh) so it is a penalty, not a hard forbid. The whole
+            # stack is re-measured and re-fitted on this controller (TODO 2e).
+            h.append(a_lat_grip - v ** 2 * kap)
+        else:
+            h.append(a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
     for j in range(max_obstacles):
         ox, oy, r_raw = obs[stride * j], obs[stride * j + 1], obs[stride * j + 2]
         r_eff = r_raw + d_obs                  # inactive slot: r_raw = -d_obs
@@ -347,8 +366,9 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     else:
         h_e = [e_c_lin if lin_corridor else e_c]
     n_cor_e = 2 if var_w else 1
-    if spline_mode == "spline" and not dyn:
-        h_e.append(a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
+    if spline_mode == "spline":
+        h_e.append(a_lat_grip - v ** 2 * kap
+                   if dyn else a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
     model.con_h_expr_e = ca.vertcat(*h_e)
     nh_e = len(h_e)
     nh = len(h)
