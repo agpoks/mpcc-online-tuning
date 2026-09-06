@@ -112,9 +112,11 @@ START = {
              "almost all the room is upward, toward BEST's 0.50."),
     "icra_t2_raceline": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.40),
-        horizon=25, q_vref=0.20, laps=1.96, clean=True, steps=2500,
-        peak_v=1.40,
-        note="RE-MEASURED 2026-09-05 on the SMOOTHED corridor (1.87, 2.01, "
+        horizon=25, q_vref=0.20, laps=2.03, clean=True, steps=2500,
+        peak_v=1.55,
+        note="RE-MEASURED 2026-09-06 on the GRIP-constrained controller (soft "
+             "lateral-accel cap for the dynamic model): 2.01, 2.09, 2.00, all "
+             "clean, few QP failures. Earlier: 1.96 on the SMOOTHED corridor (1.87, 2.01, "
              "2.00, all clean; was 2.09 on the notched one). Earlier: "
              "re-measured 2026-09-03 on the corrected corridor and referee "
              "(both used a scalar half-width before -- see acados_ocp.py and "
@@ -136,9 +138,13 @@ BEST = {
              "Situation-dependence is measured per sector in TODO 2y instead."),
     "icra_t2_raceline": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=1.0, r_d=0.5, r_a=6.0, k_v=0.50),
-        horizon=25, q_vref=0.20, laps=2.35, clean=True, steps=2500,
-        peak_v=1.85,
-        note="RE-TUNED 2026-09-05 on the SMOOTHED corridor: k_v 0.50 is clean "
+        horizon=25, q_vref=0.20, laps=2.12, clean=True, steps=2500,
+        peak_v=1.65,
+        note="RE-MEASURED 2026-09-06 on the GRIP-constrained controller: 2.25, "
+             "1.97, 2.15, all clean. The grip cap slows corners so BEST fell "
+             "2.35 -> 2.12; it may want re-tuning on this controller, but the "
+             "old weights still drive clean. Earlier: RE-TUNED 2026-09-05 on "
+             "the SMOOTHED corridor: k_v 0.50 is clean "
              "from all three starts (2.32, 2.33, 2.40); 0.55 crashes from two, "
              "0.60 -- the previous BEST at 2.65 -- from two. Smoothing rounds "
              "off the peaks of the wide sections, and the faster settings were "
