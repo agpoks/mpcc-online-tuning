@@ -117,3 +117,13 @@ half-width at the tightest point vs the fudge's 0.42 -- 43% more room at the
 apexes). Old results on `icra_t2_raceline` are left unchanged.
 
 Resolution 0.05 m/px, origin [-2.80, -7.25, 0] (same world frame as the raceline).
+
+## icra_t2_mapped_corridor.npz refined to the hand-checked edges (2026-09-07)
+
+The raycast corridor still sat inside the true walls where the ray stopped at
+interior cone rows (which are obstacles, not the track edge -- the car drives the
+whole region to the walls). The user drew the true corridor edges in pink on the
+alignment figure; those edges were extracted to world coordinates (calibrated via
+two fiducials, |a|~|c|=42.3 px/m) and each side's corridor width set to the
+nearest pink edge (tools/corridor_from_pink.py). Vendored edges:
+icra_t2_pink_edges.npz. Result: half-width 0.52-1.99 m, hugging the mapped walls.
