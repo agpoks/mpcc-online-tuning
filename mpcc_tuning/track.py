@@ -576,14 +576,33 @@ class Track:
         apexes, exactly where the racing line needs it. Provided as a SEPARATE
         track so the many existing results on ``icra_t2_raceline`` are unchanged;
         anything fitted or measured here must be re-fitted, the corridor differs.
+
+        The raycast corridor is cached in
+        ``tracks/icra_t2_mapped_corridor.npz`` (centreline, per-side widths,
+        raceline, and the optimiser's speed profile). We reuse this track many
+        times, so the cache is the source of truth and is loaded directly;
+        delete it to force a re-raycast from the parameters below.
         """
+        cache = (Path(__file__).resolve().parent / "tracks"
+                 / "icra_t2_mapped_corridor.npz")
+        if scale == 1.0 and cache.exists():
+            d = np.load(cache)
+            t = Track(d["cx"], d["cy"], ds=float(ds),
+                      w_left=d["wl"], w_right=d["wr"])
+            t.raceline = d["raceline"]
+            t.v_ref = d["vref"]
+            t.width_vehicle_adjusted = False
+            return t
         return Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds,
-                               map_stem="icra2026_t2", widen=1.0)
+                               map_stem="icra2026_t2", widen=1.0, wall_allow=6.0,
+                               wall_dilate_m=0.03, wall_max_m=6.0, wall_smooth=(0.25, 0.35))
 
     @staticmethod
     def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1,
                   smooth_m: float = 0.6, map_stem: str | None = None,
-                  widen: float = 1.0) -> "Track":
+                  widen: float = 1.0, wall_allow: float = 0.6,
+                  wall_dilate_m: float = 0.10, wall_max_m: float = 3.0,
+                  wall_smooth: tuple = (0.8, 1.2)) -> "Track":
         """Build a variable-width Track from one of the vendored raceline CSVs.
 
         Semicolon separated, the optimiser's own column names, with the
@@ -652,7 +671,8 @@ class Track:
             # against 0.35 m, which is 57% more room exactly where the car
             # needs it. The map is the track; the raceline margins are one
             # optimiser's opinion about how much of it to use.
-            got = Track._map_widths(centre, map_stem, both_sides=True)
+            got = Track._map_widths(centre, map_stem, both_sides=True,
+                                    dilate_m=wall_dilate_m, max_m=wall_max_m)
             if got is not None:
                 w_l, w_r = got
                 vehicle_adjusted = False      # these ARE distances to the wall
@@ -668,7 +688,9 @@ class Track:
                 # leak, not a widening, and is clamped to that median.
                 def _guard(w, ref):
                     ref = np.asarray(ref, float)
-                    w = np.minimum(np.asarray(w, float), ref + 0.6)   # margin + the optimiser's own safety allowance, never a metre-scale leak
+                    # margin + allowance; wall_allow large lets the corridor reach the
+                    # real map wall (isolated leaks still caught by the median clamp below)
+                    w = np.minimum(np.asarray(w, float), ref + wall_allow)
                     m = max(int(round(3.0 / max(step, 1e-9))) | 1, 5)
                     pad = np.concatenate([w[-(m // 2):], w, w[:m // 2]])
                     med = np.array([np.median(pad[i:i + m]) for i in range(len(w))])
@@ -702,7 +724,8 @@ class Track:
             return np.maximum(a, floor)
         if got is not None:
             # raycast into a 5 cm grid is rougher than the optimiser's margins
-            w_l, w_r = _smooth_w(w_l, 0.8, 1.2), _smooth_w(w_r, 0.8, 1.2)
+            w_l, w_r = (_smooth_w(w_l, wall_smooth[0], wall_smooth[1]),
+                        _smooth_w(w_r, wall_smooth[0], wall_smooth[1]))
         else:
             w_l, w_r = _smooth_w(w_l), _smooth_w(w_r)
         # SLOT CONVENTION, verified against the occupancy grid rather than
