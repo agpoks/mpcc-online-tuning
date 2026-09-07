@@ -2931,3 +2931,29 @@ sector. That is a controller change requiring a full re-fit of every policy
 (Stage 4). Robust options that work TODAY: a smooth uniform k_v cap (a learnable
 SCALAR grip level), or the grid-fitted net (never over-claims). See
 [[mpcc-critic-cold-crash-is-kv]]. Checkpoint: tag pre-lookahead-friction.
+
+## 2k. Per-sector grip in the REFERENCE profile — WORKS (smooth) — 2026-09-07
+
+The right lever for per-corner grip (chosen over k_v after 2j). Made a_lat_max
+per-sector in track_speed_profile (speed.py: speed_profile accepts a per-point
+a_lat array; the fwd/back sweep keeps v_grip(s) SMOOTH across sector boundaries)
+and wired a_lat_sectors into build_ocp's reference-speed term (default None =
+scalar A_LAT_MAX_ACA=6.0, so every existing result is unchanged -- verified:
+grid-fitted baseline still 3/3, 2.58). Go/no-go, MPCC-critic (uncapped) vs
+grid-fitted, cold 3 seeds:
+
+  a_lat_sectors        MPCC-crit               grid-fitted
+  scalar 6.0           1/3, peaks up to 4.06   3/3, 2.58
+  [6,6,6,3.5] hp low   2/3, 2.16, peaks ~2.15  3/3, 2.33 (slowed at hairpin)
+  [9,9,9,4.0] rest hi  1/3, 1.59               1/3, 1.63 (grid CRASHES, peak 3.05)
+
+Findings: (1) lowering the hairpin sector SMOOTHLY curbs the over-speed (4.06 ->
+~2.15, no discontinuity crash -- the win over per-sector k_v, 2j). (2) RAISING
+non-hairpin sectors above 6 is harmful (over-speed elsewhere, grid crashes) --
+keep them ~6, only the sensitive sector comes down. (3) The profile is a SHARED
+controller property, so lowering the hairpin costs compliant policies pace
+(2.58->2.33) -- hence learn it per-sector (down only where needed) and re-fit
+policies on it. It is a soft cost pull, not a hard cap, so [6,6,6,3.5] is 2/3 not
+3/3 -- tune the hairpin value / re-fit. Infra committed; default off. Next:
+find the 3/3 hairpin value, then Stage 4c-e (learnable + re-fit all).
+See [[mpcc-critic-cold-crash-is-kv]].

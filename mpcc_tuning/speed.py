@@ -70,23 +70,39 @@ def speed_profile(s, kappa, a_lat_max: float = A_LAT_MAX,
     if v_cap is not None:
         v = np.minimum(v, v_cap)
     ds = np.diff(np.r_[s, s[-1] + (s[1] - s[0])])
-    lat = a_lat_max * grip
+    # ``a_lat_max`` may be a scalar OR a per-point array (per-sector grip): the
+    # friction-ellipse budget ``lat`` then varies along the lap, so the profile
+    # is shaped per corner while the forward/backward sweep keeps it SMOOTH --
+    # unlike a step on k_v, which is a global scale (TODO 2j/2k).
+    lat = np.broadcast_to(np.asarray(a_lat_max, float) * grip, v.shape)
     for _ in range(max(int(sweeps), 1)):        # two sweeps settle the wrap
         for i in range(len(v) - 1):             # accelerating out of a corner
             ay = v[i] ** 2 * k[i]
-            ax = a_lon_max * np.sqrt(max(1.0 - (ay / lat) ** 2, 0.0))
+            ax = a_lon_max * np.sqrt(max(1.0 - (ay / lat[i]) ** 2, 0.0))
             v[i + 1] = min(v[i + 1], np.sqrt(max(v[i] ** 2 + 2 * ax * ds[i], 0.0)))
         for i in range(len(v) - 2, -1, -1):     # braking into one
             ay = v[i + 1] ** 2 * k[i + 1]
-            ax = a_lon_max * np.sqrt(max(1.0 - (ay / lat) ** 2, 0.0))
+            ax = a_lon_max * np.sqrt(max(1.0 - (ay / lat[i + 1]) ** 2, 0.0))
             v[i] = min(v[i], np.sqrt(max(v[i + 1] ** 2 + 2 * ax * ds[i], 0.0)))
     return v
 
 
-def track_speed_profile(track, n: int = 600, **kw):
-    """:func:`speed_profile` sampled round a :class:`~mpcc_tuning.track.Track`."""
+def track_speed_profile(track, n: int = 600, a_lat_sectors=None, **kw):
+    """:func:`speed_profile` sampled round a :class:`~mpcc_tuning.track.Track`.
+
+    ``a_lat_sectors`` (optional) makes the grip limit PER SECTOR: a sequence
+    indexed by ``track.sector(s)`` (e.g. ``[10, 9, 8, 5]`` for straight / long
+    curve / 90 / hairpin). It is expanded to a per-point ``a_lat_max`` array and
+    passed to :func:`speed_profile`, so the reference speed falls where the grip
+    is lower -- smoothly, because the forward/backward sweep bridges the sector
+    boundaries. Leave it ``None`` for the scalar ``a_lat_max`` in ``kw``.
+    """
     s = np.linspace(0.0, track.length, int(n), endpoint=False)
     k = np.array([track.curvature(float(v)) for v in s])
+    if a_lat_sectors is not None:
+        a = np.asarray(a_lat_sectors, float)
+        sec = np.array([int(track.sector(float(v))) % len(a) for v in s])
+        kw = dict(kw); kw["a_lat_max"] = a[sec]
     return s, speed_profile(s, k, **kw)
 
 

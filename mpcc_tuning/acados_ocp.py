@@ -63,7 +63,7 @@ from mpcc_tuning.mpcc import WEIGHT_NAMES
 
 
 def build_ocp(track, horizon: int = 12, dt: float = 0.15,
-              a_lat_grip: float = 6.0 * 1.0,
+              a_lat_grip: float = 6.0 * 1.0, a_lat_sectors=None,
               soft_corridor: bool = True,
               lin_corridor: bool = False,
               theta_global: bool = False,
@@ -210,8 +210,17 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         # limit, so the reference falls BEFORE a corner rather than inside it.
         from mpcc_tuning.speed import track_speed_profile
         _n, _pad = 400, 4
-        _s, _v = track_speed_profile(track, n=_n, a_lat_max=A_LAT_MAX_ACA,
-                                     grip=1.0, v_cap=SPEED_MAX)
+        if a_lat_sectors is not None:
+            # PER-SECTOR grip: the reference speed falls at low-grip corners
+            # (e.g. the hairpin) and stays high elsewhere -- smoothly, because
+            # the profile's forward/backward sweep bridges sector boundaries.
+            # This is per-corner grip done where it belongs (the reference,
+            # per-location), not on k_v (a global scale). TODO 2k.
+            _s, _v = track_speed_profile(track, n=_n, a_lat_sectors=a_lat_sectors,
+                                         grip=1.0, v_cap=SPEED_MAX)
+        else:
+            _s, _v = track_speed_profile(track, n=_n, a_lat_max=A_LAT_MAX_ACA,
+                                         grip=1.0, v_cap=SPEED_MAX)
         _ds = float(_s[1] - _s[0])
         _idx = np.concatenate([np.arange(-_pad, 0), np.arange(_n),
                                np.arange(_n, _n + _pad)])
