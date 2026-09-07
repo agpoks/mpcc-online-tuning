@@ -2957,3 +2957,44 @@ policies on it. It is a soft cost pull, not a hard cap, so [6,6,6,3.5] is 2/3 no
 3/3 -- tune the hairpin value / re-fit. Infra committed; default off. Next:
 find the 3/3 hairpin value, then Stage 4c-e (learnable + re-fit all).
 See [[mpcc-critic-cold-crash-is-kv]].
+
+## 2l. USE THE OPTIMISER'S OWN SPEED PROFILE AS THE MPCC REFERENCE — PLAN — 2026-09-07
+
+User's insight, checked and endorsed. The raceline CSV (icra_t2_raceline.csv,
+from racelines-20260830T165029Z...zip) carries the optimiser's FULL output:
+columns x, y, vx_mps, vy_mps, dpsi_rad, psi_rad, kappa_radpm, ax_mps2, s_m,
+w_left_m, w_right_m. But Track._raceline() reads only x,y,w_left,w_right and
+DISCARDS the speed profile, then recomputes a cruder curvature reference
+(track_speed_profile, flat a_lat_max=6.0). So the per-sector a_lat_max work
+(2k) is a hand-tuned reconstruction of a profile we already have, done properly.
+
+Measured optimiser profile: 2.30-8.80 m/s (mean 6.0), hairpin (radius 1.06 m)
+2.31 m/s at ~11.2 m/s^2 lateral (the real grip limit -- a true min-time line).
+
+Why this is the solution (not just per-sector a_lat_max):
+- Correct per-corner grip for free; no per-sector tuning, no learning a_lat/sector.
+- REDEFINE k_v as "fraction of the optimal raceline speed" in [0,1]. Then
+  k_v <= 1.0 => never exceed the feasible optimum => the over-speed crash is
+  STRUCTURALLY IMPOSSIBLE, and k_v learning becomes "how close to the racing-line
+  optimum can I take THIS corner" -- bounded, interpretable, situation-dependent.
+- Ends the whack-a-mole: [6,6,6,3.0] just moved the crash from the hairpin
+  (sec 3) to the 90 (sec 2) -- a full correct profile has no slack to exploit.
+
+Caveats to handle:
+1. Scale/geometry mismatch: profile is on the RACELINE (min radius 1.06 m,
+   2.3-8.8 m/s); we drive the corridor CENTRELINE (hairpin radius 0.71 m) and
+   the plant reaches ~1.8-2.8 m/s. Use the profile SHAPE re-indexed to our
+   centreline s; let bounded k_v absorb the magnitude. Do NOT use absolute m/s.
+2. It is similar to the current reference at the hairpin (2.31 vs 2.52), so it
+   is a principled refinement, not a magic fix on its own.
+3. The crash fix = optimal reference + k_v<=1.0 + adequate q_vref + RE-FIT all
+   policies on it. The bound is what makes it safe; the reference makes it correct.
+
+Implementation sketch (when greenlit):
+- Track._raceline: keep vx_mps/ax_mps2; expose track.raceline_speed(s) (a spline
+  of the optimiser v re-indexed onto the driven centreline s, normalised).
+- build_ocp: reference term uses track.raceline_speed(s) instead of
+  track_speed_profile when available; k_v bounds tightened to [~0.5, 1.0].
+- Re-fit grid + re-train online (both critics) on the new controller; test all
+  cold/warm. Supersedes 2k's per-sector a_lat_max as the primary path.
+Checkpoint: tag pre-lookahead-friction. Branch lookahead-friction.
