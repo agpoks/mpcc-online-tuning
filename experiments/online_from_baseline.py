@@ -122,9 +122,11 @@ def one(job):
     t = getattr(Track, track_name)()
     st = B.start(track_name)
     th0 = np.asarray(st.theta(), float)
+    _use_vref = bool(getattr(t, "use_optimiser_vref", False))
     m = AcadosMPCC(t, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, theta_global=(grad == "native"),
-                   discrete=True, name=f"onl_{track_name}_{seed}_{int(learn)}")
+                   discrete=True, use_track_vref=_use_vref,
+                   name=f"onl_{track_name}_{seed}_{int(learn)}")
 
     from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
     lim = np.array([STEER_MAX, ACCEL_MAX])
@@ -140,6 +142,12 @@ def one(job):
             lo, hi = B.adaptation_box(track_name, factor)
         else:
             lo, hi = THETA_LO, THETA_HI
+        if _use_vref:
+            from mpcc_tuning.ltc import KV_BOUNDS
+            from mpcc_tuning.mpcc import WEIGHT_NAMES as _WN
+            _ikv = _WN.index("k_v")
+            lo = np.array(lo, float).copy(); hi = np.array(hi, float).copy()
+            lo[_ikv] = np.log(KV_BOUNDS[0]); hi[_ikv] = np.log(KV_BOUNDS[1])
         init = np.load(init_policy) if init_policy else None
         if init is not None:
             # idea 4: start from the network fitted to the situation grid,

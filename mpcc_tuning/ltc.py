@@ -540,9 +540,11 @@ N_FEATURES = 18      # 9 + sector(4) + width(1) + opponent class(4)
 #: car aims for. Measured (raceline-ref, standing start): k_v<=1.0 clean and fast
 #: (k_v=1.0 = 4.0-4.2 laps), k_v=1.2 crashes at launch (exceeding the optimum,
 #: which is already near the grip limit). Hence [0.5, 1.1] -- a little warm-tyre
-#: headroom, below the crash point. Change KV_BOUNDS to retune.
-KV_BOUNDS = (0.5, 1.1)
-THETA_LO = np.log(np.array([0.05, 0.05, 0.02, 1e-3, 1e-3, 1e-3, 0.02, KV_BOUNDS[0]]))
+#: headroom, below the crash point. MEASURED: k_v=1.0 3/3 clean, 1.05 2/3, 1.10
+#: 0/3 -- the optimiser v_ref IS the limit, so k_v>1 over-drives grip. Applied by
+#: the raceline-ref pipeline only; the GLOBAL box stays [0.30,1.30] for legacy.
+KV_BOUNDS = (0.5, 1.0)
+THETA_LO = np.log(np.array([0.05, 0.05, 0.02, 1e-3, 1e-3, 1e-3, 0.02, 0.30]))
 #: Ceiling on q_v at 2.0 -- measured: it saturates above ~2 on an empty track
 #: and every attempted pass above it leaves the track with an opponent present.
 #: d_obs is a berth in metres. The 0.02 m floor is deliberate: driven to zero
@@ -572,7 +574,7 @@ THETA_LO = np.log(np.array([0.05, 0.05, 0.02, 1e-3, 1e-3, 1e-3, 0.02, KV_BOUNDS[
 #: on an empty track and above it attempted passes leave the track. Those are
 #: now points INSIDE the box that the learner can reach and be penalised for,
 #: which is what a learned parameter needs, instead of walls it is pinned to.
-THETA_HI = np.log(np.array([20.0, 400.0, 3.0, 10.0, 10.0, 10.0, 0.60, KV_BOUNDS[1]]))
+THETA_HI = np.log(np.array([20.0, 400.0, 3.0, 10.0, 10.0, 10.0, 0.60, 1.30]))
 assert len(WEIGHT_NAMES) == len(THETA_LO) == len(THETA_HI)
 
 

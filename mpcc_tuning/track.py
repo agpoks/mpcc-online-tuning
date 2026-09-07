@@ -621,6 +621,7 @@ class Track:
         t.raceline = d["raceline"]
         t.v_ref = d["vref"]
         t.width_vehicle_adjusted = False
+        t.use_optimiser_vref = True   # THIS track is meant to use v_ref (raceline geometry)
         return t
 
     @staticmethod
