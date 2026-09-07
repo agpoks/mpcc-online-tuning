@@ -559,6 +559,28 @@ class Track:
                                widen=widen)
 
     @staticmethod
+    def icra_t2_raceline_mapped(scale: float = 1.0, ds: float = 0.1) -> "Track":
+        """ICRA 2026 Track 2 with the REAL occupancy-grid corridor.
+
+        Same optimised raceline as :meth:`icra_t2_raceline`, but the corridor is
+        raycast from the team's own T2 occupancy grid
+        (``tracks/icra2026_t2.pgm``, from
+        ``ICRA_T2_SECOND_MAP_GOOD_01062026_0928_gimped_ev13``) instead of the
+        raceline's own conservative margins widened by a guessed factor of 1.35.
+        The archive that shipped this repo lacked the T2 grid, so
+        :meth:`icra_t2_raceline` approximated it; the grid was later recovered
+        from the team's own files.
+
+        Measured against that fudge, the real map gives a 0.60 m half-width at
+        the tightest point where the fudge assumed 0.42 -- 43% more room at the
+        apexes, exactly where the racing line needs it. Provided as a SEPARATE
+        track so the many existing results on ``icra_t2_raceline`` are unchanged;
+        anything fitted or measured here must be re-fitted, the corridor differs.
+        """
+        return Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds,
+                               map_stem="icra2026_t2", widen=1.0)
+
+    @staticmethod
     def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1,
                   smooth_m: float = 0.6, map_stem: str | None = None,
                   widen: float = 1.0) -> "Track":

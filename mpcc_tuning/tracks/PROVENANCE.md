@@ -104,3 +104,16 @@ about a fifth of the lap infeasible.
 
 `SPEED_MAX` is 8.0 and T2's optimal peak is 8.80 m/s, so the cap is now below
 what the team's own optimiser asks for on that track.
+
+## icra2026_t2.pgm / icra2026_t2.yaml — the real T2 occupancy grid (added 2026-09-07)
+
+Copied byte-identical (md5 aa1a9dd3...) from the team's own file
+`ICRA_T2_SECOND_MAP_GOOD_01062026_0928_gimped_ev13.pgm` (+ .yaml). The T2 raceline
+CSV in this repo is from the same map's `ev12/car_21` run, so the grid matches the
+line. The original archive that seeded this repo lacked the T2 grid, so
+`icra_t2_raceline` approximated the corridor from the raceline's own margins
+widened by 1.35; `icra_t2_raceline_mapped` uses this grid instead (0.60 m
+half-width at the tightest point vs the fudge's 0.42 -- 43% more room at the
+apexes). Old results on `icra_t2_raceline` are left unchanged.
+
+Resolution 0.05 m/px, origin [-2.80, -7.25, 0] (same world frame as the raceline).
