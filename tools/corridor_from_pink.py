@@ -1,34 +1,44 @@
 import sys, numpy as np
 from pathlib import Path
-from scipy.spatial import cKDTree
-ROOT=Path("/home/poxx/github/mpcc-online-tuning"); SC=Path(sys.argv[1])
+ROOT=Path("/home/poxx/github/mpcc-online-tuning"); sys.path.insert(0,str(ROOT)); SC=Path(sys.argv[1])
+import importlib.util
+spec=importlib.util.spec_from_file_location("cl", str(ROOT/"tools/centerline_from_map.py"))
+cl=importlib.util.module_from_spec(spec); spec.loader.exec_module(cl)
+from mpcc_tuning.track import Track
+im,res,org=cl.load(str(ROOT/"mpcc_tuning/tracks/icra2026_t2.pgm"),str(ROOT/"mpcc_tuning/tracks/icra2026_t2.yaml"))
+H,W=im.shape
 pk=np.load(SC/"pink_world.npz"); P=np.column_stack([pk["wx"],pk["wy"]])
+pink=np.zeros((H,W),bool)
+cc=((P[:,0]-org[0])/res).astype(int); rr=((org[1]+H*res-P[:,1])/res).astype(int)
+ok=(rr>=0)&(rr<H)&(cc>=0)&(cc<W); pink[rr[ok],cc[ok]]=True
+for _ in range(3): pink=pink|np.roll(pink,1,0)|np.roll(pink,-1,0)|np.roll(pink,1,1)|np.roll(pink,-1,1)
 d=np.load(ROOT/"mpcc_tuning/tracks/icra_t2_mapped_corridor.npz")
-cx,cy=d["cx"],d["cy"]; ctr=np.column_stack([cx,cy])
-wl0=d["wl"].copy(); wr0=d["wr"].copy()
-g=np.gradient(ctr,axis=0); g/=np.maximum(np.linalg.norm(g,axis=1,keepdims=True),1e-12)
-tang=g; nrm=np.column_stack([-g[:,1],g[:,0]])
-tree=cKDTree(P)
-WIN=0.18; RAD=3.0
-wl=wl0.copy(); wr=wr0.copy()
-for i in range(len(ctr)):
-    idx=tree.query_ball_point(ctr[i], RAD)
-    if not idx: continue
-    rel=P[idx]-ctr[i]; along=rel@tang[i]; perp=rel@nrm[i]
-    m=np.abs(along)<WIN
-    if not m.any(): continue
-    pp=perp[m]
-    plus=pp[pp>0.12]; minus=pp[pp<-0.12]
-    if len(plus):  wr[i]=float(plus.min())        # NEAREST pink on +n side
-    if len(minus): wl[i]=float((-minus).min())    # NEAREST pink on -n side
-# smoothing (median to remove single-sample jitter), floor, and clamp isolated spikes
-def sm(a,m=5,floor=0.30):
-    pad=np.concatenate([a[-(m//2):],a,a[:m//2]]); a=np.array([np.median(pad[i:i+m]) for i in range(len(a))]); return np.maximum(a,floor)
-# isolated-spike clamp vs rolling median (kills any residual cross-track grabs)
-def declip(a,win=21,fac=1.4):
-    pad=np.concatenate([a[-(win//2):],a,a[:win//2]]); med=np.array([np.median(pad[i:i+win]) for i in range(len(a))])
-    return np.where(a>fac*med, med, a)
-wl,wr=declip(sm(wl)),declip(sm(wr))
+cx,cy=d["cx"],d["cy"]; Nc=len(cx); wl0=d["wl"].copy(); wr0=d["wr"].copy()
+t=Track.icra_t2_raceline_mapped()   # SPLINE geometry (the MPCC's own normal, non-flipping)
+S=t.s
+pos=np.array([[float(t.pos(float(s))[0]),float(t.pos(float(s))[1])] for s in S])
+phi=np.array([float(t.tangent_angle(float(s))) for s in S])
+nrm=np.column_stack([-np.sin(phi),np.cos(phi)])
+def march(p,dvec,maxm=4.0):
+    for i in range(1,int(maxm/res)):
+        w=p+dvec*(i*res); c=int((w[0]-org[0])/res); r=int((org[1]+H*res-w[1])/res)
+        if not(0<=r<H and 0<=c<W): return maxm
+        if pink[r,c]: return i*res
+    return maxm
+wr=np.array([march(pos[i], nrm[i]) for i in range(Nc)])
+wl=np.array([march(pos[i],-nrm[i]) for i in range(Nc)])
+wr=np.where(wr>=3.99, wr0, wr); wl=np.where(wl>=3.99, wl0, wl)
+def med(a,m=5): pad=np.concatenate([a[-(m//2):],a,a[:m//2]]); return np.array([np.median(pad[i:i+m]) for i in range(len(a))])
+from scipy.ndimage import maximum_filter1d
+def repair(w):
+    w=med(w,5).astype(float)
+    mx=maximum_filter1d(w, size=25, mode="wrap")      # local envelope
+    bad=w < 0.6*mx                                     # downward notch
+    if bad.any():
+        good=~bad; xi=np.arange(len(w))
+        w[bad]=np.interp(xi[bad], xi[good], w[good], period=len(w))
+    return med(w,5)
+wr=np.maximum(repair(wr),0.30); wl=np.maximum(repair(wl),0.30)
 np.savez(str(ROOT/"mpcc_tuning/tracks/icra_t2_mapped_corridor.npz"),
          cx=cx,cy=cy, wl=wl, wr=wr, ds=float(d["ds"]), length=float(d["length"]),
          raceline=d["raceline"], vref=d["vref"])
