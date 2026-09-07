@@ -598,6 +598,32 @@ class Track:
                                wall_dilate_m=0.03, wall_max_m=6.0, wall_smooth=(0.25, 0.35))
 
     @staticmethod
+    def icra_t2_raceline_ref(ds: float = 0.1) -> "Track":
+        """ICRA 2026 Track 2, REFERENCED TO THE RACING LINE (for the MPCC).
+
+        The reference path (progress spline) is the optimiser's raceline itself,
+        not the reconstructed corridor centre. The centre is sharper than the
+        real track at the hairpins (min radius 0.71 m vs the raceline's 0.93 m),
+        so a corridor built as +/- width around it FOLDS at the tight U-turns.
+        Referenced to the smooth raceline, the corridor stays smooth AND the
+        per-side widths still come from the real track edges (the hand-checked
+        pink/map walls), so the car knows where it may actually drive. The
+        optimiser's speed profile ``v_ref`` is carried aligned to this reference.
+
+        Corridor cached in ``tracks/icra_t2_raceline_ref_corridor.npz`` (built by
+        tools/build_raceline_ref.py). Delete it to rebuild.
+        """
+        cache = (Path(__file__).resolve().parent / "tracks"
+                 / "icra_t2_raceline_ref_corridor.npz")
+        d = np.load(cache)
+        t = Track(d["cx"], d["cy"], ds=float(ds),
+                  w_left=d["wl"], w_right=d["wr"])
+        t.raceline = d["raceline"]
+        t.v_ref = d["vref"]
+        t.width_vehicle_adjusted = False
+        return t
+
+    @staticmethod
     def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1,
                   smooth_m: float = 0.6, map_stem: str | None = None,
                   widen: float = 1.0, wall_allow: float = 0.6,
