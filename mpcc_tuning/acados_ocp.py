@@ -64,6 +64,7 @@ from mpcc_tuning.mpcc import WEIGHT_NAMES
 
 def build_ocp(track, horizon: int = 12, dt: float = 0.15,
               a_lat_grip: float = 6.0 * 1.0, a_lat_sectors=None,
+              use_track_vref: bool = False,
               soft_corridor: bool = True,
               lin_corridor: bool = False,
               theta_global: bool = False,
@@ -210,7 +211,18 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         # limit, so the reference falls BEFORE a corner rather than inside it.
         from mpcc_tuning.speed import track_speed_profile
         _n, _pad = 400, 4
-        if a_lat_sectors is not None:
+        _tvref = getattr(track, "v_ref", None)
+        if use_track_vref and _tvref is not None:
+            # Use the OPTIMISER's own speed profile as the reference, resampled
+            # onto the arc-length grid. On a raceline-referenced track this is
+            # the real per-corner racing speed, so k_v becomes "fraction of the
+            # racing-line optimum" and, bounded, cannot claim a corner speed the
+            # tyres will not give. Capped at the plant's SPEED_MAX.
+            _tv = np.minimum(np.asarray(_tvref, float), SPEED_MAX)
+            _src = np.linspace(0.0, track.length, len(_tv), endpoint=False)
+            _s = np.linspace(0.0, track.length, _n, endpoint=False)
+            _v = np.interp(_s, _src, _tv, period=track.length)
+        elif a_lat_sectors is not None:
             # PER-SECTOR grip: the reference speed falls at low-grip corners
             # (e.g. the hairpin) and stays high elsewhere -- smoothly, because
             # the profile's forward/backward sweep bridges sector boundaries.
