@@ -592,10 +592,18 @@ class Track:
             t.raceline = d["raceline"]
             t.v_ref = d["vref"]
             t.width_vehicle_adjusted = False
+            # Cap the grip claim: measured k_v<=0.55 clean 3/3, 0.70 2/3, 0.90
+            # over-speeds. Bounding k_v here stops the online tuner (esp. the
+            # MPCC critic) drifting into the over-speed crash. NOT use_optimiser_vref
+            # -- this drives the CENTRE with the curvature reference; the raceline
+            # v_ref does not transfer to the tighter centre geometry.
+            t.kv_max = 0.60
             return t
-        return Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds,
-                               map_stem="icra2026_t2", widen=1.0, wall_allow=6.0,
-                               wall_dilate_m=0.03, wall_max_m=6.0, wall_smooth=(0.25, 0.35))
+        t = Track._raceline("icra_t2_raceline.csv", scale=scale, ds=ds,
+                            map_stem="icra2026_t2", widen=1.0, wall_allow=6.0,
+                            wall_dilate_m=0.03, wall_max_m=6.0, wall_smooth=(0.25, 0.35))
+        t.kv_max = 0.60
+        return t
 
     @staticmethod
     def icra_t2_raceline_ref(ds: float = 0.1) -> "Track":

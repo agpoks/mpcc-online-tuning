@@ -155,6 +155,13 @@ def one(job):
             # START -- the anchor of the squash -- the network's parameters
             # are what carries the situation-dependence in.
             lo, hi = init["lo"], init["hi"]
+        _kvmax = getattr(t, "kv_max", None)
+        if _kvmax is not None:
+            # hard cap the grip claim so the tuner cannot drift into over-speed
+            _ik2 = WEIGHT_NAMES.index("k_v")
+            lo = np.array(lo, float).copy(); hi = np.array(hi, float).copy()
+            hi[_ik2] = min(float(hi[_ik2]), float(np.log(_kvmax)))
+            lo[_ik2] = min(float(lo[_ik2]), float(hi[_ik2]) - 1e-3)
         pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0,
                            lo, hi, seed=seed)
         if init is not None:

@@ -93,7 +93,7 @@ class Setting:
 #: build_ocp argument, so START and BEST must agree on it or the headroom
 #: between them is partly unreachable. Chosen per track by measurement --
 #: the oval and T2 both gain from it, T1 does not (see the module docstring).
-QVREF = {"oval": 0.05, "icra_t2_raceline": 0.20}
+QVREF = {"oval": 0.05, "icra_t2_raceline": 0.20, "icra_t2_raceline_mapped": 0.20}
 
 #: Conservative, clean, and slower than it needs to be. The tuner starts here.
 #:
@@ -121,6 +121,13 @@ START = {
              "plant_scuderia.py). Three physically different starts: 2.05, "
              "2.00, 2.21, all clean. Was 1.92 inside the tunnel. Same OCP as "
              "BEST -- only theta differs."),
+    "icra_t2_raceline_mapped": Setting(
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.45),
+        horizon=25, q_vref=0.20, laps=2.03, clean=True, steps=2500, peak_v=1.50,
+        note="CENTRELINE reference with the REAL occupancy-grid corridor. k_v is "
+             "capped at 0.6 (t.kv_max): measured k_v<=0.55 clean 3/3, 0.70 2/3, "
+             "0.90 over-speeds -- bounding k_v prevents the MPCC-critic over-speed "
+             "crash. START at k_v=0.45 (2.03 laps), room up to BEST's 0.55."),
 }
 
 #: The best CLEAN result found by hand. The target, not the start.
@@ -156,6 +163,13 @@ BEST = {
              "survives every start, not the highest lap count seen once. Note "
              "the oval wants 0.50 -- still the opposite direction from START's "
              "0.40 here, which is what the tuner has to find."),
+    "icra_t2_raceline_mapped": Setting(
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.55),
+        horizon=25, q_vref=0.20, laps=2.35, clean=True, steps=2500, peak_v=1.87,
+        note="k_v=0.55 is the highest clean-from-all-starts claim on the mapped "
+             "centreline corridor (2.37, 2.38, 2.30). 0.70 crashes from one start, "
+             "0.90 over-speeds. The tuner's job: reach it, and add per-sector "
+             "q_c/q_v shape, without letting k_v drift into the over-speed."),
 }
 
 #: Horizon is part of the baseline, not a global constant. Measured: N=40 gives
