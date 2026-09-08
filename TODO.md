@@ -2998,3 +2998,33 @@ Implementation sketch (when greenlit):
 - Re-fit grid + re-train online (both critics) on the new controller; test all
   cold/warm. Supersedes 2k's per-sector a_lat_max as the primary path.
 Checkpoint: tag pre-lookahead-friction. Branch lookahead-friction.
+
+## 2m. MPCC-critic cold crash FIXED — bound k_v on the robust centreline — 2026-09-08
+
+Full resolution of the crash chased since TODO 2h. Chain:
+- Root cause (2h): the online MPCC-critic over-claims grip (k_v drifts up) and
+  plans a corner speed the tyres cannot hold -> QP infeasible -> off track.
+- Raceline-reference architecture (v_ref + bounded k_v): STRUCTURALLY bounds
+  over-speed and is FAST (Track.icra_t2_raceline_ref, optimiser v_ref, 4.0-4.2
+  laps at k_v=1.0). But FRAGILE: only stable at k_v~1.0; any slower weight
+  crashes the QP in the tight apex-hugging corridor (solver-failure, car drifts
+  out -- animation docs/source/_static/anim/centreline_vs_raceline.gif). k_v>1.0
+  crashes (v_ref is the limit). So it is the fast UPPER-BOUND reference, not a
+  learning platform.
+- Learning platform: the ROBUST centreline-mapped track (real occupancy-grid
+  corridor). Measured fixed-k_v: <=0.55 clean 3/3, 0.70 2/3, 0.90 over-speeds.
+  So Track.icra_t2_raceline_mapped sets kv_max=0.60 and online_from_baseline
+  hard-caps the policy box k_v -- the tuner cannot drift into over-speed.
+
+RESULT (online MPCC critic, 3 seeds, 12 episodes, keep-best+validate):
+  banked FROZEN 2.31 / 2.07 / 2.27 (START 2.03, BEST 2.35).
+  COLD drive of the banked nets: 8/9 clean (seed0 3/3, seed1 2/3, seed2 3/3),
+  laps 2.03-2.32. The ORIGINAL MPCC critic was 0/3 cold (2.31x/1.06x/1.01x).
+  Reverts during learning (6-7/seed) are exploration-NOISE crashes the
+  keep-best-validate recovers, not the k_v over-speed (banked nets are clean).
+
+So: the fix is a k_v CAP below the measured over-speed edge, on the robust
+centreline controller with the real map corridor. The raceline-ref remains the
+fast-but-fragile reference. Nets: results/best_policy_icra_t2_raceline_mapped_*_
+progress_mpcc_val.npz. Supersedes the guard/schedule/per-sector attempts
+(2f-2l). See [[mpcc-critic-cold-crash-is-kv]].
