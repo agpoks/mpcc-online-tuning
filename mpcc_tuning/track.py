@@ -606,6 +606,25 @@ class Track:
         return t
 
     @staticmethod
+    def icra_t2_raceline_mapped_vref(ds: float = 0.1) -> "Track":
+        """Mapped centreline with a CONSERVATIVE speed reference (a_lat_ref=1.8).
+
+        Same track and corridor as :meth:`icra_t2_raceline_mapped`, but the
+        reference speed is built at a low grip budget (t.a_lat_ref=1.8) so that
+        k_v ~ 1.0 is the SAFE NOMINAL and k_v can be a learnable HEADROOM in
+        [kv_min, kv_max] = [0.6, 1.05] -- the user's "learn whether the real
+        track allows a bit more than the offline reference" idea. Measured
+        (fixed k_v=1.05): 2.50 laps clean, peak 1.92, vs 2.37 at the a_lat=6 /
+        k_v=0.55 cap. The online pipeline reads a_lat_ref (-> a_lat_sectors) and
+        kv_min/kv_max off the track.
+        """
+        t = Track.icra_t2_raceline_mapped(ds=ds)
+        t.a_lat_ref = 1.8
+        t.kv_min = 0.60
+        t.kv_max = 1.05
+        return t
+
+    @staticmethod
     def icra_t2_raceline_ref(ds: float = 0.1) -> "Track":
         """ICRA 2026 Track 2, REFERENCED TO THE RACING LINE (for the MPCC).
 

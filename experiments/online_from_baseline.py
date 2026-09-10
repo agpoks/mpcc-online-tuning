@@ -123,9 +123,11 @@ def one(job):
     st = B.start(track_name)
     th0 = np.asarray(st.theta(), float)
     _use_vref = bool(getattr(t, "use_optimiser_vref", False))
+    _alat_ref = getattr(t, "a_lat_ref", None)   # conservative reference so k_v is headroom
     m = AcadosMPCC(t, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, theta_global=(grad == "native"),
                    discrete=True, use_track_vref=_use_vref,
+                   a_lat_sectors=([float(_alat_ref)] * 4 if _alat_ref else None),
                    name=f"onl_{track_name}_{seed}_{int(learn)}")
 
     from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
@@ -155,12 +157,17 @@ def one(job):
             # START -- the anchor of the squash -- the network's parameters
             # are what carries the situation-dependence in.
             lo, hi = init["lo"], init["hi"]
-        _kvmax = getattr(t, "kv_max", None)
-        if _kvmax is not None:
-            # hard cap the grip claim so the tuner cannot drift into over-speed
+        _kvmax = getattr(t, "kv_max", None); _kvmin = getattr(t, "kv_min", None)
+        if _kvmax is not None or _kvmin is not None:
+            # bound the grip claim: on the a_lat=6 track kv_max=0.6 stops
+            # over-speed; on the conservative-reference track kv is headroom
+            # [kv_min, kv_max] around the nominal 1.0.
             _ik2 = WEIGHT_NAMES.index("k_v")
             lo = np.array(lo, float).copy(); hi = np.array(hi, float).copy()
-            hi[_ik2] = min(float(hi[_ik2]), float(np.log(_kvmax)))
+            if _kvmax is not None:
+                hi[_ik2] = min(float(hi[_ik2]), float(np.log(_kvmax)))
+            if _kvmin is not None:
+                lo[_ik2] = max(float(lo[_ik2]), float(np.log(_kvmin)))
             lo[_ik2] = min(float(lo[_ik2]), float(hi[_ik2]) - 1e-3)
         pol = WeightPolicy(LTCCell(N_FEATURES, 12, seed=seed), th0,
                            lo, hi, seed=seed)

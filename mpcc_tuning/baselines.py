@@ -93,7 +93,8 @@ class Setting:
 #: build_ocp argument, so START and BEST must agree on it or the headroom
 #: between them is partly unreachable. Chosen per track by measurement --
 #: the oval and T2 both gain from it, T1 does not (see the module docstring).
-QVREF = {"oval": 0.05, "icra_t2_raceline": 0.20, "icra_t2_raceline_mapped": 0.20}
+QVREF = {"oval": 0.05, "icra_t2_raceline": 0.20, "icra_t2_raceline_mapped": 0.20,
+         "icra_t2_raceline_mapped_vref": 0.20}
 
 #: Conservative, clean, and slower than it needs to be. The tuner starts here.
 #:
@@ -128,6 +129,15 @@ START = {
              "capped at 0.6 (t.kv_max): measured k_v<=0.55 clean 3/3, 0.70 2/3, "
              "0.90 over-speeds -- bounding k_v prevents the MPCC-critic over-speed "
              "crash. START at k_v=0.45 (2.03 laps), room up to BEST's 0.55."),
+    "icra_t2_raceline_mapped_vref": Setting(
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.80),
+        horizon=25, q_vref=0.20, laps=2.20, clean=True, steps=2500, peak_v=1.73,
+        note="LEARNABLE v_ref: the OCP reference speed uses a CONSERVATIVE grip "
+             "(a_lat_ref=1.8, t.a_lat_ref) so that k_v=1.0 is the nominal profile "
+             "and k_v above 1.0 is headroom for warm tyres / model mismatch. On "
+             "this reference k_v is bounded [0.60,1.05] (t.kv_min/kv_max). START "
+             "at k_v=0.80 is clean from all three starts (2.23, 2.18, 2.18); room "
+             "up to BEST's 0.90. Measured 2026-09-10 scratchpad measure_vref.py."),
 }
 
 #: The best CLEAN result found by hand. The target, not the start.
@@ -170,6 +180,17 @@ BEST = {
              "centreline corridor (2.37, 2.38, 2.30). 0.70 crashes from one start, "
              "0.90 over-speeds. The tuner's job: reach it, and add per-sector "
              "q_c/q_v shape, without letting k_v drift into the over-speed."),
+    "icra_t2_raceline_mapped_vref": Setting(
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.90),
+        horizon=25, q_vref=0.20, laps=2.35, clean=True, steps=2500, peak_v=1.87,
+        note="k_v=0.90 is the highest clean-from-all-starts claim on the "
+             "conservative-reference (a_lat_ref=1.8) vref track (2.37, 2.34, "
+             "2.33). k_v=1.00 crashes from one start (2/3, mean 2.42), 1.05 "
+             "similar -- so on THIS reference the clean ceiling is 0.90, worth "
+             "the same 2.35 as the plain mapped BEST but reached as fraction of "
+             "a conservative optimum rather than an absolute grip cap. The point "
+             "of the vref variant is interpretable headroom, not a higher clean "
+             "lap. Measured 2026-09-10 scratchpad measure_vref.py."),
 }
 
 #: Horizon is part of the baseline, not a global constant. Measured: N=40 gives
