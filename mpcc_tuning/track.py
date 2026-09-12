@@ -652,8 +652,48 @@ class Track:
         return t
 
     @staticmethod
-    def icra_t2_smooth(ds: float = 0.1) -> "Track":
+    def _smooth_from_csv(ds: float = 0.1) -> "Track":
+        """Build the smooth track from the exported CSVs -- the REAL-TRACK path.
+
+        On a real car the corridor arrives as a reference line plus left/right
+        boundary polylines (from the map), not a repo .npz. This reconstructs the
+        Track from exactly that: ``icra_t2_smooth_raceline.csv`` (reference) and
+        ``icra_t2_smooth_boundaries.csv`` (left_x/y, right_x/y). The per-side
+        widths are the perpendicular distances from the reference to each
+        boundary. Verified equal to the npz path to <1 mm mean / ~6 mm max
+        corridor gap (tools test_csv_track), well under the 0.12 m car half-width
+        -- so results on the npz path transfer. Use for hardware/real-track runs.
+        """
+        tr = Path(__file__).resolve().parent / "tracks"
+        bd = np.genfromtxt(tr / "icra_t2_smooth_boundaries.csv",
+                           delimiter=",", names=True)
+        rl = np.genfromtxt(tr / "icra_t2_smooth_raceline.csv",
+                           delimiter=",", names=True)
+        ref = np.column_stack([bd["ref_x"], bd["ref_y"]])
+        L = np.column_stack([bd["left_x"], bd["left_y"]])
+        R = np.column_stack([bd["right_x"], bd["right_y"]])
+        tang = np.gradient(ref, axis=0)
+        tang /= (np.linalg.norm(tang, axis=1, keepdims=True) + 1e-12)
+        n = np.column_stack([-tang[:, 1], tang[:, 0]])          # +normal
+        wr = np.einsum("ij,ij->i", L - ref, n)                  # left  edge (+normal)
+        wl = -np.einsum("ij,ij->i", R - ref, n)                 # right edge (-normal)
+        t = Track(ref[:, 0], ref[:, 1], ds=float(ds),
+                  w_left=wl, w_right=wr)
+        t.raceline = np.column_stack([rl["x_m"], rl["y_m"]])
+        t.v_ref = rl["v_ref_mps"]
+        t.width_vehicle_adjusted = False
+        t.kv_max = 0.55
+        return t
+
+    @staticmethod
+    def icra_t2_smooth(ds: float = 0.1, source: str = "npz") -> "Track":
         """T2 with the SMOOTH raceline-referenced corridor, made ROBUST.
+
+        ``source="csv"`` rebuilds the identical corridor from the exported
+        raceline + left/right boundary CSVs (the real-track deployment path, see
+        :meth:`_smooth_from_csv`); ``source="npz"`` (default) loads the repo
+        cache. The two agree to <1 mm mean corridor gap, so experiments run on the
+        npz and transfer to the CSV/hardware path.
 
         Same smooth geometry as :meth:`icra_t2_raceline_ref` -- the reference is
         the optimiser's raceline (edge roughness ~0.001, vs the mapped centreline
@@ -667,6 +707,10 @@ class Track:
         the MPCC -- the smooth left/right edges the boundary constraint uses are
         also exported to tracks/icra_t2_smooth_boundaries.npz for plotting/reuse.
         """
+        if source == "csv":
+            return Track._smooth_from_csv(ds)
+        if source != "npz":
+            raise ValueError(f"source must be 'npz' or 'csv', got {source!r}")
         cache = (Path(__file__).resolve().parent / "tracks"
                  / "icra_t2_raceline_ref_corridor.npz")
         d = np.load(cache)
