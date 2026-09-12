@@ -134,13 +134,16 @@ START = {
              "START at k_v=0.45 (2.23 laps), room up to BEST's 0.60."),
     "icra_t2_raceline_mapped_vref": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.80),
-        horizon=25, q_vref=0.20, laps=2.20, clean=True, steps=2500, peak_v=1.73,
+        horizon=25, q_vref=0.20, laps=2.39, clean=True, steps=2500, peak_v=1.95,
         note="LEARNABLE v_ref: the OCP reference speed uses a CONSERVATIVE grip "
-             "(a_lat_ref=1.8, t.a_lat_ref) so that k_v=1.0 is the nominal profile "
-             "and k_v above 1.0 is headroom for warm tyres / model mismatch. On "
-             "this reference k_v is bounded [0.60,1.05] (t.kv_min/kv_max). START "
-             "at k_v=0.80 is clean from all three starts (2.23, 2.18, 2.18); room "
-             "up to BEST's 0.90. Measured 2026-09-10 scratchpad measure_vref.py."),
+             "(a_lat_ref=1.8, t.a_lat_ref) so k_v=1.0 is the nominal profile and "
+             "k_v above 1.0 is headroom for warm tyres / model mismatch; k_v "
+             "bounded [0.60,1.05] (t.kv_min/kv_max). RE-MEASURED 2026-09-11 on the "
+             "SMOOTHED corridor: START k_v=0.80 3/3 clean (2.36,2.27,2.54) 2.39. "
+             "The smooth reference now makes the WHOLE headroom clean -- 0.90 2.59, "
+             "1.00 2.73, 1.05 2.83, all 3/3 (was 1.00 2/3 / 1.05 1/3 on the jagged "
+             "corridor). So the car can cleanly beat the conservative reference: "
+             "the learnable-v_ref idea works. Room up to BEST's 1.05."),
 }
 
 #: The best CLEAN result found by hand. The target, not the start.
@@ -186,16 +189,17 @@ BEST = {
              "2.78). The tuner's job: reach 0.60 and add per-sector q_c/q_v shape "
              "without letting k_v drift into the over-speed."),
     "icra_t2_raceline_mapped_vref": Setting(
-        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.90),
-        horizon=25, q_vref=0.20, laps=2.35, clean=True, steps=2500, peak_v=1.87,
-        note="k_v=0.90 is the highest clean-from-all-starts claim on the "
-             "conservative-reference (a_lat_ref=1.8) vref track (2.37, 2.34, "
-             "2.33). k_v=1.00 crashes from one start (2/3, mean 2.42), 1.05 "
-             "similar -- so on THIS reference the clean ceiling is 0.90, worth "
-             "the same 2.35 as the plain mapped BEST but reached as fraction of "
-             "a conservative optimum rather than an absolute grip cap. The point "
-             "of the vref variant is interpretable headroom, not a higher clean "
-             "lap. Measured 2026-09-10 scratchpad measure_vref.py."),
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=1.05),
+        horizon=25, q_vref=0.20, laps=2.83, clean=True, steps=2500, peak_v=2.63,
+        note="RE-MEASURED 2026-09-11 on the SMOOTHED corridor: k_v=1.05 (the "
+             "kv_max headroom ceiling) is clean from all three starts (2.90, "
+             "2.76, 2.84) at 2.83 laps -- 18% over START. On the smooth reference "
+             "the WHOLE headroom [0.80..1.05] is clean and monotone (0.90 2.59, "
+             "1.00 2.73, 1.05 2.83), unlike the jagged corridor where 1.00/1.05 "
+             "crashed. This is the learnable-v_ref result: the car can, and "
+             "should, beat the conservative offline reference here. The tuner's "
+             "job: reach 1.05 (fraction of the conservative optimum), interpretable "
+             "as 'how much faster than the reference is safe', per corner."),
 }
 
 #: Horizon is part of the baseline, not a global constant. Measured: N=40 gives
