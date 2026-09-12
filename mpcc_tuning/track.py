@@ -652,6 +652,35 @@ class Track:
         return t
 
     @staticmethod
+    def icra_t2_smooth(ds: float = 0.1) -> "Track":
+        """T2 with the SMOOTH raceline-referenced corridor, made ROBUST.
+
+        Same smooth geometry as :meth:`icra_t2_raceline_ref` -- the reference is
+        the optimiser's raceline (edge roughness ~0.001, vs the mapped centreline
+        corridor's ~0.006) and the per-side widths come from the real map/pink
+        walls -- but WITHOUT ``use_optimiser_vref``: the aggressive optimiser
+        speed profile (2.3-8.8 m/s) over-drove the plant and crashed it from most
+        starts (measured 0-1/3 clean). Driven instead with the curvature speed
+        reference and a bounded grip claim, the SAME smooth corridor is robust
+        AND fast: START k_v=0.45 3/3 clean 2.52, BEST k_v=0.55 3/3 clean 2.89
+        (k_v=0.60 crashes from one start). This is the canonical smooth track for
+        the MPCC -- the smooth left/right edges the boundary constraint uses are
+        also exported to tracks/icra_t2_smooth_boundaries.npz for plotting/reuse.
+        """
+        cache = (Path(__file__).resolve().parent / "tracks"
+                 / "icra_t2_raceline_ref_corridor.npz")
+        d = np.load(cache)
+        t = Track(d["cx"], d["cy"], ds=float(ds),
+                  w_left=d["wl"], w_right=d["wr"])
+        t.raceline = d["raceline"]
+        t.v_ref = d["vref"]
+        t.width_vehicle_adjusted = False
+        # NOT use_optimiser_vref: the MPCC uses the curvature reference (tamed),
+        # so the smooth corridor is drivable from every start.
+        t.kv_max = 0.55
+        return t
+
+    @staticmethod
     def _raceline(fname: str, scale: float = 1.0, ds: float = 0.1,
                   smooth_m: float = 0.6, map_stem: str | None = None,
                   widen: float = 1.0, wall_allow: float = 0.6,

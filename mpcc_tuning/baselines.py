@@ -94,7 +94,7 @@ class Setting:
 #: between them is partly unreachable. Chosen per track by measurement --
 #: the oval and T2 both gain from it, T1 does not (see the module docstring).
 QVREF = {"oval": 0.05, "icra_t2_raceline": 0.20, "icra_t2_raceline_mapped": 0.20,
-         "icra_t2_raceline_mapped_vref": 0.20}
+         "icra_t2_raceline_mapped_vref": 0.20, "icra_t2_smooth": 0.20}
 
 #: Conservative, clean, and slower than it needs to be. The tuner starts here.
 #:
@@ -144,6 +144,16 @@ START = {
              "1.00 2.73, 1.05 2.83, all 3/3 (was 1.00 2/3 / 1.05 1/3 on the jagged "
              "corridor). So the car can cleanly beat the conservative reference: "
              "the learnable-v_ref idea works. Room up to BEST's 1.05."),
+    "icra_t2_smooth": Setting(
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.45),
+        horizon=25, q_vref=0.20, laps=2.52, clean=True, steps=2500, peak_v=1.89,
+        note="CANONICAL SMOOTH track (Track.icra_t2_smooth): raceline-referenced "
+             "corridor with edge roughness ~0.001 (vs the mapped centreline's "
+             "~0.006), widths from the real map walls, driven with the curvature "
+             "reference + bounded k_v (NOT the aggressive optimiser v_ref, which "
+             "over-drove and crashed it 0-1/3). Measured 2026-09-12: START "
+             "k_v=0.45 3/3 clean (2.45, 2.45, 2.68) 2.52; room to BEST's 0.55. "
+             "Smooth boundaries the MPCC uses: tracks/icra_t2_smooth_boundaries.npz."),
 }
 
 #: The best CLEAN result found by hand. The target, not the start.
@@ -200,6 +210,14 @@ BEST = {
              "should, beat the conservative offline reference here. The tuner's "
              "job: reach 1.05 (fraction of the conservative optimum), interpretable "
              "as 'how much faster than the reference is safe', per corner."),
+    "icra_t2_smooth": Setting(
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.55),
+        horizon=25, q_vref=0.20, laps=2.89, clean=True, steps=2500, peak_v=2.29,
+        note="Measured 2026-09-12 on the canonical SMOOTH track: k_v=0.55 is the "
+             "highest clean-from-all-starts claim (3.08, 2.98, 2.59) at 2.89 laps "
+             "-- FASTER than the mapped-smoothed BEST (2.73), because the smooth "
+             "raceline reference is a better line than the centreline. k_v=0.60 "
+             "crashes from one start (2/3, peak 2.72). kv_max=0.55."),
 }
 
 #: Horizon is part of the baseline, not a global constant. Measured: N=40 gives
