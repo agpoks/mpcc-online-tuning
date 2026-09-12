@@ -124,11 +124,14 @@ START = {
              "BEST -- only theta differs."),
     "icra_t2_raceline_mapped": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.45),
-        horizon=25, q_vref=0.20, laps=2.03, clean=True, steps=2500, peak_v=1.50,
-        note="CENTRELINE reference with the REAL occupancy-grid corridor. k_v is "
-             "capped at 0.6 (t.kv_max): measured k_v<=0.55 clean 3/3, 0.70 2/3, "
-             "0.90 over-speeds -- bounding k_v prevents the MPCC-critic over-speed "
-             "crash. START at k_v=0.45 (2.03 laps), room up to BEST's 0.55."),
+        horizon=25, q_vref=0.20, laps=2.23, clean=True, steps=2500, peak_v=1.61,
+        note="CENTRELINE reference with the REAL occupancy-grid corridor, "
+             "re-measured 2026-09-11 on the SMOOTHED corridor (centreline "
+             "gaussian sigma=3, widths re-derived to the real pink walls; edge "
+             "roughness 0.017->0.006). Smoothing the reference made every setting "
+             "faster and cleaner: k_v=0.45 3/3 2.23 (was 2.03), 0.55 2.52, 0.60 "
+             "3/3 2.73, 0.70 2/3 (over-speeds). k_v capped at 0.6 (t.kv_max). "
+             "START at k_v=0.45 (2.23 laps), room up to BEST's 0.60."),
     "icra_t2_raceline_mapped_vref": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.80),
         horizon=25, q_vref=0.20, laps=2.20, clean=True, steps=2500, peak_v=1.73,
@@ -174,12 +177,14 @@ BEST = {
              "the oval wants 0.50 -- still the opposite direction from START's "
              "0.40 here, which is what the tuner has to find."),
     "icra_t2_raceline_mapped": Setting(
-        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.55),
-        horizon=25, q_vref=0.20, laps=2.35, clean=True, steps=2500, peak_v=1.87,
-        note="k_v=0.55 is the highest clean-from-all-starts claim on the mapped "
-             "centreline corridor (2.37, 2.38, 2.30). 0.70 crashes from one start, "
-             "0.90 over-speeds. The tuner's job: reach it, and add per-sector "
-             "q_c/q_v shape, without letting k_v drift into the over-speed."),
+        weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.60),
+        horizon=25, q_vref=0.20, laps=2.73, clean=True, steps=2500, peak_v=2.18,
+        note="RE-MEASURED 2026-09-11 on the SMOOTHED corridor: k_v=0.60 is the "
+             "highest clean-from-all-starts claim (2.81, 2.56, 2.81), up from 0.55 "
+             "on the jagged corridor -- the smooth reference lets the car carry "
+             "more grip cleanly. 0.70 crashes from one start (over-speeds, peak "
+             "2.78). The tuner's job: reach 0.60 and add per-sector q_c/q_v shape "
+             "without letting k_v drift into the over-speed."),
     "icra_t2_raceline_mapped_vref": Setting(
         weights=dict(q_c=1.0, q_l=50.0, q_v=0.20, r_d=1.0, r_a=6.0, k_v=0.90),
         horizon=25, q_vref=0.20, laps=2.35, clean=True, steps=2500, peak_v=1.87,
