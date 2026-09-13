@@ -1,0 +1,4 @@
+policy,condition,clean_of_6,mean_laps,note
+fixed_const_kv0.40,nominal,6,2.25,"nominal-tuned constant, reference"
+fixed_const_kv0.40,local_3corner,6,2.3,ignorant of the grip change; conservative so unaffected
+online_MPCC_adapt,local_3corner,6,2.48,"learned on the 3-corner local friction (0.70/0.80/0.80); +8% over the fixed constant, all clean"
