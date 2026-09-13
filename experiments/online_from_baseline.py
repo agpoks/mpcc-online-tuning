@@ -122,12 +122,14 @@ def one(job):
     t = getattr(Track, track_name)()
     mu_corners = None
     if mu_local < 1.0:
+        # local grip drop: the preset carries PER-CORNER (x, y, radius, mu),
+        # e.g. one tight corner at 0.70 and two at 0.80 (mu-local<1 just triggers
+        # it; the per-corner values come from the file, not the scalar).
         import numpy as _np
-        _cs = _np.load(Path(__file__).resolve().parents[1] / "mpcc_tuning" / "tracks"
-                       / "icra_t2_smooth_narrowed_corridor.npz")["corners"]
-        mu_corners = [(float(_np.asarray(t.pos(float(_s))).ravel()[0]),
-                       float(_np.asarray(t.pos(float(_s))).ravel()[1]),
-                       1.6, float(mu_local)) for _s in _cs]
+        _fp = _np.load(Path(__file__).resolve().parents[1] / "mpcc_tuning" / "tracks"
+                       / "icra_t2_smooth_friction_local.npz")
+        mu_corners = list(zip(_fp["corner_x"].tolist(), _fp["corner_y"].tolist(),
+                              _fp["radius"].tolist(), _fp["mu"].tolist()))
     st = B.start(track_name)
     th0 = np.asarray(st.theta(), float)
     _use_vref = bool(getattr(t, "use_optimiser_vref", False))

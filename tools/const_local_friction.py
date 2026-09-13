@@ -8,21 +8,21 @@ from mpcc_tuning.mpcc import WEIGHT_NAMES
 from mpcc_tuning.acados_mpcc import AcadosMPCC
 from mpcc_tuning.plant_scuderia import ScuderiaPlant
 st=B.start("icra_t2_smooth"); t=Track.icra_t2_smooth(); ik=WEIGHT_NAMES.index("k_v")
-m=AcadosMPCC(t,horizon=st.horizon,dt=0.05,vehicle="dynamic",q_vref=st.q_vref,discrete=True,name="cl_%d"%os.getpid())
+m=AcadosMPCC(t,horizon=st.horizon,dt=0.05,vehicle="dynamic",q_vref=st.q_vref,discrete=True,name="cl3_%d"%os.getpid())
 th0=np.asarray(st.theta(),float)
-cs=np.load(ROOT/"mpcc_tuning/tracks/icra_t2_smooth_narrowed_corridor.npz")["corners"]
-def mc(mulow): return [(float(np.asarray(t.pos(float(s))).ravel()[0]),float(np.asarray(t.pos(float(s))).ravel()[1]),1.6,mulow) for s in cs]
-def run(kv,mulow):
-    th=th0.copy(); th[ik]=np.log(kv); mcorn=None if mulow>=1 else mc(mulow); out=[]
+fp=np.load(ROOT/"mpcc_tuning/tracks/icra_t2_smooth_friction_local.npz")
+MC=list(zip(fp["corner_x"].tolist(),fp["corner_y"].tolist(),fp["radius"].tolist(),fp["mu"].tolist()))
+def run(kv,local):
+    th=th0.copy(); th[ik]=np.log(kv); mcorn=MC if local else None; out=[]
     for seed in range(6):
         s0=(seed%4)*t.length/4.0; v0=1.0+0.1*(seed%3)
         P=ScuderiaPlant(t,model="std",dt=0.05,mu_corners=mcorn); P.max_steps=st.steps
-        s5=P.reset(s0=s0,v0=v0); m.reset(); b=float(s5[4]); off=tr=False; pk=0.0
+        s5=P.reset(s0=s0,v0=v0); m.reset(); b=float(s5[4]); off=tr=False
         for _ in range(st.steps):
-            u=m.value(P.state_dyn(),th)["u0"]; s5,r,off,tr=P.step(u); pk=max(pk,float(s5[3]))
+            u=m.value(P.state_dyn(),th)["u0"]; s5,r,off,tr=P.step(u)
             if off or tr: break
         out.append(((float(s5[4])-b)/t.length,bool(off)))
     cl=sum(1 for r in out if not r[1])
-    print(" k_v=%.2f mu_local=%.2f: %d/6 clean, laps %s"%(kv,mulow,cl,[round(r[0],2) for r in out]),flush=True)
-print("FIXED constant under LOCAL friction (2 corners), discrete, 6 seeds")
-run(0.40,1.0); run(0.40,0.80); run(0.55,0.80)
+    print(" k_v=%.2f local=%s: %d/6 clean, laps %s"%(kv,local,cl,[round(r[0],2) for r in out]),flush=True)
+print("FIXED nominal-tuned constant (k_v=0.40) under 3-corner LOCAL friction (0.70/0.80/0.80), discrete, 6 seeds")
+run(0.40,False); run(0.40,True)
