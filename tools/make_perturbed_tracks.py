@@ -21,9 +21,10 @@ print("corner centres at s =", [round(c,1) for c in corners], "radius", [round(1
 d=np.load(TR/"icra_t2_raceline_ref_corridor.npz")
 cx,cy,wl,wr=d["cx"].astype(float),d["cy"].astype(float),d["wl"].astype(float),d["wr"].astype(float)
 sc=np.linspace(0,t.length,len(wl),endpoint=False)
-DELTA=0.15; HALF=2.5
+HALF=2.5
 wl2,wr2=wl.copy(),wr.copy()
-for c,ci in zip(corners,picks):
+DELTAS=[0.20,0.15]   # the two places differ by 20 cm and 15 cm (the tube moved in)
+for (c,ci),DELTA in zip(zip(corners,picks),DELTAS):
     # sign of curvature at corner -> inner side. +normal(left) inner if turning left.
     ksig=float(t.curvature(float(c)))
     win=np.abs(((sc-c+t.length/2)%t.length)-t.length/2)<HALF
@@ -32,7 +33,7 @@ for c,ci in zip(corners,picks):
     else:      wl2[win]=np.maximum(wl2[win]-DELTA,0.25)
 np.savez(str(TR/"icra_t2_smooth_narrowed_corridor.npz"), cx=cx,cy=cy,wl=wl2,wr=wr2,
          ds=float(d["ds"]),length=float(d["length"]),raceline=d["raceline"],vref=d["vref"],
-         corners=np.array(corners), delta=DELTA, half=HALF)
+         corners=np.array(corners), delta=np.array(DELTAS), half=HALF)
 print("saved narrowed corridor; wl", wl.min(),wl.max(),"->",wl2.min(),wl2.max())
 # plot nominal vs narrowed edges on the map
 def edges(cxx,cyy,WL,WR):
@@ -45,11 +46,11 @@ Ln,Rn=edges(cx,cy,wl,wr); Lp,Rp=edges(cx,cy,wl2,wr2)
 im=np.array(Image.open(TR/"icra2026_t2.pgm")); H,W=im.shape; res,ox,oy=0.05,-2.8,-7.25
 fig,ax=plt.subplots(figsize=(11,9.5)); ax.imshow(im,cmap="gray",extent=[ox,ox+W*res,oy,oy+H*res],origin="upper",zorder=0)
 ax.plot(Ln[:,0],Ln[:,1],color="0.5",lw=1.0,zorder=2); ax.plot(Rn[:,0],Rn[:,1],color="0.5",lw=1.0,zorder=2,label="nominal boundary")
-ax.plot(Lp[:,0],Lp[:,1],color="tab:red",lw=1.8,zorder=3); ax.plot(Rp[:,0],Rp[:,1],color="tab:red",lw=1.8,zorder=3,label="narrowed boundary (tube moved in 0.15 m)")
+ax.plot(Lp[:,0],Lp[:,1],color="tab:red",lw=1.8,zorder=3); ax.plot(Rp[:,0],Rp[:,1],color="tab:red",lw=1.8,zorder=3,label="narrowed boundary (tube moved in 15-20 cm)")
 for c in corners:
     p=np.array(t.pos(float(c))).ravel(); ax.scatter([p[0]],[p[1]],c="yellow",edgecolor="k",s=120,zorder=5)
 ax.set_aspect("equal"); ax.axis("off"); ax.legend(loc="lower left",fontsize=10,framealpha=0.9)
-ax.set_title("Use-case: geometry change -- boundary moved 0.15 m into the track at 2 corners (yellow)")
+ax.set_title("Use-case: geometry change -- boundary moved 15-20 cm into the track at 2 corners (yellow)")
 fig.tight_layout()
 for ext in ("png","pdf"): fig.savefig(str(ROOT/f"results/paper_smooth/perturb_geometry.{ext}"),dpi=140)
 print("saved perturb_geometry")
