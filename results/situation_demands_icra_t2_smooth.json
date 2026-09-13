@@ -1,0 +1,1542 @@
+{
+  "track": "icra_t2_smooth",
+  "horizon": 25,
+  "steps": 220,
+  "grid": [
+    [
+      1.0,
+      0.2
+    ],
+    [
+      1.0,
+      0.5
+    ],
+    [
+      1.0,
+      1.0
+    ],
+    [
+      1.0,
+      2.0
+    ],
+    [
+      1.0,
+      5.0
+    ],
+    [
+      0.3,
+      2.0
+    ],
+    [
+      0.3,
+      5.0
+    ],
+    [
+      3.0,
+      2.0
+    ],
+    [
+      3.0,
+      5.0
+    ]
+  ],
+  "cells": {
+    "0|none|1|1.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 46.150278101109826,
+      "off": false,
+      "passes": 0
+    },
+    "0|none|1|3.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 47.05125966924429,
+      "off": false,
+      "passes": 0
+    },
+    "0|slower|1|1.0": {
+      "q_c": 1.0,
+      "q_v": 0.5,
+      "ratio": 0.5,
+      "covered": 28.531082990924734,
+      "off": false,
+      "passes": 0
+    },
+    "0|slower|1|3.0": {
+      "q_c": 1.0,
+      "q_v": 0.5,
+      "ratio": 0.5,
+      "covered": 28.531082990924734,
+      "off": false,
+      "passes": 0
+    },
+    "0|equal|1|1.0": {
+      "q_c": 1.0,
+      "q_v": 2.0,
+      "ratio": 2.0,
+      "covered": 38.14155305102569,
+      "off": false,
+      "passes": 0
+    },
+    "0|equal|1|3.0": {
+      "q_c": 3.0,
+      "q_v": 2.0,
+      "ratio": 0.6666666666666666,
+      "covered": 36.94024429351307,
+      "off": false,
+      "passes": 0
+    },
+    "0|faster|1|1.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 45.74984184860562,
+      "off": false,
+      "passes": 0
+    },
+    "0|faster|1|3.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 46.65082341674008,
+      "off": false,
+      "passes": 0
+    },
+    "2|none|0|1.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 43.44733339670643,
+      "off": false,
+      "passes": 0
+    },
+    "2|none|0|3.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 44.7487512173451,
+      "off": false,
+      "passes": 0
+    },
+    "2|slower|0|1.0": {
+      "q_c": 1.0,
+      "q_v": 2.0,
+      "ratio": 2.0,
+      "covered": 30.733482379697865,
+      "off": false,
+      "passes": 0
+    },
+    "2|slower|0|3.0": {
+      "q_c": 1.0,
+      "q_v": 0.2,
+      "ratio": 0.2,
+      "covered": 28.531082990924727,
+      "off": false,
+      "passes": 0
+    },
+    "2|equal|0|1.0": {
+      "q_c": 3.0,
+      "q_v": 5.0,
+      "ratio": 1.6666666666666667,
+      "covered": 41.14482494480724,
+      "off": false,
+      "passes": 0
+    },
+    "2|equal|0|3.0": {
+      "q_c": 1.0,
+      "q_v": 1.0,
+      "ratio": 1.0,
+      "covered": 37.74111679852149,
+      "off": false,
+      "passes": 0
+    },
+    "2|faster|0|1.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 43.24711527045433,
+      "off": false,
+      "passes": 0
+    },
+    "2|faster|0|3.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 43.84776964921064,
+      "off": false,
+      "passes": 0
+    },
+    "3|none|1|1.0": {
+      "q_c": 1.0,
+      "q_v": 5.0,
+      "ratio": 5.0,
+      "covered": 40.04362525042067,
+      "off": false,
+      "passes": 0
+    },
+    "3|none|1|3.0": {
+      "q_c": 1.0,
+      "q_v": 5.0,
+      "ratio": 5.0,
+      "covered": 40.444061502924875,
+      "off": false,
+      "passes": 0
+    },
+    "3|slower|1|1.0": {
+      "q_c": 3.0,
+      "q_v": 2.0,
+      "ratio": 0.6666666666666666,
+      "covered": 27.930428612168413,
+      "off": false,
+      "passes": 0
+    },
+    "3|slower|1|3.0": {
+      "q_c": 3.0,
+      "q_v": 2.0,
+      "ratio": 0.6666666666666666,
+      "covered": 27.930428612168413,
+      "off": false,
+      "passes": 0
+    },
+    "3|equal|1|1.0": {
+      "q_c": 1.0,
+      "q_v": 5.0,
+      "ratio": 5.0,
+      "covered": 39.04253461916016,
+      "off": false,
+      "passes": 0
+    },
+    "3|equal|1|3.0": {
+      "q_c": 1.0,
+      "q_v": 5.0,
+      "ratio": 5.0,
+      "covered": 40.14373431354672,
+      "off": false,
+      "passes": 0
+    },
+    "3|faster|1|1.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 40.744388692303026,
+      "off": false,
+      "passes": 0
+    },
+    "3|faster|1|3.0": {
+      "q_c": 0.3,
+      "q_v": 5.0,
+      "ratio": 16.666666666666668,
+      "covered": 40.94460681855513,
+      "off": false,
+      "passes": 0
+    }
+  },
+  "raw": {
+    "0|none|1|1.0|1.0|0.2": {
+      "covered": 25.02726578151292,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|1.0|0.5": {
+      "covered": 35.13828115724414,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|1.0|1.0": {
+      "covered": 39.54307993479041,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|1.0|2.0": {
+      "covered": 41.94569744981566,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|1.0|5.0": {
+      "covered": 44.948969343597206,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|0.3|2.0": {
+      "covered": 42.94678808107617,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|0.3|5.0": {
+      "covered": 46.150278101109826,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|3.0|2.0": {
+      "covered": 41.54526119731145,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|1.0|3.0|5.0": {
+      "covered": 43.64755152295854,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|1.0|0.2": {
+      "covered": 32.53544551596679,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|1.0|0.5": {
+      "covered": 38.9424255560341,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|1.0|1.0": {
+      "covered": 41.44515213418539,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|1.0|2.0": {
+      "covered": 43.24711527045433,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|1.0|5.0": {
+      "covered": 46.150278101109826,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|0.3|2.0": {
+      "covered": 44.24820590171484,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|0.3|5.0": {
+      "covered": 47.05125966924429,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|3.0|2.0": {
+      "covered": 42.846679017950116,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|none|1|3.0|3.0|5.0": {
+      "covered": 45.04907840672326,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|1.0|0.2": {
+      "covered": 25.02726578151292,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|1.0|0.5": {
+      "covered": 28.531082990924734,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|1.0|1.0": {
+      "covered": 28.53108299092473,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|1.0|5.0": {
+      "covered": 3.3090522394622894,
+      "off": true,
+      "passes": 1,
+      "contact": 0
+    },
+    "0|slower|1|1.0|1.0|2.0": {
+      "covered": 8.314505395764874,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|0.3|2.0": {
+      "covered": 2.9086159869580825,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|0.3|5.0": {
+      "covered": 2.6082887975799274,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|3.0|5.0": {
+      "covered": 4.410251933848858,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|1.0|3.0|2.0": {
+      "covered": 28.531082990924734,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|3.0|1.0|0.2": {
+      "covered": 28.53108299092473,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|3.0|1.0|0.5": {
+      "covered": 28.531082990924734,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|3.0|1.0|2.0": {
+      "covered": 1.6071981663194101,
+      "off": true,
+      "passes": 0,
+      "contact": 1
+    },
+    "0|slower|1|3.0|1.0|5.0": {
+      "covered": 1.306870976941255,
+      "off": true,
+      "passes": 0,
+      "contact": 1
+    },
+    "0|slower|1|3.0|0.3|2.0": {
+      "covered": 1.4069800400673067,
+      "off": true,
+      "passes": 0,
+      "contact": 1
+    },
+    "0|slower|1|3.0|0.3|5.0": {
+      "covered": 0.2056712825546878,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|3.0|1.0|1.0": {
+      "covered": 28.531082990924734,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|slower|1|3.0|3.0|5.0": {
+      "covered": 1.8074162925715136,
+      "off": true,
+      "passes": 0,
+      "contact": 1
+    },
+    "0|slower|1|3.0|3.0|2.0": {
+      "covered": 28.531082990924734,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|1.0|0.2": {
+      "covered": 25.02726578151292,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|1.0|0.5": {
+      "covered": 34.73784490473993,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|1.0|5.0": {
+      "covered": 8.414614458890926,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|1.0|1.0": {
+      "covered": 36.23948085163071,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|0.3|2.0": {
+      "covered": 10.216577595159857,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|0.3|5.0": {
+      "covered": 8.314505395764874,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|1.0|2.0": {
+      "covered": 38.14155305102569,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|3.0|5.0": {
+      "covered": 10.516904784538012,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|1.0|3.0|2.0": {
+      "covered": 36.94024429351307,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|1.0|0.2": {
+      "covered": 29.832500811563403,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|1.0|2.0": {
+      "covered": 6.812869448874098,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|1.0|0.5": {
+      "covered": 34.73784490473993,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|1.0|5.0": {
+      "covered": 6.112106006991736,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|0.3|2.0": {
+      "covered": 5.711669754487529,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|1.0|1.0": {
+      "covered": 36.23948085163071,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|0.3|5.0": {
+      "covered": 4.810688186353065,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|3.0|5.0": {
+      "covered": 6.712760385748046,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|equal|1|3.0|3.0|2.0": {
+      "covered": 36.94024429351307,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|1.0|0.2": {
+      "covered": 25.02726578151292,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|1.0|0.5": {
+      "covered": 35.13828115724414,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|1.0|1.0": {
+      "covered": 38.44188024040384,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|1.0|2.0": {
+      "covered": 40.04362525042067,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|1.0|5.0": {
+      "covered": 44.7487512173451,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|0.3|2.0": {
+      "covered": 42.546351828571964,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|0.3|5.0": {
+      "covered": 45.74984184860562,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|3.0|2.0": {
+      "covered": 39.242752745412254,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|1.0|0.2": {
+      "covered": 30.333046127193654,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|1.0|3.0|5.0": {
+      "covered": 42.846679017950116,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|1.0|0.5": {
+      "covered": 36.94024429351307,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|1.0|1.0": {
+      "covered": 38.44188024040384,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|1.0|2.0": {
+      "covered": 42.34613370231987,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|1.0|5.0": {
+      "covered": 45.64973278547957,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|0.3|2.0": {
+      "covered": 43.84776964921063,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|3.0|2.0": {
+      "covered": 39.242752745412254,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|0.3|5.0": {
+      "covered": 46.65082341674008,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|1.0|0.2": {
+      "covered": 25.32759297089107,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|1.0|0.5": {
+      "covered": 34.13719052598363,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "0|faster|1|3.0|3.0|5.0": {
+      "covered": 44.948969343597206,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|1.0|1.0": {
+      "covered": 38.742207429782006,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|1.0|2.0": {
+      "covered": 40.644279629176985,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|1.0|5.0": {
+      "covered": 42.546351828571964,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|0.3|2.0": {
+      "covered": 41.14482494480724,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|3.0|2.0": {
+      "covered": 40.44406150292488,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|0.3|5.0": {
+      "covered": 43.44733339670643,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|1.0|3.0|5.0": {
+      "covered": 41.74547932356355,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|1.0|0.2": {
+      "covered": 31.934791137210485,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|1.0|0.5": {
+      "covered": 37.94133492477359,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|1.0|1.0": {
+      "covered": 40.24384337667278,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|1.0|2.0": {
+      "covered": 41.4451521341854,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|1.0|5.0": {
+      "covered": 43.64755152295854,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|0.3|2.0": {
+      "covered": 42.04580651294171,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|3.0|2.0": {
+      "covered": 41.244934007933296,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|0.3|5.0": {
+      "covered": 44.7487512173451,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|none|0|3.0|3.0|5.0": {
+      "covered": 42.546351828571964,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|1.0|0.2": {
+      "covered": 25.32759297089107,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|1.0|0.5": {
+      "covered": 28.631192054050786,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|1.0|5.0": {
+      "covered": 2.007634418823619,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|0.3|2.0": {
+      "covered": 2.1077434819496705,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|0.3|5.0": {
+      "covered": 1.7073072294454636,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|1.0|1.0": {
+      "covered": 28.631192054050782,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|3.0|5.0": {
+      "covered": 2.8085069238320326,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|1.0|2.0": {
+      "covered": 30.733482379697865,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|1.0|0.5": {
+      "covered": 1.8074162925715154,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|1.0|1.0": {
+      "covered": 0.7062165981849464,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|1.0|3.0|2.0": {
+      "covered": 28.631192054050782,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|1.0|2.0": {
+      "covered": 0.40588940880679125,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|1.0|5.0": {
+      "covered": 0.40588940880679125,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|0.3|2.0": {
+      "covered": 0.10556221942863608,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|0.3|5.0": {
+      "covered": 0.10556221942863608,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|1.0|0.2": {
+      "covered": 28.531082990924727,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|3.0|2.0": {
+      "covered": 0.6061075350588947,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|slower|0|3.0|3.0|5.0": {
+      "covered": 0.30578034568073953,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|1.0|0.2": {
+      "covered": 25.32759297089107,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|1.0|0.5": {
+      "covered": 34.13719052598363,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|1.0|1.0": {
+      "covered": 36.84013523038702,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|1.0|2.0": {
+      "covered": 38.04144398789964,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|1.0|5.0": {
+      "covered": 32.34068054601728,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|0.3|2.0": {
+      "covered": 40.84449775542909,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|0.3|5.0": {
+      "covered": 31.439698977882813,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|3.0|2.0": {
+      "covered": 37.64100773539543,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|1.0|3.0|5.0": {
+      "covered": 41.14482494480724,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|1.0|0.2": {
+      "covered": 29.732391748437347,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|1.0|0.5": {
+      "covered": 37.04035335663912,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|1.0|2.0": {
+      "covered": 4.710579123227015,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|1.0|5.0": {
+      "covered": 2.708397860705981,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|0.3|2.0": {
+      "covered": 3.6093794288404464,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|0.3|5.0": {
+      "covered": 2.4080706713278257,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|3.0|2.0": {
+      "covered": 4.41025193384886,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|3.0|5.0": {
+      "covered": 2.9086159869580843,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|equal|0|3.0|1.0|1.0": {
+      "covered": 37.74111679852149,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|1.0|0.2": {
+      "covered": 25.32759297089107,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|1.0|0.5": {
+      "covered": 34.13719052598363,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|1.0|1.0": {
+      "covered": 37.94133492477359,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|1.0|2.0": {
+      "covered": 39.24275274541226,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|1.0|5.0": {
+      "covered": 42.24602463919381,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|0.3|2.0": {
+      "covered": 41.14482494480724,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|3.0|2.0": {
+      "covered": 38.94242555603411,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|0.3|5.0": {
+      "covered": 43.24711527045433,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|1.0|3.0|5.0": {
+      "covered": 41.4451521341854,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|1.0|0.2": {
+      "covered": 30.132828000941554,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|1.0|0.5": {
+      "covered": 36.039262725378606,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|1.0|1.0": {
+      "covered": 40.043625250420675,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|1.0|2.0": {
+      "covered": 41.04471588168119,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|1.0|5.0": {
+      "covered": 43.147006207328275,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|0.3|2.0": {
+      "covered": 41.74547932356355,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|3.0|2.0": {
+      "covered": 40.84449775542909,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|0.3|5.0": {
+      "covered": 43.84776964921064,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "2|faster|0|3.0|3.0|5.0": {
+      "covered": 42.34613370231986,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|1.0|0.2": {
+      "covered": 23.625738897748192,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|1.0|0.5": {
+      "covered": 30.633373316571813,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|1.0|1.0": {
+      "covered": 33.93697239973152,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|1.0|2.0": {
+      "covered": 36.439698977882806,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|1.0|5.0": {
+      "covered": 40.04362525042067,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|0.3|2.0": {
+      "covered": 37.54089867226937,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|0.3|5.0": {
+      "covered": 33.74220742978199,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|3.0|2.0": {
+      "covered": 35.63882647287439,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|1.0|3.0|5.0": {
+      "covered": 38.74220742978199,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|1.0|0.2": {
+      "covered": 28.430973927798675,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|1.0|0.5": {
+      "covered": 32.335227389714696,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|1.0|1.0": {
+      "covered": 34.33740865223573,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|1.0|2.0": {
+      "covered": 36.74002616726096,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|1.0|5.0": {
+      "covered": 40.444061502924875,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|0.3|2.0": {
+      "covered": 37.74111679852148,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|0.3|5.0": {
+      "covered": 33.74220742978199,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|3.0|2.0": {
+      "covered": 36.0392627253786,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|none|1|3.0|3.0|5.0": {
+      "covered": 39.1426436822862,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|1.0|0.2": {
+      "covered": 23.625738897748192,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|1.0|0.5": {
+      "covered": 27.229665170286054,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|1.0|5.0": {
+      "covered": 3.3090522394622894,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|1.0|1.0": {
+      "covered": 27.63010142279026,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|0.3|2.0": {
+      "covered": 4.009815681344648,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|0.3|5.0": {
+      "covered": 3.3090522394622894,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|1.0|2.0": {
+      "covered": 22.429883296538158,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|3.0|5.0": {
+      "covered": 5.51145162823542,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|1.0|3.0|2.0": {
+      "covered": 27.930428612168413,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|1.0|0.2": {
+      "covered": 26.328683602151585,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|1.0|2.0": {
+      "covered": 3.4091613025883376,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|1.0|0.5": {
+      "covered": 27.229665170286054,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|1.0|5.0": {
+      "covered": 2.8085069238320273,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|0.3|2.0": {
+      "covered": 3.509270365714393,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|1.0|1.0": {
+      "covered": 27.63010142279026,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|0.3|5.0": {
+      "covered": 3.208943176336234,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|3.0|5.0": {
+      "covered": 4.009815681344648,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|slower|1|3.0|3.0|2.0": {
+      "covered": 27.930428612168413,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|1.0|0.2": {
+      "covered": 23.625738897748192,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|1.0|0.5": {
+      "covered": 30.633373316571813,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|1.0|1.0": {
+      "covered": 31.834682074084434,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|1.0|2.0": {
+      "covered": 33.93697239973152,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|0.3|5.0": {
+      "covered": 11.91843166830273,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|1.0|5.0": {
+      "covered": 39.04253461916016,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|0.3|2.0": {
+      "covered": 36.439698977882806,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|3.0|2.0": {
+      "covered": 32.63555457909285,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|1.0|3.0|5.0": {
+      "covered": 37.74111679852148,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|1.0|0.2": {
+      "covered": 27.229665170286054,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|1.0|0.5": {
+      "covered": 30.83359144282391,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|1.0|1.0": {
+      "covered": 31.834682074084434,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|1.0|2.0": {
+      "covered": 35.8390445991265,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|1.0|5.0": {
+      "covered": 40.14373431354672,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|0.3|5.0": {
+      "covered": 11.618104478924579,
+      "off": true,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|0.3|2.0": {
+      "covered": 37.04035335663912,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|3.0|2.0": {
+      "covered": 32.63555457909285,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|equal|1|3.0|3.0|5.0": {
+      "covered": 37.94133492477358,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|1.0|0.2": {
+      "covered": 23.625738897748192,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|1.0|0.5": {
+      "covered": 30.633373316571813,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|1.0|1.0": {
+      "covered": 33.53653614722732,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|1.0|2.0": {
+      "covered": 35.53871740974834,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|1.0|5.0": {
+      "covered": 39.84340712416857,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|0.3|2.0": {
+      "covered": 36.94024429351307,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|0.3|5.0": {
+      "covered": 40.744388692303026,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|3.0|2.0": {
+      "covered": 34.83795396786598,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|1.0|0.2": {
+      "covered": 27.63010142279026,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|1.0|3.0|5.0": {
+      "covered": 38.04144398789963,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|1.0|0.5": {
+      "covered": 31.93479113721049,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|1.0|1.0": {
+      "covered": 33.63664521035336,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|1.0|2.0": {
+      "covered": 35.63882647287439,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|1.0|5.0": {
+      "covered": 40.04362525042067,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|0.3|2.0": {
+      "covered": 37.340680546017275,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|0.3|5.0": {
+      "covered": 40.94460681855513,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|3.0|2.0": {
+      "covered": 34.93806303099203,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    },
+    "3|faster|1|3.0|3.0|5.0": {
+      "covered": 38.64209836665595,
+      "off": false,
+      "passes": 0,
+      "contact": 0
+    }
+  },
+  "best_constant": [
+    1.0,
+    1.0
+  ],
+  "constant_mean": 33.02833005420771,
+  "adaptive_mean": 38.683810476291804,
+  "headroom_pct": 17.123119494089003
+}
