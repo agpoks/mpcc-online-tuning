@@ -49,10 +49,10 @@ def eval_pol(name, spec, cond, m, t, mu=1.0):
 POLS=[("best_constant",dict(th=const_theta(0.55))),
       ("online_MPCC",  dict(npz="results/best_policy_icra_t2_smooth_2_progress_mpcc_val_f3.npz",seed=2))]
 rows=[]
-tn=nominal(); mn=AcadosMPCC(tn,horizon=st.horizon,dt=DT,vehicle="dynamic",q_vref=st.q_vref,name=f"rob_nom_{os.getpid()}")
+tn=nominal(); mn=AcadosMPCC(tn,horizon=st.horizon,dt=DT,vehicle="dynamic",q_vref=st.q_vref,discrete=True,name=f"rob_nom_{os.getpid()}")
 print("NOMINAL"); [rows.append(eval_pol(n,s,"nominal",mn,tn)) for n,s in POLS]
 print("LOW FRICTION (mu=0.80)"); [rows.append(eval_pol(n,s,"friction_0.80",mn,tn,mu=0.80)) for n,s in POLS]
-tw=narrowed(); mw=AcadosMPCC(tw,horizon=st.horizon,dt=DT,vehicle="dynamic",q_vref=st.q_vref,name=f"rob_narrow_{os.getpid()}")
+tw=narrowed(); mw=AcadosMPCC(tw,horizon=st.horizon,dt=DT,vehicle="dynamic",q_vref=st.q_vref,discrete=True,name=f"rob_narrow_{os.getpid()}")
 print("GEOMETRY (boundary moved in 0.15 m @ 2 corners)"); [rows.append(eval_pol(n,s,"geometry_narrowed",mw,tw)) for n,s in POLS]
 keys=["policy","condition","clean_of_3","mean_laps","laps","top_speed"]
 with open(OUT/"robustness.csv","w",newline="") as f:

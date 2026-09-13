@@ -1,7 +1,7 @@
 policy,condition,clean_of_3,mean_laps,laps,top_speed
-best_constant,nominal,3,2.886,3.08;2.98;2.59,2.295
-online_MPCC,nominal,3,2.869,2.91;2.94;2.76,2.593
-best_constant,friction_0.80,3,2.639,2.61;2.50;2.81,2.001
-online_MPCC,friction_0.80,2,2.412,1.48;2.80;2.96,2.166
-best_constant,geometry_narrowed,2,2.336,2.94;2.94;1.13,2.69
-online_MPCC,geometry_narrowed,3,2.882,2.90;2.72;3.02,2.432
+best_constant,nominal,2,2.728,2.62;2.64;2.92,2.214
+online_MPCC,nominal,3,2.926,3.07;2.62;3.09,2.451
+best_constant,friction_0.80,3,2.707,2.77;2.45;2.91,2.02
+online_MPCC,friction_0.80,3,2.852,3.11;2.58;2.86,2.199
+best_constant,geometry_narrowed,3,2.768,2.81;2.61;2.89,2.207
+online_MPCC,geometry_narrowed,2,2.064,0.49;2.66;3.04,2.331
