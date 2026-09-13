@@ -1,0 +1,5 @@
+policy,condition,clean_of_6,mean_laps,note
+fixed_const_kv0.40,local_mu0.80,6,2.33,"nominal-tuned constant, ignorant of change"
+fixed_const_kv0.55,local_mu0.80,6,2.8,"faster constant, also robust"
+online_MPCC_adapted,local_mu0.80,6,2.45,"learned on the local-friction plant, from START"
+fixed_const_kv0.40,nominal,6,2.25,reference
