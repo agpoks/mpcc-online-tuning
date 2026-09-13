@@ -74,7 +74,8 @@ class ScuderiaPlant:
     """A `scuderia_gym_jax` vehicle, behind the same interface as ``Plant``."""
 
     def __init__(self, track, model: str = "st", dt: float = 0.05,
-                 config: str | None = None, seed: int = 0, **make_kwargs):
+                 config: str | None = None, seed: int = 0,
+                 mu_scale: float = 1.0, **make_kwargs):
         try:
             import jax
             import jax.numpy as jnp
@@ -98,6 +99,16 @@ class ScuderiaPlant:
                             model=model, ctrl_mode="accl", num_agents=1,
                             produce_scans=False, collision_on=False,
                             timestep=PLANT_DT, **make_kwargs)
+        # Reduced-friction plant (use-case: track grip drops). The env applies
+        # ``_mu_scale(x)`` as a per-tick multiplier on the tyre forces; overriding
+        # it with a constant < 1 simulates uniformly lower grip that the CONTROLLER
+        # does not know about (its model still assumes mu=1), so the online tuner
+        # has to LEARN to back off. Set before the jit so the traced step captures
+        # it. mu_scale=1.0 leaves the plant untouched (every existing result).
+        self.mu_scale = float(mu_scale)
+        if self.mu_scale != 1.0:
+            self.env._mu_scale = (lambda x, _mu=self.mu_scale:
+                                  jnp.full((x.shape[0],), _mu, x.dtype))
         # jit the bound method once -- see the note in rtrrl-playground's
         # envs/scuderia.py about what stepping this from Python costs otherwise.
         self._step_env = jax.jit(self.env.step_env)

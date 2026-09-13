@@ -70,7 +70,7 @@ OUT = ROOT / "results"
 
 
 def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
-               kv_launch_laps=1.0):
+               kv_launch_laps=1.0, plant_mu=1.0):
     """Drive the CURRENT network with no learning and no noise; one episode.
 
     ``kv_launch`` (>0) is a **launch schedule on the grip claim**: cap the
@@ -88,7 +88,7 @@ def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
     from mpcc_tuning.mpcc import WEIGHT_NAMES
     ik = WEIGHT_NAMES.index("k_v")
     cap = float(np.log(kv_launch)) if kv_launch and kv_launch > 0 else None
-    P = ScuderiaPlant(t, model="std", dt=0.05); P.max_steps = steps
+    P = ScuderiaPlant(t, model="std", dt=0.05, mu_scale=plant_mu); P.max_steps = steps
     s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
     base = float(s5[4]); off = tr = False
 
@@ -112,7 +112,7 @@ def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
      clock, keep_best, kb_tol, eval_eps, critic, theta_explore, explore,
-     validate, init_policy) = job
+     validate, init_policy, plant_mu) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -192,13 +192,13 @@ def one(job):
     v0 = 1.0 + 0.1 * (seed % 3)
     if learn and keep_best and init_seeded:
         with tu.frozen():
-            l0, o0 = run_frozen(m, pol, t, s0, v0, steps, features)
+            l0, o0 = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu)
         tu._best = (-1.0 if o0 else float(l0), pol.G.copy(), pol.cell.p.copy())
         pol.reset(); m.reset()
 
     per_ep, wtrace = [], []
     for ep in range(episodes):
-        P = ScuderiaPlant(t, model="std", dt=0.05)
+        P = ScuderiaPlant(t, model="std", dt=0.05, mu_scale=plant_mu)
         P.max_steps = steps
         s5 = P.reset(s0=s0, v0=v0)
         m.reset()
@@ -253,7 +253,7 @@ def one(job):
                 # score beats the validated incumbent
                 with tu.frozen():
                     val_laps, val_off = run_frozen(m, pol, t, s0, v0, steps,
-                                                   features)
+                                                   features, plant_mu=plant_mu)
                 val = dict(laps=val_laps, off=val_off)
                 banked = tu.confirm_candidate(-1.0 if val_off else val_laps)
                 action = "banked" if banked else "rejected"
@@ -275,7 +275,7 @@ def one(job):
         pol.G[...] = G; pol.cell.p[...] = cp
         with tu.frozen():
             for k in range(eval_eps):
-                l_, o_ = run_frozen(m, pol, t, s0, v0, steps, features)
+                l_, o_ = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu)
                 evals.append(dict(laps=l_, off=o_))
         # keep the network itself, so it can be reloaded and driven again
         # the critic and the box are part of the identity of a banked network:
@@ -336,6 +336,10 @@ def main(argv=None):
     ap.add_argument("--validate", action="store_true",
                     help="keep-best banks a candidate only after a FROZEN "
                          "validation episode beats the incumbent")
+    ap.add_argument("--plant-mu", type=float, default=1.0,
+                    help="tyre-friction multiplier on the PLANT only (the "
+                         "controller model still assumes 1.0). <1 simulates a "
+                         "grip drop the online tuner must LEARN to adapt to.")
     ap.add_argument("--init-policy", default=None,
                     help="path to a fitted_policy_*.npz from "
                          "scripts/fit_policy_to_grid.py: start the learner "
@@ -360,7 +364,7 @@ def main(argv=None):
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
              a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
              a.eval_episodes, a.critic, a.theta_explore, a.explore,
-             a.validate, a.init_policy)
+             a.validate, a.init_policy, a.plant_mu)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
