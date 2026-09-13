@@ -75,7 +75,7 @@ class ScuderiaPlant:
 
     def __init__(self, track, model: str = "st", dt: float = 0.05,
                  config: str | None = None, seed: int = 0,
-                 mu_scale: float = 1.0, **make_kwargs):
+                 mu_scale: float = 1.0, mu_corners=None, **make_kwargs):
         try:
             import jax
             import jax.numpy as jnp
@@ -105,8 +105,26 @@ class ScuderiaPlant:
         # does not know about (its model still assumes mu=1), so the online tuner
         # has to LEARN to back off. Set before the jit so the traced step captures
         # it. mu_scale=1.0 leaves the plant untouched (every existing result).
+        #
+        # ``mu_corners`` makes the grip drop LOCAL: a list of (cx, cy, radius,
+        # mu_low). Inside ``radius`` metres of any (cx,cy) the multiplier is
+        # ``mu_low``, elsewhere 1.0 -- "some corners have less grip". A GLOBAL
+        # constant weight cannot slow only there; a per-sector online policy can,
+        # which is the whole point of the use-case.
         self.mu_scale = float(mu_scale)
-        if self.mu_scale != 1.0:
+        self.mu_corners = mu_corners
+        if mu_corners:
+            _c = jnp.asarray([[c[0], c[1]] for c in mu_corners])   # [K,2]
+            _r2 = jnp.asarray([c[2] ** 2 for c in mu_corners])     # [K]
+            _lo = jnp.asarray([c[3] for c in mu_corners])          # [K]
+            def _mu_local(x, _c=_c, _r2=_r2, _lo=_lo):
+                d2 = ((x[:, None, 0:2] - _c[None, :, :]) ** 2).sum(-1)  # [n,K]
+                inside = d2 <= _r2[None, :]
+                # nearest low-grip corner if inside any, else 1.0
+                mu = jnp.where(inside, _lo[None, :], 1.0)
+                return jnp.min(mu, axis=1).astype(x.dtype)
+            self.env._mu_scale = _mu_local
+        elif self.mu_scale != 1.0:
             self.env._mu_scale = (lambda x, _mu=self.mu_scale:
                                   jnp.full((x.shape[0],), _mu, x.dtype))
         # jit the bound method once -- see the note in rtrrl-playground's
