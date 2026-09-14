@@ -1,0 +1,4 @@
+policy,box,clean_of_6,mean_laps,seeds,note
+fixed_const_kv0.40,-,6,2.3,,nominal-tuned baseline
+online_MPCC,factor2,6,2.48,2.17;2.49;2.46;2.96;2.55;2.25,weights clamped at +/-2x
+online_MPCC,factor3,6,2.62,2.13;2.20;3.34;3.23;2.57;2.28,unclamped to +/-3x; 2 seeds reach 3.2-3.3 (fast regime)
