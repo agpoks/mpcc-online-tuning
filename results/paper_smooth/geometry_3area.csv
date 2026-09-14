@@ -1,0 +1,6 @@
+policy,adapts,condition,clean_of_6,mean_laps,laps
+online_MPCC_f2,yes,geometry_narrowed3,6,2.49,2.32;2.19;2.69;2.69;2.23;2.82
+best_constant_kv0.40,no,nominal,6,2.25,2.33;2.09;2.21;2.27;2.32;2.29
+best_constant_kv0.40,no,geometry_narrowed3,6,2.25,2.33;2.09;2.21;2.27;2.32;2.29
+best_constant_kv0.55,no,nominal,4,2.45,2.62;2.64;2.92;0.72;3.01;2.80
+best_constant_kv0.55,no,geometry_narrowed3,4,2.45,2.62;2.64;2.92;0.72;3.01;2.80

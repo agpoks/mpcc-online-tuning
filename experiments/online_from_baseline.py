@@ -70,7 +70,8 @@ OUT = ROOT / "results"
 
 
 def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
-               kv_launch_laps=1.0, plant_mu=1.0, mu_corners=None):
+               kv_launch_laps=1.0, plant_mu=1.0, mu_corners=None,
+               plant_track=None):
     """Drive the CURRENT network with no learning and no noise; one episode.
 
     ``kv_launch`` (>0) is a **launch schedule on the grip claim**: cap the
@@ -88,7 +89,11 @@ def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
     from mpcc_tuning.mpcc import WEIGHT_NAMES
     ik = WEIGHT_NAMES.index("k_v")
     cap = float(np.log(kv_launch)) if kv_launch and kv_launch > 0 else None
-    P = ScuderiaPlant(t, model="std", dt=0.05, mu_scale=plant_mu, mu_corners=mu_corners); P.max_steps = steps
+    # geometry use-case: the WALL moved (narrowed corridor) but the controller
+    # still plans on the nominal track -- so the plant's collision boundary comes
+    # from plant_track while m/t stay nominal. Same centreline => same length.
+    tp = plant_track if plant_track is not None else t
+    P = ScuderiaPlant(tp, model="std", dt=0.05, mu_scale=plant_mu, mu_corners=mu_corners); P.max_steps = steps
     s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
     base = float(s5[4]); off = tr = False
 
@@ -112,7 +117,7 @@ def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
      clock, keep_best, kb_tol, eval_eps, critic, theta_explore, explore,
-     validate, init_policy, plant_mu, mu_local) = job
+     validate, init_policy, plant_mu, mu_local, geom_narrow) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -130,6 +135,15 @@ def one(job):
                        / "icra_t2_smooth_friction_local.npz")
         mu_corners = list(zip(_fp["corner_x"].tolist(), _fp["corner_y"].tolist(),
                               _fp["radius"].tolist(), _fp["mu"].tolist()))
+    plant_track = None
+    if geom_narrow:
+        # geometry use-case: the corridor WALL moved in at N corners. The plant's
+        # collision boundary is the narrowed corridor; the controller (m, features)
+        # still plans on the nominal track -> it must LEARN to hold a tighter line.
+        import numpy as _np
+        _g = _np.load(geom_narrow)
+        plant_track = Track(_g["cx"], _g["cy"], ds=0.1,
+                            w_left=_g["wl"], w_right=_g["wr"])
     st = B.start(track_name)
     th0 = np.asarray(st.theta(), float)
     _use_vref = bool(getattr(t, "use_optimiser_vref", False))
@@ -202,13 +216,14 @@ def one(job):
     v0 = 1.0 + 0.1 * (seed % 3)
     if learn and keep_best and init_seeded:
         with tu.frozen():
-            l0, o0 = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners)
+            l0, o0 = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners, plant_track=plant_track)
         tu._best = (-1.0 if o0 else float(l0), pol.G.copy(), pol.cell.p.copy())
         pol.reset(); m.reset()
 
     per_ep, wtrace = [], []
     for ep in range(episodes):
-        P = ScuderiaPlant(t, model="std", dt=0.05, mu_scale=plant_mu, mu_corners=mu_corners)
+        P = ScuderiaPlant(plant_track if plant_track is not None else t,
+                          model="std", dt=0.05, mu_scale=plant_mu, mu_corners=mu_corners)
         P.max_steps = steps
         s5 = P.reset(s0=s0, v0=v0)
         m.reset()
@@ -263,7 +278,8 @@ def one(job):
                 # score beats the validated incumbent
                 with tu.frozen():
                     val_laps, val_off = run_frozen(m, pol, t, s0, v0, steps,
-                                                   features, plant_mu=plant_mu, mu_corners=mu_corners)
+                                                   features, plant_mu=plant_mu, mu_corners=mu_corners,
+                                                   plant_track=plant_track)
                 val = dict(laps=val_laps, off=val_off)
                 banked = tu.confirm_candidate(-1.0 if val_off else val_laps)
                 action = "banked" if banked else "rejected"
@@ -285,7 +301,7 @@ def one(job):
         pol.G[...] = G; pol.cell.p[...] = cp
         with tu.frozen():
             for k in range(eval_eps):
-                l_, o_ = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners)
+                l_, o_ = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners, plant_track=plant_track)
                 evals.append(dict(laps=l_, off=o_))
         # keep the network itself, so it can be reloaded and driven again
         # the critic and the box are part of the identity of a banked network:
@@ -346,6 +362,10 @@ def main(argv=None):
     ap.add_argument("--validate", action="store_true",
                     help="keep-best banks a candidate only after a FROZEN "
                          "validation episode beats the incumbent")
+    ap.add_argument("--geom-narrow", default=None,
+                    help="path to a narrowed-corridor .npz: the plant collision "
+                    "boundary uses it while the controller plans on the nominal "
+                    "track (geometry use-case -- the wall moved, tuner must adapt)")
     ap.add_argument("--mu-local", type=float, default=1.0,
                     help="LOCAL grip drop: <1 sets tyre friction to this value "
                          "inside the two preset T2 corners (s=60.1, 52.4), 1.0 "
@@ -379,7 +399,7 @@ def main(argv=None):
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
              a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
              a.eval_episodes, a.critic, a.theta_explore, a.explore,
-             a.validate, a.init_policy, a.plant_mu, a.mu_local)
+             a.validate, a.init_policy, a.plant_mu, a.mu_local, a.geom_narrow)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
