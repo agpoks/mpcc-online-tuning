@@ -1,0 +1,5395 @@
+{
+  "summary": {
+    "const": {
+      "laps": 0.998,
+      "passes": 0.59375,
+      "clean": 0.96875,
+      "contact": 0.0,
+      "n": 4
+    },
+    "fixed": {
+      "laps": 0.9980625000000001,
+      "passes": 0.75,
+      "clean": 0.84375,
+      "contact": 0.15625,
+      "n": 4
+    },
+    "ltc": {
+      "laps": 0.9123125000000001,
+      "passes": 0.46875,
+      "clean": 0.96875,
+      "contact": 0.03125,
+      "n": 4
+    },
+    "mlp": {
+      "laps": 0.9244062499999999,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "n": 4
+    }
+  },
+  "ego_pace": 1.3900562051301306,
+  "runs": [
+    {
+      "arm": "const",
+      "seed": 2,
+      "laps": 0.8015000000000001,
+      "passes": 0.625,
+      "clean": 0.875,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "equal",
+          "laps": 0.121,
+          "passes": 0,
+          "contact": false,
+          "off": true,
+          "clean": false,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "faster",
+          "laps": 1.02,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "static",
+          "laps": 0.95,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            50.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "slower",
+          "laps": 1.199,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            97.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "equal",
+          "laps": 1.118,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            45.0,
+            0.0,
+            0.0,
+            122.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "faster",
+          "laps": 0.664,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "static",
+          "laps": 1.118,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            54.0,
+            0.0,
+            8.0,
+            7.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            2.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "slower",
+          "laps": 1.25,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            23.0,
+            0.0,
+            50.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "equal",
+          "laps": 0.75,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "faster",
+          "laps": 0.814,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "static",
+          "laps": 0.121,
+          "passes": 1,
+          "contact": false,
+          "off": true,
+          "clean": false,
+          "sec_attempt": [
+            4.0,
+            0.0,
+            30.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "slower",
+          "laps": 0.577,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3385.4
+    },
+    {
+      "arm": "fixed",
+      "seed": 3,
+      "laps": 0.8422499999999999,
+      "passes": 0.5,
+      "clean": 0.75,
+      "contact": 0.25,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "faster",
+          "laps": 0.99,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "static",
+          "laps": 1.08,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            75.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            2.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "slower",
+          "laps": 1.064,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            35.0,
+            0.0,
+            64.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "equal",
+          "laps": 1.06,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            81.0,
+            0.0,
+            65.0,
+            114.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "faster",
+          "laps": 1.077,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "static",
+          "laps": 0.969,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            48.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "slower",
+          "laps": 0.197,
+          "passes": 1,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            34.0,
+            0.0,
+            97.0,
+            53.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "equal",
+          "laps": 1.065,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            31.0,
+            0.0,
+            0.0,
+            36.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "faster",
+          "laps": 1.067,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "static",
+          "laps": 1.031,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            46.0,
+            0.0,
+            0.0,
+            16.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "slower",
+          "laps": 0.271,
+          "passes": 1,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            53.0,
+            0.0,
+            100.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "equal",
+          "laps": 1.061,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3515.6
+    },
+    {
+      "arm": "fixed",
+      "seed": 2,
+      "laps": 1.03025,
+      "passes": 0.875,
+      "clean": 0.75,
+      "contact": 0.25,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "equal",
+          "laps": 0.762,
+          "passes": 1,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            56.0,
+            0.0,
+            85.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "faster",
+          "laps": 1.09,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "static",
+          "laps": 1.167,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            63.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            2.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "slower",
+          "laps": 1.138,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            16.0,
+            0.0,
+            107.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "equal",
+          "laps": 0.823,
+          "passes": 1,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            37.0,
+            0.0,
+            0.0,
+            47.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "faster",
+          "laps": 1.09,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "static",
+          "laps": 1.109,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            52.0,
+            0.0,
+            8.0,
+            6.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            2.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "slower",
+          "laps": 1.085,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            61.0,
+            0.0,
+            7.0,
+            84.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "equal",
+          "laps": 0.974,
+          "passes": 1,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            29.0,
+            0.0,
+            0.0,
+            116.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "faster",
+          "laps": 1.114,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "static",
+          "laps": 0.95,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            6.0,
+            0.0,
+            35.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "slower",
+          "laps": 1.097,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            29.0,
+            0.0,
+            0.0,
+            105.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3649.9
+    },
+    {
+      "arm": "fixed",
+      "seed": 0,
+      "laps": 1.08125,
+      "passes": 0.75,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "static",
+          "laps": 1.15,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            40.0,
+            0.0,
+            27.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "slower",
+          "laps": 0.992,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            90.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "equal",
+          "laps": 0.706,
+          "passes": 1,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            46.0,
+            0.0,
+            45.0,
+            17.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "faster",
+          "laps": 1.138,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "static",
+          "laps": 1.147,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            65.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "slower",
+          "laps": 1.15,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            35.0,
+            0.0,
+            41.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "equal",
+          "laps": 1.024,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "faster",
+          "laps": 1.139,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "static",
+          "laps": 1.123,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            63.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "slower",
+          "laps": 1.138,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            55.0,
+            0.0,
+            52.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "equal",
+          "laps": 1.038,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "faster",
+          "laps": 0.891,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3709.6
+    },
+    {
+      "arm": "const",
+      "seed": 0,
+      "laps": 1.084375,
+      "passes": 0.75,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "static",
+          "laps": 1.156,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            41.0,
+            0.0,
+            26.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "slower",
+          "laps": 0.977,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            92.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "equal",
+          "laps": 1.133,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            60.0,
+            0.0,
+            65.0,
+            75.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "faster",
+          "laps": 1.081,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "static",
+          "laps": 1.105,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            66.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "slower",
+          "laps": 1.089,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            38.0,
+            0.0,
+            39.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "equal",
+          "laps": 1.025,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "faster",
+          "laps": 1.098,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "static",
+          "laps": 1.136,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            62.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "slower",
+          "laps": 1.079,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            55.0,
+            0.0,
+            54.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "equal",
+          "laps": 1.062,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            40.0,
+            0.0,
+            25.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "faster",
+          "laps": 1.081,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3759.6
+    },
+    {
+      "arm": "const",
+      "seed": 1,
+      "laps": 1.0538750000000001,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "slower",
+          "laps": 1.097,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            23.0,
+            0.0,
+            0.0,
+            100.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "equal",
+          "laps": 0.979,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "faster",
+          "laps": 1.084,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "static",
+          "laps": 1.017,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            43.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "slower",
+          "laps": 1.109,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            36.0,
+            0.0,
+            0.0,
+            81.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "equal",
+          "laps": 1.086,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            68.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "faster",
+          "laps": 1.017,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "static",
+          "laps": 1.046,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            54.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "slower",
+          "laps": 1.083,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            115.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "equal",
+          "laps": 1.034,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            2.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "faster",
+          "laps": 0.987,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "static",
+          "laps": 1.069,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            55.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3776.7
+    },
+    {
+      "arm": "const",
+      "seed": 3,
+      "laps": 1.0522500000000001,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "faster",
+          "laps": 1.077,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "static",
+          "laps": 1.081,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            73.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            2.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "slower",
+          "laps": 1.073,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            13.0,
+            0.0,
+            92.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "equal",
+          "laps": 1.079,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            56.0,
+            0.0,
+            88.0,
+            30.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "faster",
+          "laps": 1.101,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "static",
+          "laps": 1.041,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            45.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "slower",
+          "laps": 1.029,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            55.0,
+            0.0,
+            121.0,
+            6.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "equal",
+          "laps": 1.062,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            33.0,
+            0.0,
+            0.0,
+            104.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "faster",
+          "laps": 1.073,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "static",
+          "laps": 1.018,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            34.0,
+            0.0,
+            0.0,
+            17.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "slower",
+          "laps": 1.014,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            34.0,
+            0.0,
+            99.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "equal",
+          "laps": 1.08,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            14.0,
+            0.0,
+            0.0,
+            53.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3785.5
+    },
+    {
+      "arm": "fixed",
+      "seed": 1,
+      "laps": 1.0385,
+      "passes": 0.875,
+      "clean": 0.875,
+      "contact": 0.125,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "slower",
+          "laps": 1.121,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            8.0,
+            0.0,
+            0.0,
+            90.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "equal",
+          "laps": 1.027,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "faster",
+          "laps": 1.1,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "static",
+          "laps": 1.11,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            64.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            2.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "slower",
+          "laps": 1.114,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            36.0,
+            0.0,
+            0.0,
+            73.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "equal",
+          "laps": 1.061,
+          "passes": 1,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            56.0,
+            0.0,
+            25.0,
+            50.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "faster",
+          "laps": 1.063,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "static",
+          "laps": 1.139,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            65.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            2.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "slower",
+          "laps": 0.85,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            68.0,
+            0.0,
+            95.0,
+            12.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "equal",
+          "laps": 0.909,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "faster",
+          "laps": 1.066,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "static",
+          "laps": 1.106,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            67.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            2.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3789.4
+    },
+    {
+      "arm": "ltc",
+      "seed": 1,
+      "laps": 0.77025,
+      "passes": 0.375,
+      "clean": 0.875,
+      "contact": 0.125,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "slower",
+          "laps": 0.471,
+          "passes": 0,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            45.0,
+            0.0,
+            139.0,
+            57.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "equal",
+          "laps": 0.914,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "faster",
+          "laps": 0.777,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "static",
+          "laps": 0.846,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            42.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "slower",
+          "laps": 0.743,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            86.0,
+            0.0,
+            150.0,
+            85.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "equal",
+          "laps": 0.871,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "faster",
+          "laps": 0.841,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "static",
+          "laps": 0.94,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            41.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "slower",
+          "laps": 0.47,
+          "passes": 0,
+          "contact": true,
+          "off": false,
+          "clean": false,
+          "sec_attempt": [
+            77.0,
+            0.0,
+            42.0,
+            53.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "equal",
+          "laps": 0.548,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "faster",
+          "laps": 0.878,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "static",
+          "laps": 0.871,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            44.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 3920.6
+    },
+    {
+      "arm": "mlp",
+      "seed": 1,
+      "laps": 0.79575,
+      "passes": 0.375,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "slower",
+          "laps": 0.973,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            31.0,
+            0.0,
+            0.0,
+            102.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "equal",
+          "laps": 0.888,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "faster",
+          "laps": 0.897,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "static",
+          "laps": 0.794,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            52.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "slower",
+          "laps": 0.799,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            153.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "equal",
+          "laps": 0.873,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "faster",
+          "laps": 0.788,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "static",
+          "laps": 0.886,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            52.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "slower",
+          "laps": 0.477,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "equal",
+          "laps": 0.757,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "faster",
+          "laps": 0.891,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "static",
+          "laps": 0.895,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            46.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 4002.7
+    },
+    {
+      "arm": "ltc",
+      "seed": 0,
+      "laps": 0.9655,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "static",
+          "laps": 1.028,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            29.0,
+            0.0,
+            28.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "slower",
+          "laps": 0.964,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            23.0,
+            0.0,
+            90.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "equal",
+          "laps": 0.623,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "faster",
+          "laps": 0.981,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "static",
+          "laps": 1.059,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            71.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "slower",
+          "laps": 0.908,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            31.0,
+            0.0,
+            39.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "equal",
+          "laps": 0.913,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "faster",
+          "laps": 1.059,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "static",
+          "laps": 0.928,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            38.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "slower",
+          "laps": 0.977,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            51.0,
+            0.0,
+            58.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "equal",
+          "laps": 0.894,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "faster",
+          "laps": 0.986,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 4015.8
+    },
+    {
+      "arm": "mlp",
+      "seed": 0,
+      "laps": 0.9566250000000001,
+      "passes": 0.625,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "static",
+          "laps": 1.042,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            43.0,
+            0.0,
+            29.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "slower",
+          "laps": 0.953,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            27.0,
+            0.0,
+            87.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "equal",
+          "laps": 0.993,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "faster",
+          "laps": 0.982,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "static",
+          "laps": 1.063,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            71.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            2.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "slower",
+          "laps": 0.807,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            31.0,
+            0.0,
+            39.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "equal",
+          "laps": 0.915,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "faster",
+          "laps": 1.036,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "static",
+          "laps": 0.943,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            38.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "slower",
+          "laps": 0.978,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            51.0,
+            0.0,
+            58.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "equal",
+          "laps": 0.928,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "faster",
+          "laps": 0.983,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 4047.7
+    },
+    {
+      "arm": "mlp",
+      "seed": 2,
+      "laps": 0.984,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "equal",
+          "laps": 0.661,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "faster",
+          "laps": 1.084,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "static",
+          "laps": 1.103,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            64.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            2.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "slower",
+          "laps": 1.075,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            4.0,
+            0.0,
+            124.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "equal",
+          "laps": 0.959,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "faster",
+          "laps": 1.022,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "static",
+          "laps": 1.033,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            47.0,
+            0.0,
+            3.0,
+            8.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "slower",
+          "laps": 0.907,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            63.0,
+            0.0,
+            38.0,
+            11.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "equal",
+          "laps": 1.029,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "faster",
+          "laps": 0.986,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "static",
+          "laps": 0.987,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            5.0,
+            0.0,
+            31.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "slower",
+          "laps": 0.949,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            63.0,
+            0.0,
+            0.0,
+            118.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 4051.0
+    },
+    {
+      "arm": "ltc",
+      "seed": 2,
+      "laps": 0.9715,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "equal",
+          "laps": 0.84,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "faster",
+          "laps": 0.947,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "static",
+          "laps": 1.082,
+          "passes": 2,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            66.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            2.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "slower",
+          "laps": 1.033,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            10.0,
+            0.0,
+            125.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "equal",
+          "laps": 0.87,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "faster",
+          "laps": 1.021,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "static",
+          "laps": 1.024,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            37.0,
+            0.0,
+            3.0,
+            8.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "slower",
+          "laps": 0.879,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            64.0,
+            0.0,
+            39.0,
+            112.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "equal",
+          "laps": 1.046,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "faster",
+          "laps": 0.995,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "static",
+          "laps": 0.919,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            5.0,
+            0.0,
+            31.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "slower",
+          "laps": 1.018,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            35.0,
+            0.0,
+            0.0,
+            29.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 4054.1
+    },
+    {
+      "arm": "ltc",
+      "seed": 3,
+      "laps": 0.942,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "faster",
+          "laps": 1.026,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "static",
+          "laps": 0.859,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            51.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "slower",
+          "laps": 0.97,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            31.0,
+            0.0,
+            76.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "equal",
+          "laps": 0.869,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "faster",
+          "laps": 0.95,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "static",
+          "laps": 0.907,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            46.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "slower",
+          "laps": 0.972,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            51.0,
+            75.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "equal",
+          "laps": 1.017,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "faster",
+          "laps": 0.946,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "static",
+          "laps": 0.984,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            25.0,
+            0.0,
+            0.0,
+            15.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "slower",
+          "laps": 0.774,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            23.0,
+            0.0,
+            0.0,
+            52.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "equal",
+          "laps": 0.986,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 2122.0
+    },
+    {
+      "arm": "mlp",
+      "seed": 3,
+      "laps": 0.9612499999999999,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "faster",
+          "laps": 1.008,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "static",
+          "laps": 0.864,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            50.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "slower",
+          "laps": 0.966,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            27.0,
+            0.0,
+            80.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "equal",
+          "laps": 0.869,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 4,
+          "kind": "faster",
+          "laps": 0.921,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 5,
+          "kind": "static",
+          "laps": 1.011,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            46.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 6,
+          "kind": "slower",
+          "laps": 1.002,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            49.0,
+            74.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 7,
+          "kind": "equal",
+          "laps": 1.002,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 8,
+          "kind": "faster",
+          "laps": 0.937,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 9,
+          "kind": "static",
+          "laps": 1.009,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            25.0,
+            0.0,
+            0.0,
+            15.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 10,
+          "kind": "slower",
+          "laps": 0.821,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            45.0,
+            0.0,
+            36.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 11,
+          "kind": "equal",
+          "laps": 0.987,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 2061.6
+    }
+  ]
+}
