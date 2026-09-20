@@ -114,6 +114,30 @@ def measure_pace(m, track, th0, steps):
 PACE = {"static": 0.0, "slower": 0.55, "equal": 0.90, "faster": 1.20}
 PACE_KINDS = ("static", "slower", "equal", "faster")
 
+# Pace-DEPENDENT reward, per the intended behaviour for each opponent type:
+#   static/slower : overtake, but drive STABLE (not full-aggressive) -- a strong
+#                   bonus for a CLEAN pass, no extra speed pressure.
+#   equal         : find and hold a good overtaking POSITION, then pass patiently
+#                   -- the largest clean-pass bonus, plus a small reward for staying
+#                   engaged in a passing window.
+#   faster        : cannot out-wait a faster car -- reward CLOSING PACE (go fast to
+#                   catch up); a pass, if it comes, still pays.
+# Contact is always heavily penalised: a pass that touches is worse than no pass.
+PASS_BONUS = {"static": 6.0, "slower": 6.0, "equal": 9.0, "faster": 4.0}
+
+
+def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
+    if contact:
+        return float(r) - 8.0
+    x = float(r)
+    if just_passed:
+        x += PASS_BONUS.get(kind, 6.0)
+    if kind == "equal" and -1.0 < gap < 3.0:
+        x += 0.3                       # reward holding a good overtaking position
+    elif kind == "faster":
+        x += 0.5 * float(v_ego)        # reward catching up (fastest safe speed)
+    return x
+
 
 def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
         factor=2.0, box="adapt"):
@@ -136,8 +160,11 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
     if arm in ("ltc", "mlp"):
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, n_hidden, seed=seed)
         pol = WeightPolicy(cell, th0, lo, hi, seed=seed)
+        # theta_prior lowered 0.5 -> 0.3: the strong pull to START made the tuner
+        # over-conservative (it declined safe passes the constant took). 0.3 keeps
+        # a trust region but lets it exploit clean passes; contact stays penalised.
         tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
-                            seed=seed, trust_region=0.01, theta_prior=0.5)
+                            seed=seed, trust_region=0.01, theta_prior=0.3)
 
     rng = np.random.default_rng(seed)
     rows = []
@@ -184,16 +211,19 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
             if 0 < g < 2.0 and float(P._x[3]) > v_opp + 0.05:
                 sec_attempt[sec] += 1
             # a completed pass: opponent went from ahead to behind, we are faster
+            just_passed = False
             if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > v_opp:
-                passes += 1; seen = True; sec_pass[sec] += 1
+                passes += 1; seen = True; sec_pass[sec] += 1; just_passed = True
             elif g > 0.5:
                 seen = False
             m.set_obstacles([opp.keepout()])
             tracker.update(opp.pose()[:2])
             fn = race_features(track, s5n, [opp], opp_speed_est=tracker.speed)
-            # shaped reward for the tuner: plant progress (r = progress - 5*off),
-            # + a pass bonus, - a contact penalty (contact ends the episode).
-            r_shaped = float(r) + (2.0 if (g < 0 and not seen) else 0.0) - (5.0 if contact else 0.0)
+            # pace-DEPENDENT shaped reward (race_reward): the pass bonus fires on the
+            # tick the pass COMPLETES (just_passed), which the old code missed because
+            # `seen` was already set -- so the tuner never saw a pass reward before.
+            r_shaped = race_reward(kind, r, just_passed, contact,
+                                   float(P._x[3]), v_opp, g)
             if arm in ("ltc", "mlp"):
                 out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
                 if out[0] is None:
