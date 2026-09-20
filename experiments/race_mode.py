@@ -241,6 +241,12 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
                          contact=bool(contact), off=bool(off), clean=bool(clean),
                          sec_attempt=sec_attempt.tolist(), sec_pass=sec_pass.tolist(),
                          sec_contact=sec_contact.tolist()))
+    # save the trained policy so the GIF/eval can REPLAY the learned behaviour
+    if tuner is not None:
+        ndir = OUT / "nets"; ndir.mkdir(parents=True, exist_ok=True)
+        np.savez(str(ndir / f"race_{arm}_{seed}.npz"), G=pol.G, cell_p=pol.cell.p,
+                 th0=th0, n_hidden=pol.cell.n, arm=arm, seed=seed,
+                 lo=np.asarray(lo, float), hi=np.asarray(hi, float))
     last = rows[-8:] if len(rows) >= 8 else rows
     return dict(arm=arm, seed=seed,
                 laps=float(np.mean([r["laps"] for r in last])),
