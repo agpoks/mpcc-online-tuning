@@ -1,0 +1,259 @@
+{
+  "summary": {
+    "const": {
+      "laps": 0.5297499999999999,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "n": 1
+    },
+    "ltc": {
+      "laps": 0.5055000000000001,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "n": 1
+    }
+  },
+  "ego_pace": 1.3050331863123346,
+  "runs": [
+    {
+      "arm": "const",
+      "seed": 0,
+      "laps": 0.5297499999999999,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "static",
+          "laps": 0.534,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            24.0,
+            0.0,
+            16.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "slower",
+          "laps": 0.526,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            86.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "equal",
+          "laps": 0.529,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "faster",
+          "laps": 0.53,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 458.2
+    },
+    {
+      "arm": "ltc",
+      "seed": 0,
+      "laps": 0.5055000000000001,
+      "passes": 0.5,
+      "clean": 1.0,
+      "contact": 0.0,
+      "rows": [
+        {
+          "ep": 0,
+          "kind": "static",
+          "laps": 0.537,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            24.0,
+            0.0,
+            15.0,
+            0.0
+          ],
+          "sec_pass": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 1,
+          "kind": "slower",
+          "laps": 0.47,
+          "passes": 1,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            91.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 2,
+          "kind": "equal",
+          "laps": 0.485,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "ep": 3,
+          "kind": "faster",
+          "laps": 0.53,
+          "passes": 0,
+          "contact": false,
+          "off": false,
+          "clean": true,
+          "sec_attempt": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_pass": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "sec_contact": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "wall_s": 490.4
+    }
+  ]
+}

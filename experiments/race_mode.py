@@ -1,0 +1,289 @@
+"""Race-mode Phase 1: head-to-head behaviour training against ONE opponent.
+
+    ACADOS_SOURCE_DIR=... PYTHONPATH=...:. python3 experiments/race_mode.py --seeds 6
+
+The shipping stack (acados + dynamic drift + STD plant, discrete integrator to
+match the online-net training), on the canonical Track.icra_t2_smooth. One
+opponent per episode, cycled across relative-pace classes -- static / slower /
+equal / faster (scaled to the ego's own solo pace) -- placed a few metres ahead,
+with the ego start point varied per seed (physical seeds, not an RNG).
+
+What the policy must learn (per sector): whether to STAY BEHIND at a distance or
+OVERTAKE, based on relative pace, available space, closing speed, and WHICH SIDE
+IS OPEN. A sector that is too tight / crash-prone is a bad place to attempt a
+pass, so the net should follow there and pass in the good sectors instead.
+
+Arms, identical except what emits theta each tick:
+  const   START weights held fixed (the best-constant baseline)
+  fixed   fixed_schedule -- the rule-based relative-pace lookup (baseline to beat)
+  ltc     WeightPolicy(LTCCell)  -- the paper's memory tuner (MPCC-critic, keep-best)
+  mlp     WeightPolicy(MLPCell)  -- the memoryless ablation
+
+Success is a MIX, not one headline: overtakes completed + no-contact (clean) +
+time gained (progress vs the follow baseline), across opponent configs and seeds.
+Per-sector attempt/pass/contact are logged so the "good overtake sector" the net
+learns can be read out.
+
+The MPCC keep-out carries the opponent as an (x,y,r) circle whose radius is both
+cars' half-widths (mpcc_tuning/opponents.py); the learnable berth d_obs (weight 6)
+sets how much room the pass leaves. Contact = the two bodies touch (dist < radius).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
+import numpy as np  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from mpcc_tuning import baselines as B  # noqa: E402
+from mpcc_tuning.track import Track  # noqa: E402
+from mpcc_tuning.mpcc import WEIGHT_NAMES  # noqa: E402
+
+OUT = ROOT / "results" / "race"
+ARMS = ("const", "fixed", "ltc", "mlp")
+
+
+def signed_gap(track, s_ego, s_opp):
+    """+ opponent ahead, - opponent behind, in metres of arc length."""
+    d = (s_opp - s_ego) % track.length
+    return d - track.length if d > track.length / 2 else d
+
+
+def side_open(track, opponents, car_w=0.24):
+    """Two features appended to the base 18: WHICH SIDE IS OPEN at the nearest
+    opponent, and whether a pass fits there at all.
+
+    The opponent sits at ``offset`` in lateral() convention; the corridor has
+    room ``wl`` (-normal) and ``wr`` (+normal) at the opponent's arc length.
+    room_right = wr - offset, room_left = wl + offset.
+      f0 = tanh(room_right - room_left)  -- sign = which side has more room
+      f1 = clip(max(room_right,room_left) - car_w, over one car width)  -- pass fits?
+    No opponent -> (0, 1): no side pressure, a pass trivially fits.
+    """
+    if not len(opponents):
+        return [0.0, 1.0]
+    o = opponents[0]   # phase 1: one opponent (extend to nearest-ahead for phase 2)
+    try:
+        wl, wr = track.width(o.s % track.length)
+    except Exception:
+        wl = wr = track.half_width
+    off = float(getattr(o, "offset", 0.0))
+    room_r = float(wr) - off
+    room_l = float(wl) + off
+    return [float(np.tanh(room_r - room_l)),
+            float(np.clip((max(room_r, room_l) - car_w) / car_w, -1.0, 1.0))]
+
+
+def race_features(track, s5, opponents=(), opp_speed_est=None):
+    """Base 18 features + 2 side-open features = 20. The base indices are left
+    untouched so fixed_schedule (which reads feat[7], feat[8], feat[14:18]) works."""
+    from mpcc_tuning.ltc import features
+    base = features(track, s5, opponents, opp_speed_est=opp_speed_est)
+    return np.concatenate([base, np.array(side_open(track, opponents), float)])
+
+
+N_RACE_FEATURES = 20
+
+
+def measure_pace(m, track, th0, steps):
+    """Ego solo mean speed, to scale opponent speeds to the ego's own pace."""
+    from mpcc_tuning.plant_scuderia import ScuderiaPlant
+    P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
+    P.reset(s0=0.0, v0=1.0); m.reset()
+    vs = []
+    for _ in range(steps):
+        u = m.value(P.state_dyn(), th0)["u0"]; s5, r, off, tr = P.step(u)
+        vs.append(float(P._x[3]))
+        if off or tr:
+            break
+    return float(np.mean(vs)) if vs else 1.4
+
+
+# relative-pace classes: opponent speed as a fraction of the ego's solo pace.
+# static=parked; slower=catchable; equal=expensive pass; faster=cannot catch.
+PACE = {"static": 0.0, "slower": 0.55, "equal": 0.90, "faster": 1.20}
+PACE_KINDS = ("static", "slower", "equal", "faster")
+
+
+def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
+        factor=2.0, box="adapt"):
+    from mpcc_tuning.acados_mpcc import AcadosMPCC
+    from mpcc_tuning.ltc import (LTCCell, MLPCell, THETA_HI, THETA_LO,
+                                 PolicyTuner, WeightPolicy, fixed_schedule)
+    from mpcc_tuning.plant_scuderia import ScuderiaPlant
+    from mpcc_tuning.opponents import ObstacleTracker, Opponent
+
+    track = Track.icra_t2_smooth()
+    st = B.start("icra_t2_smooth")
+    th0 = np.asarray(st.theta(), float)
+    m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
+                   q_vref=st.q_vref, discrete=True, max_obstacles=1,
+                   name=f"race_{arm}_{seed}")
+    lo, hi = (B.adaptation_box("icra_t2_smooth", factor) if box == "adapt"
+              else (THETA_LO, THETA_HI))
+
+    tuner = pol = None
+    if arm in ("ltc", "mlp"):
+        cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, n_hidden, seed=seed)
+        pol = WeightPolicy(cell, th0, lo, hi, seed=seed)
+        tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
+                            seed=seed, trust_region=0.01, theta_prior=0.5)
+
+    rng = np.random.default_rng(seed)
+    rows = []
+    for ep in range(n_ep):
+        kind = PACE_KINDS[(seed + ep) % 4]
+        v_opp = PACE[kind] * ego_pace
+        s0 = (seed % 4) * track.length / 4.0
+        v0 = 1.0 + 0.1 * (seed % 3)
+        gap0 = 3.0 + 1.5 * (ep % 3)          # opponent starts a few m ahead
+        opp = Opponent(track, s0=(s0 + gap0) % track.length, speed=v_opp,
+                       offset=0.0, radius=0.24)
+        tracker = ObstacleTracker(dt=0.05)
+        P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
+        s5 = P.reset(s0=s0, v0=v0); m.reset()
+        if tuner is not None:
+            tuner.reset()
+        opp.reset()
+        tracker.update(opp.pose()[:2])
+        m.set_obstacles([opp.keepout()])
+        feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed)
+        if arm in ("ltc", "mlp"):
+            theta, u = tuner.act(feat, P.state_dyn())
+        elif arm == "fixed":
+            theta = fixed_schedule(feat, th0); u = m.value(P.state_dyn(), theta)["u0"]
+        else:  # const
+            theta = th0; u = m.value(P.state_dyn(), theta)["u0"]
+
+        base = float(P.state5()[4]); off = tr = False
+        passes = 0; contact = False; seen = False
+        sec_attempt = np.zeros(4); sec_pass = np.zeros(4); sec_contact = np.zeros(4)
+        for _ in range(steps):
+            s5n, r, off, tr = P.step(u)
+            opp.step(0.05)
+            ex, ey = float(P._x[0]), float(P._x[1])
+            ox, oy, rad = opp.keepout()
+            dist = float(np.hypot(ex - ox, ey - oy))
+            s_ego = track.project(ex, ey)
+            g = signed_gap(track, s_ego, opp.s)
+            sec = int(track.sector(track.wrap(s_ego)))
+            # contact = the two bodies touch
+            if dist < rad and not contact:
+                contact = True; sec_contact[sec] += 1
+            # engagement: opponent within a car-length ahead and we are closing
+            if 0 < g < 2.0 and float(P._x[3]) > v_opp + 0.05:
+                sec_attempt[sec] += 1
+            # a completed pass: opponent went from ahead to behind, we are faster
+            if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > v_opp:
+                passes += 1; seen = True; sec_pass[sec] += 1
+            elif g > 0.5:
+                seen = False
+            m.set_obstacles([opp.keepout()])
+            tracker.update(opp.pose()[:2])
+            fn = race_features(track, s5n, [opp], opp_speed_est=tracker.speed)
+            # shaped reward for the tuner: plant progress (r = progress - 5*off),
+            # + a pass bonus, - a contact penalty (contact ends the episode).
+            r_shaped = float(r) + (2.0 if (g < 0 and not seen) else 0.0) - (5.0 if contact else 0.0)
+            if arm in ("ltc", "mlp"):
+                out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
+                if out[0] is None:
+                    break
+                theta, u = out
+            elif arm == "fixed":
+                theta = fixed_schedule(fn, th0); u = m.value(P.state_dyn(), theta)["u0"]
+            else:
+                theta = th0; u = m.value(P.state_dyn(), theta)["u0"]
+            if off or tr or contact:
+                break
+        laps = (float(P.state5()[4]) - base) / track.length
+        clean = (not off) and (not contact)
+        rows.append(dict(ep=ep, kind=kind, laps=round(laps, 3), passes=int(passes),
+                         contact=bool(contact), off=bool(off), clean=bool(clean),
+                         sec_attempt=sec_attempt.tolist(), sec_pass=sec_pass.tolist(),
+                         sec_contact=sec_contact.tolist()))
+    last = rows[-8:] if len(rows) >= 8 else rows
+    return dict(arm=arm, seed=seed,
+                laps=float(np.mean([r["laps"] for r in last])),
+                passes=float(np.mean([r["passes"] for r in last])),
+                clean=float(np.mean([r["clean"] for r in last])),
+                contact=float(np.mean([r["contact"] for r in last])),
+                rows=rows)
+
+
+def one(job):
+    arm, seed, n_ep, steps, ego_pace = job
+    t0 = time.perf_counter()
+    out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace)
+    out["wall_s"] = round(time.perf_counter() - t0, 1)
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--seeds", type=int, default=6)
+    ap.add_argument("--episodes", type=int, default=16)
+    ap.add_argument("--steps", type=int, default=1600)
+    ap.add_argument("--jobs", type=int, default=0)
+    ap.add_argument("--arms", nargs="*", default=list(ARMS))
+    ap.add_argument("--pilot", action="store_true",
+                    help="1 seed, 4 episodes, 600 steps, arms const+ltc -- quick smoke")
+    ap.add_argument("--out", default=str(OUT / "race_phase1.json"))
+    a = ap.parse_args(argv)
+    if a.pilot:
+        a.seeds, a.episodes, a.steps, a.arms = 1, 4, 600, ["const", "ltc"]
+
+    # measure ego pace once (solo START drive) to scale opponents
+    from mpcc_tuning.acados_mpcc import AcadosMPCC
+    track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth")
+    th0 = np.asarray(st.theta(), float)
+    mp = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
+                    q_vref=st.q_vref, discrete=True, max_obstacles=1, name="race_pace")
+    ego_pace = measure_pace(mp, track, th0, a.steps)
+    print(f"  ego solo pace = {ego_pace:.2f} m/s ; opponents: "
+          + ", ".join(f"{k}={PACE[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
+
+    jobs = [(arm, s, a.episodes, a.steps, ego_pace)
+            for s in range(a.seeds) for arm in a.arms]
+    n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
+    print(f"  {len(jobs)} runs, {a.episodes} episodes, {n_proc} processes\n", flush=True)
+
+    import multiprocessing as mp2
+    res = []
+    with mp2.get_context("spawn").Pool(n_proc) as pool:
+        for o in pool.imap_unordered(one, jobs):
+            res.append(o)
+            print(f"  done  {o['arm']:<6} seed {o['seed']}  {o['laps']:5.2f} laps"
+                  f"  {o['passes']:.2f} passes  {o['clean']:.0%} clean"
+                  f"  {o['contact']:.0%} contact  ({o['wall_s']:.0f}s)", flush=True)
+
+    print(f"\n  {'arm':<7}{'laps':>7}{'passes':>8}{'clean':>7}{'contact':>8}")
+    S = {}
+    for arm in a.arms:
+        r = [x for x in res if x["arm"] == arm]
+        if not r:
+            continue
+        S[arm] = dict(laps=float(np.mean([x["laps"] for x in r])),
+                      passes=float(np.mean([x["passes"] for x in r])),
+                      clean=float(np.mean([x["clean"] for x in r])),
+                      contact=float(np.mean([x["contact"] for x in r])), n=len(r))
+        print(f"  {arm:<7}{S[arm]['laps']:7.2f}{S[arm]['passes']:8.2f}"
+              f"{S[arm]['clean']:7.0%}{S[arm]['contact']:8.0%}")
+
+    p = Path(a.out); p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(dict(summary=S, ego_pace=ego_pace, runs=res), indent=2) + "\n")
+    print(f"\n  wrote {p}")
+
+
+if __name__ == "__main__":
+    main()
