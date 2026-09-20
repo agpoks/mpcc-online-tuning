@@ -23,7 +23,9 @@ d=json.load(open(ROOT/"results"/JSON))
 ep=d['episodes']; tr=d['traces']
 bestk=max(ep,key=lambda k:max(x['laps'] for x in ep[k])); sdlab=bestk.split('|')[1]
 # tag the outputs by the run so different experiments don't overwrite each other
-TAG=("_geom3" if "geom3" in JSON else "_f3" if "f3" in JSON
+TAG=("_geom3big" if "geom3big" in JSON else "_geom3mid" if "geom3mid" in JSON
+     else "_geom3" if "geom3" in JSON
+     else "_f3" if "f3" in JSON
      else "_mulocal3" if "mulocal3" in JSON else "")
 factor=float(sys.argv[2]) if len(sys.argv)>2 else 2.0
 

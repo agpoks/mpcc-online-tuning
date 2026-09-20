@@ -69,7 +69,7 @@ from mpcc_tuning.track import Track  # noqa: E402
 OUT = ROOT / "results"
 
 
-def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
+def run_frozen(m, pol, m_track, s0, v0, steps, features, kv_launch=0.0,
                kv_launch_laps=1.0, plant_mu=1.0, mu_corners=None,
                plant_track=None):
     """Drive the CURRENT network with no learning and no noise; one episode.
@@ -89,17 +89,18 @@ def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
     from mpcc_tuning.mpcc import WEIGHT_NAMES
     ik = WEIGHT_NAMES.index("k_v")
     cap = float(np.log(kv_launch)) if kv_launch and kv_launch > 0 else None
-    # geometry use-case: the WALL moved (narrowed corridor) but the controller
-    # still plans on the nominal track -- so the plant's collision boundary comes
-    # from plant_track while m/t stay nominal. Same centreline => same length.
-    tp = plant_track if plant_track is not None else t
+    # geometry use-case: the plant's collision boundary is plant_track (narrowed);
+    # the controller/features run on m_track, which for the geometry case IS the
+    # same narrowed track (the MPCC is told the moved walls). Same centreline =>
+    # same length as nominal, so progress normalisation is unaffected.
+    tp = plant_track if plant_track is not None else m_track
     P = ScuderiaPlant(tp, model="std", dt=0.05, mu_scale=plant_mu, mu_corners=mu_corners); P.max_steps = steps
     s5 = P.reset(s0=s0, v0=v0); m.reset(); pol.reset()
     base = float(s5[4]); off = tr = False
 
     def emit():
-        th = np.asarray(pol.step(features(t, s5)), float)
-        if cap is not None and (float(s5[4]) - base) < kv_launch_laps * t.length:
+        th = np.asarray(pol.step(features(m_track, s5)), float)
+        if cap is not None and (float(s5[4]) - base) < kv_launch_laps * m_track.length:
             th[ik] = min(th[ik], cap)          # launch: cap the grip claim
         return th
 
@@ -110,7 +111,7 @@ def run_frozen(m, pol, t, s0, v0, steps, features, kv_launch=0.0,
         th = emit()
         if off or tr:
             break
-    return (float(s5[4]) - base) / t.length, bool(off)
+    return (float(s5[4]) - base) / m_track.length, bool(off)
 
 
 def one(job):
@@ -136,19 +137,28 @@ def one(job):
         mu_corners = list(zip(_fp["corner_x"].tolist(), _fp["corner_y"].tolist(),
                               _fp["radius"].tolist(), _fp["mu"].tolist()))
     plant_track = None
+    m_track = t
     if geom_narrow:
-        # geometry use-case: the corridor WALL moved in at N corners. The plant's
-        # collision boundary is the narrowed corridor; the controller (m, features)
-        # still plans on the nominal track -> it must LEARN to hold a tighter line.
+        # geometry use-case: the corridor WALL moved in at N sites. The MPCC is
+        # TOLD the new boundaries (its corridor constraint uses the narrowed
+        # widths), so it plans a feasible path AROUND the narrowing -- it does not
+        # crash into a wall it knows about. The plant uses the same narrowed track.
+        # What the online tuner must learn is to drive the narrowing EFFICIENTLY
+        # (weights), not to avoid a wall it cannot see. Built to match
+        # Track.icra_t2_smooth (same raceline/vref, width_vehicle_adjusted=False,
+        # kv_max) so only the widths differ from nominal.
         import numpy as _np
         _g = _np.load(geom_narrow)
         plant_track = Track(_g["cx"], _g["cy"], ds=0.1,
                             w_left=_g["wl"], w_right=_g["wr"])
+        plant_track.raceline = _g["raceline"]; plant_track.v_ref = _g["vref"]
+        plant_track.width_vehicle_adjusted = False; plant_track.kv_max = 0.55
+        m_track = plant_track   # the controller knows the moved walls
     st = B.start(track_name)
     th0 = np.asarray(st.theta(), float)
     _use_vref = bool(getattr(t, "use_optimiser_vref", False))
     _alat_ref = getattr(t, "a_lat_ref", None)   # conservative reference so k_v is headroom
-    m = AcadosMPCC(t, horizon=st.horizon, dt=0.05, vehicle="dynamic",
+    m = AcadosMPCC(m_track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, theta_global=(grad == "native"),
                    discrete=True, use_track_vref=_use_vref,
                    a_lat_sectors=([float(_alat_ref)] * 4 if _alat_ref else None),
@@ -216,7 +226,7 @@ def one(job):
     v0 = 1.0 + 0.1 * (seed % 3)
     if learn and keep_best and init_seeded:
         with tu.frozen():
-            l0, o0 = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners, plant_track=plant_track)
+            l0, o0 = run_frozen(m, pol, m_track, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners, plant_track=plant_track)
         tu._best = (-1.0 if o0 else float(l0), pol.G.copy(), pol.cell.p.copy())
         pol.reset(); m.reset()
 
@@ -232,7 +242,7 @@ def one(job):
         th = th0
         if learn:
             tu.reset()
-            th, u = tu.act(features(t, s5), P.state_dyn())
+            th, u = tu.act(features(m_track, s5), P.state_dyn())
         ep_th = []
         for k in range(steps):
             if not learn:
@@ -258,10 +268,10 @@ def one(job):
                     # must change with the clock)
                     progress = float(r) + (5.0 if off else 0.0)
                     r_learn = -0.05 - (5.0 if off else 0.0)
-                    out = tu.learn(r_learn, P.state_dyn(), features(t, s5n),
+                    out = tu.learn(r_learn, P.state_dyn(), features(m_track, s5n),
                                    off, ds=progress)
                 else:
-                    out = tu.learn(r, P.state_dyn(), features(t, s5n), off)
+                    out = tu.learn(r, P.state_dyn(), features(m_track, s5n), off)
                 if out[0] is None:
                     break
                 th, u = out
@@ -277,7 +287,7 @@ def one(job):
                 # drive the candidate network frozen; bank only if THAT
                 # score beats the validated incumbent
                 with tu.frozen():
-                    val_laps, val_off = run_frozen(m, pol, t, s0, v0, steps,
+                    val_laps, val_off = run_frozen(m, pol, m_track, s0, v0, steps,
                                                    features, plant_mu=plant_mu, mu_corners=mu_corners,
                                                    plant_track=plant_track)
                 val = dict(laps=val_laps, off=val_off)
@@ -301,7 +311,7 @@ def one(job):
         pol.G[...] = G; pol.cell.p[...] = cp
         with tu.frozen():
             for k in range(eval_eps):
-                l_, o_ = run_frozen(m, pol, t, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners, plant_track=plant_track)
+                l_, o_ = run_frozen(m, pol, m_track, s0, v0, steps, features, plant_mu=plant_mu, mu_corners=mu_corners, plant_track=plant_track)
                 evals.append(dict(laps=l_, off=o_))
         # keep the network itself, so it can be reloaded and driven again
         # the critic and the box are part of the identity of a banked network:
