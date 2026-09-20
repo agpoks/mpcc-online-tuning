@@ -62,4 +62,46 @@ ax2.set_xticks(xk); ax2.set_xticklabels(KINDS); ax2.set_ylabel("mean passes / ep
 ax2.set_title("Behaviour by opponent pace: learned arms decline equal/faster (rule attempts them)")
 ax2.legend(fontsize=8); fig2.tight_layout()
 for e in ("pdf","png"): fig2.savefig(OUT/f"race_behaviour{TAG}.{e}",dpi=140)
+
+# 4) WEIGHTS BY OPPONENT TYPE (learned arms) -- how the 8 weights the tuner emits
+#    change with the opponent it faces. Needs theta_mean in the rows (new runs).
+sys.path.insert(0,str(ROOT))
+try:
+    from mpcc_tuning import baselines as B
+    from mpcc_tuning.mpcc import WEIGHT_NAMES
+    start=np.exp(np.asarray(B.start("icra_t2_smooth").theta(),float))
+    have_theta=any("theta_mean" in r for x in d["runs"] for r in x["rows"])
+    if have_theta:
+        with open(OUT/f"race_weights_by_kind{TAG}.csv","w",newline="") as f:
+            w=csv.writer(f); w.writerow(["arm","kind"]+list(WEIGHT_NAMES)+[n+"_relSTART" for n in WEIGHT_NAMES])
+            for arm in ["ltc","mlp"]:
+                for k in KINDS:
+                    R=[r for x in d["runs"] if x["arm"]==arm for r in x["rows"]
+                       if r["kind"]==k and "theta_mean" in r]
+                    if not R: continue
+                    wm=np.mean([r["theta_mean"] for r in R],axis=0)
+                    w.writerow([arm,k]+[round(float(v),4) for v in wm]
+                               +[round(float(v),3) for v in wm/start])
+        for arm in ["ltc","mlp"]:
+            M=[]
+            for k in KINDS:
+                R=[r for x in d["runs"] if x["arm"]==arm for r in x["rows"]
+                   if r["kind"]==k and "theta_mean" in r]
+                M.append(np.mean([r["theta_mean"] for r in R],axis=0)/start if R else np.ones(8))
+            M=np.array(M)                      # 4 kinds x 8 weights, relative to START
+            fig,ax=plt.subplots(figsize=(8,3.8))
+            im=ax.imshow(np.log2(M).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")
+            ax.set_xticks(range(4)); ax.set_xticklabels(KINDS)
+            ax.set_yticks(range(8)); ax.set_yticklabels(WEIGHT_NAMES)
+            for i in range(8):
+                for j in range(4): ax.text(j,i,f"{M[j,i]:.2f}",ha="center",va="center",fontsize=7)
+            ax.set_title(f"{arm}: emitted weights by opponent type (x START)")
+            fig.colorbar(im,ax=ax,fraction=0.03,label="log2(weight / START)")
+            fig.tight_layout()
+            for e in ("pdf","png"): fig.savefig(OUT/f"race_weights_by_kind_{arm}{TAG}.{e}",dpi=140)
+        print("  + race_weights_by_kind CSV + heatmaps (ltc,mlp)")
+    else:
+        print("  (no theta_mean in rows -- re-run race_mode.py to get weights-by-kind)")
+except Exception as e:
+    print("  weights-by-kind skipped:",e)
 print("wrote race_summary/by_kind/sectors CSVs + race_sector_suitability + race_behaviour figures, TAG="+repr(TAG))

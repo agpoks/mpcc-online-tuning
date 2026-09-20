@@ -123,17 +123,24 @@ PACE_KINDS = ("static", "slower", "equal", "faster")
 #   faster        : cannot out-wait a faster car -- reward CLOSING PACE (go fast to
 #                   catch up); a pass, if it comes, still pays.
 # Contact is always heavily penalised: a pass that touches is worse than no pass.
-PASS_BONUS = {"static": 6.0, "slower": 6.0, "equal": 9.0, "faster": 4.0}
+PASS_BONUS = {"static": 9.0, "slower": 9.0, "equal": 13.0, "faster": 5.0}
 
 
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
+    """Adapted to overtake FASTER: bigger clean-pass bonuses, plus a shaping term
+    that rewards CLOSING on a passable opponent (static/slower/equal) so the tuner
+    commits to the move sooner instead of trailing. Contact stays heavily penalised."""
     if contact:
         return float(r) - 8.0
     x = float(r)
     if just_passed:
-        x += PASS_BONUS.get(kind, 6.0)
-    if kind == "equal" and -1.0 < gap < 3.0:
-        x += 0.3                       # reward holding a good overtaking position
+        x += PASS_BONUS.get(kind, 9.0)
+    if kind in ("static", "slower", "equal"):
+        # engaged and closing on a passable car -> reward committing to the overtake
+        if 0.0 < gap < 4.0 and v_ego > v_opp + 0.02:
+            x += 0.4 * float(v_ego - v_opp)
+        if kind == "equal" and -1.0 < gap < 3.0:
+            x += 0.3                   # hold a good overtaking position
     elif kind == "faster":
         x += 0.5 * float(v_ego)        # reward catching up (fastest safe speed)
     return x
@@ -160,11 +167,11 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
     if arm in ("ltc", "mlp"):
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, n_hidden, seed=seed)
         pol = WeightPolicy(cell, th0, lo, hi, seed=seed)
-        # theta_prior lowered 0.5 -> 0.3: the strong pull to START made the tuner
-        # over-conservative (it declined safe passes the constant took). 0.3 keeps
-        # a trust region but lets it exploit clean passes; contact stays penalised.
-        tuner = PolicyTuner(m, pol, alpha=2e-3, explore=0.05, delta_clip=1.0,
-                            seed=seed, trust_region=0.01, theta_prior=0.3)
+        # adapted to overtake faster: prior 0.3 -> 0.2 (let it move toward the
+        # overtake posture q_v/q_c~2), alpha 2e-3 -> 3e-3 (learn quicker). Contact
+        # is still penalised, so "faster" is bounded by the safety term.
+        tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0,
+                            seed=seed, trust_region=0.01, theta_prior=0.2)
 
     rng = np.random.default_rng(seed)
     rows = []
@@ -195,7 +202,9 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
         base = float(P.state5()[4]); off = tr = False
         passes = 0; contact = False; seen = False
         sec_attempt = np.zeros(4); sec_pass = np.zeros(4); sec_contact = np.zeros(4)
+        theta_acc = np.zeros(8); n_th = 0        # mean emitted weights this episode
         for _ in range(steps):
+            theta_acc += np.exp(np.asarray(theta, float)); n_th += 1
             s5n, r, off, tr = P.step(u)
             opp.step(0.05)
             ex, ey = float(P._x[0]), float(P._x[1])
@@ -240,7 +249,8 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
         rows.append(dict(ep=ep, kind=kind, laps=round(laps, 3), passes=int(passes),
                          contact=bool(contact), off=bool(off), clean=bool(clean),
                          sec_attempt=sec_attempt.tolist(), sec_pass=sec_pass.tolist(),
-                         sec_contact=sec_contact.tolist()))
+                         sec_contact=sec_contact.tolist(),
+                         theta_mean=(theta_acc / max(n_th, 1)).tolist()))
     # save the trained policy so the GIF/eval can REPLAY the learned behaviour
     if tuner is not None:
         ndir = OUT / "nets"; ndir.mkdir(parents=True, exist_ok=True)
