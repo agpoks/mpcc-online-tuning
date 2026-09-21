@@ -154,7 +154,7 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
 
 
 def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
-        factor=2.0, box="adapt"):
+        factor=2.0, box="adapt", dump_traj=False):
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, MLPCell, THETA_HI, THETA_LO,
                                  PolicyTuner, WeightPolicy, fixed_schedule)
@@ -182,6 +182,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
 
     rng = np.random.default_rng(seed)
     rows = []
+    traj = {}                      # one trajectory per opponent kind (last episode), if dumping
     for ep in range(n_ep):
         kind = PACE_KINDS[(seed + ep) % 4]
         v_opp = PACE[kind] * ego_pace
@@ -211,6 +212,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         sec_attempt = np.zeros(4); sec_pass = np.zeros(4); sec_contact = np.zeros(4)
         theta_acc = np.zeros(8); n_th = 0        # mean emitted weights this episode
         sec_theta = np.zeros((4, 8)); sec_theta_n = np.zeros(4)   # weights BY SECTOR
+        TEX = []; TEY = []; TEV = []; TOX = []; TOY = []; TG = []; TP = []   # trajectory (if dumping)
         for _ in range(steps):
             theta_acc += np.exp(np.asarray(theta, float)); n_th += 1
             s5n, r, off, tr = P.step(u)
@@ -234,6 +236,9 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
                 passes += 1; seen = True; sec_pass[sec] += 1; just_passed = True
             elif g > 0.5:
                 seen = False
+            if dump_traj:
+                TEX.append(ex); TEY.append(ey); TEV.append(float(P._x[3]))
+                TOX.append(ox); TOY.append(oy); TG.append(g); TP.append(passes)
             m.set_obstacles([opp.keepout()])
             tracker.update(opp.pose()[:2])
             fn = race_features(track, s5n, [opp], opp_speed_est=tracker.speed)
@@ -261,12 +266,20 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
                          sec_contact=sec_contact.tolist(),
                          theta_mean=(theta_acc / max(n_th, 1)).tolist(),
                          sec_theta=(sec_theta / np.maximum(sec_theta_n[:, None], 1)).tolist()))
+        if dump_traj and TEX:
+            traj[kind] = dict(EX=TEX, EY=TEY, EV=TEV, OX=TOX, OY=TOY, GAP=TG, PASS=TP)
     # save the trained policy so the GIF/eval can REPLAY the learned behaviour
     if tuner is not None:
         ndir = OUT / "nets"; ndir.mkdir(parents=True, exist_ok=True)
         np.savez(str(ndir / f"race_{arm}_{seed}.npz"), G=pol.G, cell_p=pol.cell.p,
                  th0=th0, n_hidden=pol.cell.n, arm=arm, seed=seed,
                  lo=np.asarray(lo, float), hi=np.asarray(hi, float))
+    if dump_traj and traj:
+        # per-opponent-kind trajectory (last episode of each kind) for the 2D paper plots,
+        # so tools/race_2d.py can render WITHOUT re-driving (no acados).
+        tdir = OUT / "traj"; tdir.mkdir(parents=True, exist_ok=True)
+        np.savez(str(tdir / f"traj_{arm}_{seed}.npz"),
+                 **{f"{k}_{fld}": np.array(v[fld]) for k, v in traj.items() for fld in v})
     last = rows[-8:] if len(rows) >= 8 else rows
     return dict(arm=arm, seed=seed,
                 laps=float(np.mean([r["laps"] for r in last])),
@@ -277,9 +290,9 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
 
 
 def one(job):
-    arm, seed, n_ep, steps, ego_pace = job
+    arm, seed, n_ep, steps, ego_pace, dump_traj = job
     t0 = time.perf_counter()
-    out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace)
+    out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace, dump_traj=dump_traj)
     out["wall_s"] = round(time.perf_counter() - t0, 1)
     return out
 
@@ -297,6 +310,9 @@ def main(argv=None):
     ap.add_argument("--pilot", action="store_true",
                     help="1 seed, 4 episodes, 600 steps, arms const+ltc -- quick smoke")
     ap.add_argument("--out", default=str(OUT / "race_phase1.json"))
+    ap.add_argument("--dump-traj", action="store_true",
+                    help="save one trajectory per opponent kind (results/race/traj/) so "
+                    "tools/race_2d.py can render 2D paper plots without re-driving")
     a = ap.parse_args(argv)
     if a.pilot:
         a.seeds, a.episodes, a.steps, a.arms = 1, 2, 1200, ["const", "ltc"]
@@ -311,7 +327,7 @@ def main(argv=None):
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; opponents: "
           + ", ".join(f"{k}={PACE[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
 
-    jobs = [(arm, s, a.episodes, a.steps, ego_pace)
+    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj)
             for s in range(a.seeds) for arm in a.arms]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
     print(f"  {len(jobs)} runs, {a.episodes} episodes, {n_proc} processes\n", flush=True)

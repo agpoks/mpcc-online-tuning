@@ -26,10 +26,21 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=0); ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--ego-pace", type=float, default=1.35)
     ap.add_argument("--snapshots", type=int, default=7)
+    ap.add_argument("--traj", default=None,
+                    help="a results/race/traj/traj_<arm>_<seed>.npz saved by race_mode "
+                    "--dump-traj: render from it (no acados re-drive)")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     out = a.out or str(ROOT / "results/race/paper" / f"{a.arm}_{a.kind}_2d.pdf")
-    d = drive(a.arm, a.kind, a.seed, a.steps, a.ego_pace)
+    if a.traj:
+        z = np.load(a.traj); k = a.kind
+        if f"{k}_EX" not in z.files:
+            raise SystemExit(f"kind {k} not in {a.traj} (have {sorted(set(f.split('_')[0] for f in z.files))})")
+        d = dict(EX=z[f"{k}_EX"], EY=z[f"{k}_EY"], EV=z[f"{k}_EV"], OX=z[f"{k}_OX"],
+                 OY=z[f"{k}_OY"], GAP=list(z[f"{k}_GAP"]), PASS=list(z[f"{k}_PASS"]),
+                 rad=0.36, track=Track.icra_t2_smooth())
+    else:
+        d = drive(a.arm, a.kind, a.seed, a.steps, a.ego_pace)
     EX, EY, EV = d["EX"], d["EY"], d["EV"]; OX, OY = d["OX"], d["OY"]
     passes = np.array(d["PASS"]); track = d["track"]; TR = ROOT / "mpcc_tuning/tracks"
     body_gap = np.hypot(EX - OX, EY - OY) - 0.24        # 0.24 = sum of half-widths
