@@ -123,7 +123,7 @@ PACE_KINDS = ("static", "slower", "equal", "faster")
 #   faster        : cannot out-wait a faster car -- reward CLOSING PACE (go fast to
 #                   catch up); a pass, if it comes, still pays.
 # Contact is always heavily penalised: a pass that touches is worse than no pass.
-PASS_BONUS = {"static": 9.0, "slower": 9.0, "equal": 13.0, "faster": 5.0}
+PASS_BONUS = {"static": 7.0, "slower": 7.0, "equal": 10.0, "faster": 0.0}
 # Bigger keep-out so a pass leaves ROOM (was "nearly touching"): the MPCC treats the
 # opponent as a KEEPOUT_R circle, so with the START berth d_obs~0.15 it holds the ego
 # centre >~0.51 m off -> ~0.27 m clear body-to-body. This is a fixed safety margin, NOT
@@ -133,23 +133,36 @@ KEEPOUT_R = 0.36
 CONTACT_R = 0.24
 
 
+SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-end)
+
+
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
-    """Adapted to overtake FASTER: bigger clean-pass bonuses, plus a shaping term
-    that rewards CLOSING on a passable opponent (static/slower/equal) so the tuner
-    commits to the move sooner instead of trailing. Contact stays heavily penalised."""
+    """Safe-first behaviour reward.
+
+    - Contact strongly dominates (-15): a pass that touches is far worse than no pass, so
+      the tuner cannot buy passes with occasional collisions (the aggressive corner in the
+      5-lap run crashed 25%, incl. 100% into the faster car).
+    - static/slower/equal: a clean-pass bonus + a small reward for CLOSING on a passable
+      car, so it commits to the overtake but only when a pass is physically available.
+    - faster: NO pass bonus (a faster car cannot be safely passed). Catch up from FAR, but
+      when within SAFE_FOLLOW hold the gap -- penalise creeping closer -> follow, don't
+      rear-end. This is "stay behind at a safe distance" for the faster opponent.
+    """
     if contact:
-        return float(r) - 8.0
+        return float(r) - 15.0
     x = float(r)
     if just_passed:
-        x += PASS_BONUS.get(kind, 9.0)
+        x += PASS_BONUS.get(kind, 7.0)
     if kind in ("static", "slower", "equal"):
-        # engaged and closing on a passable car -> reward committing to the overtake
         if 0.0 < gap < 4.0 and v_ego > v_opp + 0.02:
-            x += 0.4 * float(v_ego - v_opp)
+            x += 0.3 * float(v_ego - v_opp)        # commit to a passable overtake
         if kind == "equal" and -1.0 < gap < 3.0:
-            x += 0.3                   # hold a good overtaking position
+            x += 0.2                                # hold a good overtaking position
     elif kind == "faster":
-        x += 0.5 * float(v_ego)        # reward catching up (fastest safe speed)
+        if gap > SAFE_FOLLOW:
+            x += 0.3 * float(min(v_ego, v_opp + 0.5))   # close the gap from far (bounded)
+        elif 0.0 < gap <= SAFE_FOLLOW:
+            x -= 2.0 * float(SAFE_FOLLOW - gap)         # too close -> back off, follow safely
     return x
 
 
@@ -174,11 +187,12 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     if arm in ("ltc", "mlp"):
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, n_hidden, seed=seed)
         pol = WeightPolicy(cell, th0, lo, hi, seed=seed)
-        # adapted to overtake faster: prior 0.3 -> 0.2 (let it move toward the
-        # overtake posture q_v/q_c~2), alpha 2e-3 -> 3e-3 (learn quicker). Contact
-        # is still penalised, so "faster" is bounded by the safety term.
+        # prior 0.2 -> 0.3: the weak trust region let the tuner collapse to the
+        # crash-prone max-overtake corner (loose q_c, high k_v) over 5 laps. A stronger
+        # pull to START keeps it stable; the safety-first reward (contact -15, bounded
+        # catch-up) supplies the behaviour without needing the unstable corner.
         tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0,
-                            seed=seed, trust_region=0.01, theta_prior=0.2)
+                            seed=seed, trust_region=0.01, theta_prior=0.3)
 
     rng = np.random.default_rng(seed)
     rows = []
