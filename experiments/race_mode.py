@@ -146,7 +146,7 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
     return x
 
 
-def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
+def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         factor=2.0, box="adapt"):
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, MLPCell, THETA_HI, THETA_LO,
@@ -157,6 +157,10 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
     track = Track.icra_t2_smooth()
     st = B.start("icra_t2_smooth")
     th0 = np.asarray(st.theta(), float)
+    # bigger berth so a pass leaves ROOM (was "nearly touching"): d_obs 0.15 -> 0.35 m
+    # keeps the ego centre ~0.24(bodies)+0.35 = 0.59 m from the opponent centre -> ~0.35 m
+    # clear body-to-body during a pass. The tuner can still adjust it, but starts safe.
+    th0[WEIGHT_NAMES.index("d_obs")] = np.log(0.35)
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, discrete=True, max_obstacles=1,
                    name=f"race_{arm}_{seed}")
@@ -203,6 +207,7 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
         passes = 0; contact = False; seen = False
         sec_attempt = np.zeros(4); sec_pass = np.zeros(4); sec_contact = np.zeros(4)
         theta_acc = np.zeros(8); n_th = 0        # mean emitted weights this episode
+        sec_theta = np.zeros((4, 8)); sec_theta_n = np.zeros(4)   # weights BY SECTOR
         for _ in range(steps):
             theta_acc += np.exp(np.asarray(theta, float)); n_th += 1
             s5n, r, off, tr = P.step(u)
@@ -213,6 +218,7 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
             s_ego = track.project(ex, ey)
             g = signed_gap(track, s_ego, opp.s)
             sec = int(track.sector(track.wrap(s_ego)))
+            sec_theta[sec] += np.exp(np.asarray(theta, float)); sec_theta_n[sec] += 1
             # contact = the two bodies touch
             if dist < rad and not contact:
                 contact = True; sec_contact[sec] += 1
@@ -250,7 +256,8 @@ def run(arm, seed=0, n_ep=16, steps=1600, n_hidden=12, ego_pace=1.4,
                          contact=bool(contact), off=bool(off), clean=bool(clean),
                          sec_attempt=sec_attempt.tolist(), sec_pass=sec_pass.tolist(),
                          sec_contact=sec_contact.tolist(),
-                         theta_mean=(theta_acc / max(n_th, 1)).tolist()))
+                         theta_mean=(theta_acc / max(n_th, 1)).tolist(),
+                         sec_theta=(sec_theta / np.maximum(sec_theta_n[:, None], 1)).tolist()))
     # save the trained policy so the GIF/eval can REPLAY the learned behaviour
     if tuner is not None:
         ndir = OUT / "nets"; ndir.mkdir(parents=True, exist_ok=True)
@@ -278,8 +285,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seeds", type=int, default=6)
-    ap.add_argument("--episodes", type=int, default=16)
-    ap.add_argument("--steps", type=int, default=1600)
+    ap.add_argument("--episodes", type=int, default=10)
+    ap.add_argument("--steps", type=int, default=5500,
+                    help="~5 laps at START pace (73.6 m track, ~1.35 m/s) so the ego "
+                    "meets each opponent several times and can change strategy per lap")
     ap.add_argument("--jobs", type=int, default=0)
     ap.add_argument("--arms", nargs="*", default=list(ARMS))
     ap.add_argument("--pilot", action="store_true",
@@ -287,7 +296,7 @@ def main(argv=None):
     ap.add_argument("--out", default=str(OUT / "race_phase1.json"))
     a = ap.parse_args(argv)
     if a.pilot:
-        a.seeds, a.episodes, a.steps, a.arms = 1, 4, 600, ["const", "ltc"]
+        a.seeds, a.episodes, a.steps, a.arms = 1, 2, 1200, ["const", "ltc"]
 
     # measure ego pace once (solo START drive) to scale opponents
     from mpcc_tuning.acados_mpcc import AcadosMPCC

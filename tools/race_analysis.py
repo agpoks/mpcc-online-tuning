@@ -104,4 +104,56 @@ try:
         print("  (no theta_mean in rows -- re-run race_mode.py to get weights-by-kind)")
 except Exception as e:
     print("  weights-by-kind skipped:",e)
+
+# 5) WEIGHT LEARNING CURVE (over episodes) + WEIGHTS BY SECTOR (from sec_theta)
+try:
+    from mpcc_tuning import baselines as B
+    from mpcc_tuning.mpcc import WEIGHT_NAMES
+    start=np.exp(np.asarray(B.start("icra_t2_smooth").theta(),float))
+    if any("theta_mean" in r for x in d["runs"] for r in x["rows"]):
+        for arm in ["ltc","mlp"]:
+            runs=[x for x in d["runs"] if x["arm"]==arm]
+            if not runs: continue
+            neps=max(len(x["rows"]) for x in runs); curve=np.full((neps,8),np.nan)
+            for e in range(neps):
+                vals=[x["rows"][e]["theta_mean"] for x in runs
+                      if e<len(x["rows"]) and "theta_mean" in x["rows"][e]]
+                if vals: curve[e]=np.mean(vals,axis=0)/start
+            fig,ax=plt.subplots(figsize=(8,4.2))
+            for i,n in enumerate(WEIGHT_NAMES): ax.plot(range(neps),curve[:,i],marker="o",ms=3,label=n)
+            ax.axhline(1.0,color="k",lw=0.7,ls="--"); ax.set_yscale("log")
+            ax.set_xlabel("episode"); ax.set_ylabel("emitted weight / START")
+            ax.set_title(f"{arm}: weight learning curve over episodes (how weights change over time)")
+            ax.legend(fontsize=7,ncol=4); fig.tight_layout()
+            for e2 in ("pdf","png"): fig.savefig(OUT/f"race_weight_curve_{arm}{TAG}.{e2}",dpi=140)
+    if any("sec_theta" in r for x in d["runs"] for r in x["rows"]):
+        with open(OUT/f"race_weights_by_sector{TAG}.csv","w",newline="") as f:
+            wtr=csv.writer(f); wtr.writerow(["arm","sector"]+list(WEIGHT_NAMES)+[n+"_relSTART" for n in WEIGHT_NAMES])
+            for arm in ["ltc","mlp"]:
+                runs=[x for x in d["runs"] if x["arm"]==arm]
+                if not runs: continue
+                M=np.zeros((4,8)); cnt=np.zeros(4)
+                for x in runs:
+                    for r in x["rows"][len(x["rows"])//2:]:      # last-half episodes = converged
+                        st_=np.array(r.get("sec_theta",np.zeros((4,8))))
+                        for s in range(4):
+                            if st_[s].any(): M[s]+=st_[s]; cnt[s]+=1
+                for s in range(4):
+                    if cnt[s]: M[s]/=cnt[s]
+                    wtr.writerow([arm,s]+[round(float(v),4) for v in M[s]]
+                                 +[round(float(v),3) for v in (M[s]/start)])
+                rel=M/start
+                fig,ax=plt.subplots(figsize=(8,3.8))
+                im=ax.imshow(np.log2(np.where(rel>0,rel,1)).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")
+                ax.set_xticks(range(4)); ax.set_xticklabels([f"S{i}" for i in range(4)])
+                ax.set_yticks(range(8)); ax.set_yticklabels(WEIGHT_NAMES)
+                for i in range(8):
+                    for j in range(4): ax.text(j,i,f"{rel[j,i]:.2f}",ha="center",va="center",fontsize=7)
+                ax.set_title(f"{arm}: emitted weights BY SECTOR (x START)")
+                fig.colorbar(im,ax=ax,fraction=0.03,label="log2(weight / START)")
+                fig.tight_layout()
+                for e2 in ("pdf","png"): fig.savefig(OUT/f"race_weights_by_sector_{arm}{TAG}.{e2}",dpi=140)
+        print("  + weight learning curves + weights-by-sector (CSV+heatmaps)")
+except Exception as e:
+    print("  learning-curve/per-sector skipped:",e)
 print("wrote race_summary/by_kind/sectors CSVs + race_sector_suitability + race_behaviour figures, TAG="+repr(TAG))
