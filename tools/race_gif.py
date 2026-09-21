@@ -26,7 +26,7 @@ from mpcc_tuning import baselines as B
 from mpcc_tuning.acados_mpcc import AcadosMPCC
 from mpcc_tuning.plant_scuderia import ScuderiaPlant
 from mpcc_tuning.opponents import ObstacleTracker, Opponent
-from experiments.race_mode import race_features, PACE, signed_gap, N_RACE_FEATURES
+from experiments.race_mode import race_features, PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R, CONTACT_R
 
 
 def drive(arm, kind, seed, steps, ego_pace):
@@ -44,7 +44,7 @@ def drive(arm, kind, seed, steps, ego_pace):
         pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.reset()
     v_opp = PACE[kind] * ego_pace
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.0 + 0.1 * (seed % 3)
-    opp = Opponent(track, s0=(s0 + 3.0) % track.length, speed=v_opp, offset=0.0, radius=0.24)
+    opp = Opponent(track, s0=(s0 + 3.0) % track.length, speed=v_opp, offset=0.0, radius=KEEPOUT_R)
     tracker = ObstacleTracker(dt=0.05)
     P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
     P.reset(s0=s0, v0=v0); m.reset(); opp.reset()
@@ -64,7 +64,7 @@ def drive(arm, kind, seed, steps, ego_pace):
         s5n, r, off, tr = P.step(u); opp.step(0.05)
         ex, ey = float(P._x[0]), float(P._x[1]); ox, oy, rad = opp.keepout()
         g = signed_gap(track, track.project(ex, ey), opp.s)
-        if float(np.hypot(ex - ox, ey - oy)) < rad:
+        if float(np.hypot(ex - ox, ey - oy)) < CONTACT_R:
             contact = True
         if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > v_opp:
             passes += 1; seen = True
@@ -77,7 +77,7 @@ def drive(arm, kind, seed, steps, ego_pace):
         if off or tr or contact:
             break
     return dict(EX=np.array(EX), EY=np.array(EY), EV=np.array(EV), OX=np.array(OX),
-                OY=np.array(OY), GAP=GAP, PASS=PASS, CONTACT=CONTACT, rad=0.24, track=track)
+                OY=np.array(OY), GAP=GAP, PASS=PASS, CONTACT=CONTACT, rad=KEEPOUT_R, track=track)
 
 
 def animate(d, arm, kind, out, stride=4, fps=20):

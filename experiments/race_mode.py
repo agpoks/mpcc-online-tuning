@@ -124,6 +124,13 @@ PACE_KINDS = ("static", "slower", "equal", "faster")
 #                   catch up); a pass, if it comes, still pays.
 # Contact is always heavily penalised: a pass that touches is worse than no pass.
 PASS_BONUS = {"static": 9.0, "slower": 9.0, "equal": 13.0, "faster": 5.0}
+# Bigger keep-out so a pass leaves ROOM (was "nearly touching"): the MPCC treats the
+# opponent as a KEEPOUT_R circle, so with the START berth d_obs~0.15 it holds the ego
+# centre >~0.51 m off -> ~0.27 m clear body-to-body. This is a fixed safety margin, NOT
+# the tunable d_obs (which must stay strictly inside its box). CONTACT_R is the physical
+# body-to-body touch distance used only for detecting an actual collision.
+KEEPOUT_R = 0.36
+CONTACT_R = 0.24
 
 
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
@@ -157,10 +164,6 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     track = Track.icra_t2_smooth()
     st = B.start("icra_t2_smooth")
     th0 = np.asarray(st.theta(), float)
-    # bigger berth so a pass leaves ROOM (was "nearly touching"): d_obs 0.15 -> 0.35 m
-    # keeps the ego centre ~0.24(bodies)+0.35 = 0.59 m from the opponent centre -> ~0.35 m
-    # clear body-to-body during a pass. The tuner can still adjust it, but starts safe.
-    th0[WEIGHT_NAMES.index("d_obs")] = np.log(0.35)
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, discrete=True, max_obstacles=1,
                    name=f"race_{arm}_{seed}")
@@ -186,7 +189,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         v0 = 1.0 + 0.1 * (seed % 3)
         gap0 = 3.0 + 1.5 * (ep % 3)          # opponent starts a few m ahead
         opp = Opponent(track, s0=(s0 + gap0) % track.length, speed=v_opp,
-                       offset=0.0, radius=0.24)
+                       offset=0.0, radius=KEEPOUT_R)
         tracker = ObstacleTracker(dt=0.05)
         P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
         s5 = P.reset(s0=s0, v0=v0); m.reset()
@@ -219,8 +222,8 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             g = signed_gap(track, s_ego, opp.s)
             sec = int(track.sector(track.wrap(s_ego)))
             sec_theta[sec] += np.exp(np.asarray(theta, float)); sec_theta_n[sec] += 1
-            # contact = the two bodies touch
-            if dist < rad and not contact:
+            # contact = the two bodies actually touch (physical distance, not the keep-out)
+            if dist < CONTACT_R and not contact:
                 contact = True; sec_contact[sec] += 1
             # engagement: opponent within a car-length ahead and we are closing
             if 0 < g < 2.0 and float(P._x[3]) > v_opp + 0.05:
