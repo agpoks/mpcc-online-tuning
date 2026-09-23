@@ -1,0 +1,20 @@
+{
+  "alpha_r_peak": 0.148,
+  "alpha_f_peak": 0.148,
+  "kappa_peak": 0.142,
+  "v_crit": 22.0,
+  "beta_crit": -0.0813,
+  "alpha_r_crit": 0.0844,
+  "understeer_grad_deg_per_ms2": 0.025,
+  "stable_all_speeds": true,
+  "alpha_r_ref": 0.111,
+  "kappa_ref": 0.1065,
+  "beta_ref": 0.1,
+  "class_scale": {
+    "static": 0.6,
+    "slower": 0.7,
+    "equal": 0.85,
+    "faster": 1.0
+  },
+  "notes": "understeer-stable RC car: binding limit is TYRE SATURATION (alpha_r_peak), not a saddle-node. alpha_r_ref/kappa_ref = 0.75x peak; beta_ref soft drift limit. Multiply the ref by class_scale[opp_class] in the risk reward: vs faster spend the full margin, vs slower keep a bigger one."
+}
