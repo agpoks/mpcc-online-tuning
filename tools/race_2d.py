@@ -41,8 +41,11 @@ def main(argv=None):
                  rad=0.36, track=Track.icra_t2_smooth())
     else:
         d = drive(a.arm, a.kind, a.seed, a.steps, a.ego_pace)
-    EX, EY, EV = d["EX"], d["EY"], d["EV"]; OX, OY = d["OX"], d["OY"]
-    passes = np.array(d["PASS"]); track = d["track"]; TR = ROOT / "mpcc_tuning/tracks"
+    EX = np.asarray(d["EX"]).ravel(); EY = np.asarray(d["EY"]).ravel(); EV = np.asarray(d["EV"]).ravel()
+    OX = np.asarray(d["OX"]).ravel(); OY = np.asarray(d["OY"]).ravel()
+    n = min(len(EX), len(EY), len(EV), len(OX), len(OY))
+    EX, EY, EV, OX, OY = EX[:n], EY[:n], EV[:n], OX[:n], OY[:n]
+    passes = np.asarray(d["PASS"]).ravel()[:n]; track = d["track"]; TR = ROOT / "mpcc_tuning/tracks"
     body_gap = np.hypot(EX - OX, EY - OY) - 0.24        # 0.24 = sum of half-widths
 
     im = np.array(Image.open(TR / "icra2026_t2.pgm")); H, W = im.shape; res, ox, oy = 0.05, -2.8, -7.25
@@ -51,7 +54,7 @@ def main(argv=None):
     ss = np.linspace(0, tt.length, 1200, endpoint=False); L = []; Rr = []
     for si in ss:
         p = np.asarray(tt.pos(float(si))).ravel(); ang = float(tt.tangent_angle(float(si)))
-        nx, ny = -np.sin(ang), np.cos(ang); wl, wr = tt.width(float(si))
+        nx, ny = -np.sin(ang), np.cos(ang); wl, wr = tt.width(float(si)); wl, wr = float(wl), float(wr)
         L.append([p[0] + nx * wr, p[1] + ny * wr]); Rr.append([p[0] - nx * wl, p[1] - ny * wl])
     L = np.array(L); Rr = np.array(Rr)
 
