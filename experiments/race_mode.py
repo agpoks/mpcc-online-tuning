@@ -138,19 +138,27 @@ CONTACT_R = 0.24
 
 
 SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-end)
+# RISK-AWARE term: a CERTAIN, GRADED per-tick cost of running near a limit, so the reward
+# optimum is INTERIOR (moderate aggression) instead of the box corner. This is the fix for
+# "the weights just run to the box edge and stop evolving": with only an occasional crash
+# penalty, aggression pays in expectation and the policy saturates the box wall; a continuous
+# margin penalty makes aggression cost something EVERY step, so the 8 weights settle at
+# interior, situation-dependent values (tight sector / near opponent -> back off; open -> push).
+RISK_WALL = 0.20    # start penalising when the wall clearance drops below this (m)
+RISK_OPP = 0.30     # start penalising when the body gap to the opponent drops below this (m)
+W_RISK = 4.0        # weight of the graded risk penalty
 
 
-def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
-    """Safe-first behaviour reward.
+def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
+                wall_margin=9.0, opp_gap=9.0):
+    """Safe-first behaviour reward + a continuous RISK term (interior optimum).
 
-    - Contact strongly dominates (-15): a pass that touches is far worse than no pass, so
-      the tuner cannot buy passes with occasional collisions (the aggressive corner in the
-      5-lap run crashed 25%, incl. 100% into the faster car).
-    - static/slower/equal: a clean-pass bonus + a small reward for CLOSING on a passable
-      car, so it commits to the overtake but only when a pass is physically available.
-    - faster: NO pass bonus (a faster car cannot be safely passed). Catch up from FAR, but
-      when within SAFE_FOLLOW hold the gap -- penalise creeping closer -> follow, don't
-      rear-end. This is "stay behind at a safe distance" for the faster opponent.
+    - Contact strongly dominates (-15).
+    - static/slower/equal: clean-pass bonus + a bounded closing reward.
+    - faster: no pass bonus; catch up from far but hold SAFE_FOLLOW (follow, don't rear-end).
+    - RISK: -W_RISK * (how far inside RISK_WALL the wall clearance is + how far inside RISK_OPP
+      the opponent body gap is). Graded and paid every tick, so pushing the limit has a certain
+      cost -> the weights settle interior instead of pinning to the box edge.
     """
     if contact:
         return float(r) - 15.0
@@ -167,6 +175,8 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
             x += 0.3 * float(min(v_ego, v_opp + 0.5))   # close the gap from far (bounded)
         elif 0.0 < gap <= SAFE_FOLLOW:
             x -= 2.0 * float(SAFE_FOLLOW - gap)         # too close -> back off, follow safely
+    x -= W_RISK * (max(0.0, RISK_WALL - float(wall_margin))
+                   + max(0.0, RISK_OPP - float(opp_gap)))
     return x
 
 
@@ -250,6 +260,10 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             s_ego = track.project(ex, ey)
             g = signed_gap(track, s_ego, opp.s)
             sec = int(track.sector(track.wrap(s_ego)))
+            # margins for the risk-aware reward: clearance to the wall and body gap to opponent
+            _lat = float(track.lateral(ex, ey)); _wl, _wr = track.width(track.wrap(s_ego))
+            wall_margin = min(float(_wr) - _lat, float(_wl) + _lat)
+            opp_gap = dist - CONTACT_R
             sec_theta[sec] += np.exp(np.asarray(theta, float)); sec_theta_n[sec] += 1
             # contact = the two bodies actually touch (physical distance, not the keep-out)
             if dist < CONTACT_R and not contact:
@@ -273,7 +287,8 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             # tick the pass COMPLETES (just_passed), which the old code missed because
             # `seen` was already set -- so the tuner never saw a pass reward before.
             r_shaped = race_reward(kind, r, just_passed, contact,
-                                   float(P._x[3]), vo, g)
+                                   float(P._x[3]), vo, g,
+                                   wall_margin=wall_margin, opp_gap=opp_gap)
             if arm in ("ltc", "mlp"):
                 out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
                 if out[0] is None:
@@ -356,8 +371,9 @@ def main(argv=None):
     mp = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                     q_vref=st.q_vref, discrete=True, max_obstacles=1, name="race_pace")
     ego_pace = measure_pace(mp, track, th0, a.steps)
-    print(f"  ego solo pace = {ego_pace:.2f} m/s ; opponents: "
-          + ", ".join(f"{k}={PACE[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
+    _pace = FAIR_PACE if a.fair_opp else PACE
+    print(f"  ego solo pace = {ego_pace:.2f} m/s ; {'FAIR ' if a.fair_opp else ''}opponents "
+          + "(straight-line target): " + ", ".join(f"{k}={_pace[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
 
     jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp)
             for s in range(a.seeds) for arm in a.arms]
