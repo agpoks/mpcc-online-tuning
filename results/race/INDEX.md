@@ -47,3 +47,20 @@ constant, and here does not differentiate weights by opponent.
 - PDF+PNG: race_{behaviour,sector_suitability}_{s4,sharp,aggr}, race_weights_by_kind_{ltc,mlp}_aggr
 - GIF (gif/): {ltc,const}_{static,slower,equal,faster}.gif, fixed_equal_s0, plus _s0 variants
 - Nets (nets/): race_{ltc,mlp}_{0..3}.npz  (G + cell_p + th0 + bounds; replay with race_gif.py)
+
+## Update 2026-09-23: 5-lap runs + reward variants (DEFINITIVE)
+Ran 5-LAP episodes (steps 5500) with per-sector + over-time weight logging, bigger berth
+(KEEPOUT_R 0.36 -> ~0.27 m clear passes), and --dump-traj. Tried 5 reward variants
+(baseline/sharp/aggr/faster-catchup/safe-follow). Every variant: the tuner converges to the
+SAME max-overtake posture (q_c->0.5, q_v->2.0, k_v->0.67) in every sector and is WORSE than
+the constant. Safe run (race_phase1_safe.json): const 5.26 laps/2.50 passes/8% contact;
+ltc 4.00/1.79/25%; mlp 3.80/1.75/25%. ltc contacts the faster opponent ~100%.
+- 2D paper plots (paper/): {ltc,const}_{static,slower,equal,faster}_2d.{pdf,png} -- ego
+  speed-coloured + opponent paths + snapshots + min body gap. const_faster clears 1.71 m,
+  ltc_faster collides (-0.01 m).
+- weight learning curves: race_weight_curve_{ltc,mlp}_safe.* (jumps to the corner in 1-2 ep).
+- weights by sector: race_weights_by_sector_{ltc,mlp}_safe.* (same posture every sector).
+- trajectories: traj/traj_{arm}_{seed}.npz (render 2D via race_2d.py --traj, no acados).
+CONCLUSION: online weight-tuning does not improve 1-opponent racing here; the safe constant
+wins. Reward iteration is exhausted. Meaningful next step = PHASE 2 (reactive/defending
+opponent + multi-obstacle) or a higher-level attempt-vs-follow decision.
