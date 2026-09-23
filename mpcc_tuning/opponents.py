@@ -115,3 +115,62 @@ class Opponent:
         """``(x, y, r)`` for :meth:`MPCC.set_obstacles`."""
         x, y, _ = self.pose()
         return (float(x), float(y), self.radius)
+
+
+class RacelineOpponent:
+    """A FAIR opponent: follows the raceline at a GRIP-LIMITED speed (it slows for
+    corners like a real car, same lateral-accel limit), and reactively steps to the
+    open side to OVERTAKE when it is faster and blocked behind the ego -- rather than
+    the dumb :class:`Opponent`, which drives the centreline at constant speed through
+    hairpins a real car could not hold and simply rams a slower ego.
+
+    ``pace`` is the target straight-line speed (m/s); in corners the speed is capped at
+    ``sqrt(a_lat * mu / |kappa|)`` so cornering respects grip. ``a_lat`` is the
+    opponent's lateral-accel budget (2.5 m/s^2 by default -- a touch above the ego's
+    conservative START line so a "faster" opponent really is faster on the straights
+    without being a physics-free ghost). ``step(dt, ego)`` takes the ego pose+speed so
+    the reactive overtake can see it.
+    """
+
+    def __init__(self, track, s0: float = 3.0, pace: float = 1.2, offset: float = 0.0,
+                 radius: float = 0.24, a_lat: float = 2.5, mu: float = 1.0):
+        self.track = track
+        self.s0, self.pace, self.offset0 = float(s0), float(pace), float(offset)
+        self.radius, self.a_lat, self.mu = float(radius), float(a_lat), float(mu)
+        self.reset()
+
+    def reset(self) -> None:
+        self.s = self.s0
+        self.offset = self.offset0
+        self.speed = self.pace
+
+    def _vlimit(self, s: float) -> float:
+        kap = abs(float(self.track.curvature(self.track.wrap(s))))
+        return float(min(self.pace, (self.a_lat * self.mu / max(kap, 1e-3)) ** 0.5))
+
+    def step(self, dt: float, ego=None) -> None:
+        v = self._vlimit(self.s); self.speed = v
+        self.s = (self.s + v * float(dt)) % self.track.length
+        # reactive overtake: ego just ahead AND we are faster -> move to the OPEN side
+        tgt = self.offset0
+        if ego is not None:
+            ex, ey, ev = ego
+            es = self.track.project(float(ex), float(ey))
+            d = (es - self.s) % self.track.length
+            gap = d - self.track.length if d > self.track.length / 2 else d   # +ve: ego ahead
+            if 0.2 < gap < 3.0 and v > float(ev) + 0.05:
+                wl, wr = self.track.width(self.track.wrap(self.s))
+                tgt = ((float(wr) - self.radius - 0.05) if wr > wl
+                       else -(float(wl) - self.radius - 0.05))
+        self.offset += float(np.clip(tgt - self.offset, -1.5 * dt, 1.5 * dt))
+
+    def pose(self) -> np.ndarray:
+        s = self.s % self.track.length
+        p = np.array(self.track.pos(s)).ravel()
+        psi = float(self.track.tangent_angle(s))
+        n = np.array([-np.sin(psi), np.cos(psi)])
+        return np.array([p[0] + self.offset * n[0], p[1] + self.offset * n[1], psi])
+
+    def keepout(self) -> tuple:
+        x, y, _ = self.pose()
+        return (float(x), float(y), self.radius)

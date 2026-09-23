@@ -112,6 +112,10 @@ def measure_pace(m, track, th0, steps):
 # relative-pace classes: opponent speed as a fraction of the ego's solo pace.
 # static=parked; slower=catchable; equal=expensive pass; faster=cannot catch.
 PACE = {"static": 0.0, "slower": 0.55, "equal": 0.90, "faster": 1.20}
+# For the FAIR (grip-limited) opponent, pace is a STRAIGHT-LINE target: because it slows
+# for corners like a real car, the straight-line target must be higher than the dumb
+# constant speed to give a comparable lap pace, so the fractions are larger.
+FAIR_PACE = {"static": 0.0, "slower": 0.90, "equal": 1.30, "faster": 1.80}
 PACE_KINDS = ("static", "slower", "equal", "faster")
 
 # Pace-DEPENDENT reward, per the intended behaviour for each opponent type:
@@ -167,12 +171,12 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap):
 
 
 def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
-        factor=2.0, box="adapt", dump_traj=False):
+        factor=2.0, box="adapt", dump_traj=False, fair_opp=False):
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, MLPCell, THETA_HI, THETA_LO,
                                  PolicyTuner, WeightPolicy, fixed_schedule)
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
-    from mpcc_tuning.opponents import ObstacleTracker, Opponent
+    from mpcc_tuning.opponents import ObstacleTracker, Opponent, RacelineOpponent
 
     track = Track.icra_t2_smooth()
     st = B.start("icra_t2_smooth")
@@ -199,12 +203,16 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     traj = {}                      # one trajectory per opponent kind (last episode), if dumping
     for ep in range(n_ep):
         kind = PACE_KINDS[(seed + ep) % 4]
-        v_opp = PACE[kind] * ego_pace
+        v_opp = (FAIR_PACE if fair_opp else PACE)[kind] * ego_pace
         s0 = (seed % 4) * track.length / 4.0
         v0 = 1.0 + 0.1 * (seed % 3)
         gap0 = 3.0 + 1.5 * (ep % 3)          # opponent starts a few m ahead
-        opp = Opponent(track, s0=(s0 + gap0) % track.length, speed=v_opp,
-                       offset=0.0, radius=KEEPOUT_R)
+        if fair_opp:
+            opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp,
+                                   offset=0.0, radius=KEEPOUT_R, a_lat=2.5)
+        else:
+            opp = Opponent(track, s0=(s0 + gap0) % track.length, speed=v_opp,
+                           offset=0.0, radius=KEEPOUT_R)
         tracker = ObstacleTracker(dt=0.05)
         P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
         s5 = P.reset(s0=s0, v0=v0); m.reset()
@@ -230,8 +238,13 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         for _ in range(steps):
             theta_acc += np.exp(np.asarray(theta, float)); n_th += 1
             s5n, r, off, tr = P.step(u)
-            opp.step(0.05)
             ex, ey = float(P._x[0]), float(P._x[1])
+            # fair opponent sees the ego (for reactive overtaking); dumb one steps blind
+            if fair_opp:
+                opp.step(0.05, ego=(ex, ey, float(P._x[3])))
+            else:
+                opp.step(0.05)
+            vo = float(getattr(opp, "speed", v_opp))   # opponent's CURRENT speed (dynamic if fair)
             ox, oy, rad = opp.keepout()
             dist = float(np.hypot(ex - ox, ey - oy))
             s_ego = track.project(ex, ey)
@@ -242,11 +255,11 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             if dist < CONTACT_R and not contact:
                 contact = True; sec_contact[sec] += 1
             # engagement: opponent within a car-length ahead and we are closing
-            if 0 < g < 2.0 and float(P._x[3]) > v_opp + 0.05:
+            if 0 < g < 2.0 and float(P._x[3]) > vo + 0.05:
                 sec_attempt[sec] += 1
             # a completed pass: opponent went from ahead to behind, we are faster
             just_passed = False
-            if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > v_opp:
+            if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > vo:
                 passes += 1; seen = True; sec_pass[sec] += 1; just_passed = True
             elif g > 0.5:
                 seen = False
@@ -260,7 +273,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             # tick the pass COMPLETES (just_passed), which the old code missed because
             # `seen` was already set -- so the tuner never saw a pass reward before.
             r_shaped = race_reward(kind, r, just_passed, contact,
-                                   float(P._x[3]), v_opp, g)
+                                   float(P._x[3]), vo, g)
             if arm in ("ltc", "mlp"):
                 out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
                 if out[0] is None:
@@ -304,9 +317,10 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
 
 
 def one(job):
-    arm, seed, n_ep, steps, ego_pace, dump_traj = job
+    arm, seed, n_ep, steps, ego_pace, dump_traj, fair_opp = job
     t0 = time.perf_counter()
-    out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace, dump_traj=dump_traj)
+    out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace,
+              dump_traj=dump_traj, fair_opp=fair_opp)
     out["wall_s"] = round(time.perf_counter() - t0, 1)
     return out
 
@@ -327,6 +341,10 @@ def main(argv=None):
     ap.add_argument("--dump-traj", action="store_true",
                     help="save one trajectory per opponent kind (results/race/traj/) so "
                     "tools/race_2d.py can render 2D paper plots without re-driving")
+    ap.add_argument("--fair-opp", action="store_true",
+                    help="use the FAIR opponent (RacelineOpponent): grip-limited speed "
+                    "(slows for corners like our car) + reactive side-step overtake, "
+                    "instead of the dumb constant-speed centreline ghost")
     a = ap.parse_args(argv)
     if a.pilot:
         a.seeds, a.episodes, a.steps, a.arms = 1, 2, 1200, ["const", "ltc"]
@@ -341,7 +359,7 @@ def main(argv=None):
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; opponents: "
           + ", ".join(f"{k}={PACE[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
 
-    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj)
+    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp)
             for s in range(a.seeds) for arm in a.arms]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
     print(f"  {len(jobs)} runs, {a.episodes} episodes, {n_proc} processes\n", flush=True)

@@ -138,17 +138,22 @@ try:
                         st_=np.array(r.get("sec_theta",np.zeros((4,8))))
                         for s in range(4):
                             if st_[s].any(): M[s]+=st_[s]; cnt[s]+=1
+                seen=[s for s in range(4) if cnt[s]>0]     # only sectors the car visits
                 for s in range(4):
                     if cnt[s]: M[s]/=cnt[s]
+                    else: continue                          # no samples -> not an "all-zero" row
                     wtr.writerow([arm,s]+[round(float(v),4) for v in M[s]]
                                  +[round(float(v),3) for v in (M[s]/start)])
-                rel=M/start
+                rel=np.full((4,8),np.nan)                   # empty sectors stay blank (NaN)
+                for s in seen: rel[s]=M[s]/start
                 fig,ax=plt.subplots(figsize=(8,3.8))
-                im=ax.imshow(np.log2(np.where(rel>0,rel,1)).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")
+                im=ax.imshow(np.log2(rel).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")
+                im.cmap.set_bad("0.85")                      # NaN sectors shown grey (no data)
                 ax.set_xticks(range(4)); ax.set_xticklabels([f"S{i}" for i in range(4)])
                 ax.set_yticks(range(8)); ax.set_yticklabels(WEIGHT_NAMES)
                 for i in range(8):
-                    for j in range(4): ax.text(j,i,f"{rel[j,i]:.2f}",ha="center",va="center",fontsize=7)
+                    for j in range(4):
+                        ax.text(j,i,("--" if np.isnan(rel[j,i]) else f"{rel[j,i]:.2f}"),ha="center",va="center",fontsize=7)
                 ax.set_title(f"{arm}: emitted weights BY SECTOR (x START)")
                 fig.colorbar(im,ax=ax,fraction=0.03,label="log2(weight / START)")
                 fig.tight_layout()
