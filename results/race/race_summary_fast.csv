@@ -1,0 +1,5 @@
+arm,laps,passes,clean_frac,contact_frac,composite
+const,4.271,1.75,0.542,0.0,2.292
+fixed,5.951,2.333,0.792,0.0,3.125
+ltc,5.436,2.0,0.875,0.042,2.792
+mlp,5.563,2.0,0.958,0.0,2.958

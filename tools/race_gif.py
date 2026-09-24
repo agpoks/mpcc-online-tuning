@@ -145,16 +145,42 @@ def animate(d, arm, kind, out, stride=4, fps=20):
     print(f"saved {out}  ({len(idx)} frames, passes={d['PASS'][-1]}, contact={d['CONTACT'][-1]})")
 
 
+def from_traj(path, kind):
+    """Build the animate() dict from a race_mode --dump-traj npz -- NO acados re-drive
+    (reap-proof). The dump has <kind>_EX/EY/EV/OX/OY/GAP/PASS; CONTACT is reconstructed
+    from the body-to-body distance (sticky, as in the live drive)."""
+    z = np.load(path); k = kind
+    if f"{k}_OX" not in z.files:
+        raise SystemExit(f"kind {k} has no opponent arrays in {path} "
+                         f"(have {sorted(set(f.split('_')[0] for f in z.files))})")
+    EX, EY = np.asarray(z[f"{k}_EX"]), np.asarray(z[f"{k}_EY"])
+    OX, OY = np.asarray(z[f"{k}_OX"]), np.asarray(z[f"{k}_OY"])
+    cg = np.hypot(EX - OX, EY - OY) < CONTACT_R
+    return dict(EX=EX, EY=EY, EV=np.asarray(z[f"{k}_EV"]), OX=OX, OY=OY,
+                GAP=list(z[f"{k}_GAP"]), PASS=list(z[f"{k}_PASS"]),
+                CONTACT=list(np.maximum.accumulate(cg)), rad=KEEPOUT_R, track=Track.icra_t2_smooth())
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", default="const"); ap.add_argument("--kind", default="slower")
     ap.add_argument("--seed", type=int, default=0); ap.add_argument("--steps", type=int, default=900)
     ap.add_argument("--ego-pace", type=float, default=1.35)
+    ap.add_argument("--stride", type=int, default=4); ap.add_argument("--fps", type=int, default=20)
+    ap.add_argument("--traj", default=None,
+                    help="a results/race/traj/traj_<arm>_<seed>.npz saved by race_mode "
+                    "--dump-traj: animate from it (no acados re-drive)")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
+    if a.traj:
+        stem = Path(a.traj).stem
+        if stem.startswith("traj_"):
+            a.arm = stem.split("_")[1]
+        d = from_traj(a.traj, a.kind)
+    else:
+        d = drive(a.arm, a.kind, a.seed, a.steps, a.ego_pace)
     out = a.out or str(ROOT / "results/race/gif" / f"{a.arm}_{a.kind}_s{a.seed}.gif")
-    d = drive(a.arm, a.kind, a.seed, a.steps, a.ego_pace)
-    animate(d, a.arm, a.kind, out)
+    animate(d, a.arm, a.kind, out, stride=a.stride, fps=a.fps)
 
 
 if __name__ == "__main__":

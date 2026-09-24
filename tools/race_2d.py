@@ -33,6 +33,11 @@ def main(argv=None):
     a = ap.parse_args(argv)
     out = a.out or str(ROOT / "results/race/paper" / f"{a.arm}_{a.kind}_2d.pdf")
     if a.traj:
+        # the traj file name is traj_<arm>_<seed>.npz -- take the arm label from it so the
+        # figure title/label matches the data (otherwise it defaults to --arm's "ltc").
+        stem = Path(a.traj).stem
+        if stem.startswith("traj_"):
+            a.arm = stem.split("_")[1]
         z = np.load(a.traj); k = a.kind
         if f"{k}_EX" not in z.files:
             raise SystemExit(f"kind {k} not in {a.traj} (have {sorted(set(f.split('_')[0] for f in z.files))})")
