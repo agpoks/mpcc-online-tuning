@@ -149,26 +149,31 @@ class RacelineOpponent:
         return float(min(self.pace, (self.a_lat * self.mu / max(kap, 1e-3)) ** 0.5))
 
     def step(self, dt: float, ego=None) -> None:
-        v = self._vlimit(self.s); self.speed = v
-        self.s = (self.s + v * float(dt)) % self.track.length
-        # MUTUAL avoidance: when the ego is close (ahead OR behind), yield to the side
-        # AWAY from where the ego is running, so the two cars separate laterally instead
-        # of fighting for the raceline. This makes the pass fair for BOTH: the ego can go
-        # around a slower/equal car, and a faster opponent gets room to come by.
+        v = self._vlimit(self.s)
+        # MUTUAL avoidance, done REALISTICALLY: when the ego is close the opponent eases to
+        # ONE side by a modest CLEARANCE (not slamming into the wall), with hysteresis so it
+        # does not flap between sides, a limited lateral RATE, and -- crucially -- a GRIP COST:
+        # moving sideways uses tyre grip that is then unavailable to go forward, so a lateral
+        # manoeuvre SLOWS the car (a real car sliding across the track loses speed).
+        CLEAR = 0.45                                  # how far to ease aside [m] (not to the wall)
+        LAT_RATE = 0.8                                # max lateral speed [m/s] (grip-limited)
         tgt = self.offset0
         if ego is not None:
             ex, ey, _ = ego
             es = self.track.project(float(ex), float(ey))
             d = (es - self.s) % self.track.length
             gap = d - self.track.length if d > self.track.length / 2 else d
-            if abs(gap) < 3.5:                                   # ego is nearby -> give room
+            if abs(gap) < 3.5:
                 ego_lat = float(self.track.lateral(float(ex), float(ey)))
                 wl, wr = self.track.width(self.track.wrap(self.s))
-                if ego_lat >= 0.0:                              # ego on +normal side -> go -normal
-                    tgt = -(float(wl) - self.radius - 0.05)
-                else:                                          # ego on -normal side -> go +normal
-                    tgt = (float(wr) - self.radius - 0.05)
-        self.offset += float(np.clip(tgt - self.offset, -2.0 * dt, 2.0 * dt))
+                side = -1.0 if ego_lat >= 0.10 else (1.0 if ego_lat <= -0.10 else np.sign(self.offset) or 1.0)
+                room = (float(wr) if side > 0 else float(wl)) - self.radius - 0.05
+                tgt = side * min(CLEAR, max(room, 0.0))
+        step_lat = float(np.clip(tgt - self.offset, -LAT_RATE * dt, LAT_RATE * dt))
+        self.offset += step_lat
+        lat_speed = abs(step_lat) / max(dt, 1e-3)
+        self.speed = float(max(0.0, v * (1.0 - 0.4 * lat_speed / max(v, 0.3))))   # grip cost of moving sideways
+        self.s = (self.s + self.speed * float(dt)) % self.track.length
 
     def pose(self) -> np.ndarray:
         s = self.s % self.track.length

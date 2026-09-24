@@ -112,10 +112,11 @@ def measure_pace(m, track, th0, steps):
 # relative-pace classes: opponent speed as a fraction of the ego's solo pace.
 # static=parked; slower=catchable; equal=expensive pass; faster=cannot catch.
 PACE = {"static": 0.0, "slower": 0.55, "equal": 0.90, "faster": 1.20}
-# For the FAIR (grip-limited) opponent, pace is a STRAIGHT-LINE target: because it slows
-# for corners like a real car, the straight-line target must be higher than the dumb
-# constant speed to give a comparable lap pace, so the fractions are larger.
-FAIR_PACE = {"static": 0.0, "slower": 0.90, "equal": 1.30, "faster": 1.80}
+# For the FAIR (grip-limited) opponent, pace is a STRAIGHT-LINE target; it slows for corners
+# AND pays a grip cost for lateral moves, so the realised lap pace is well below the target.
+# Recalibrated DOWN (was 0.9/1.3/1.8, which made "faster" ~1.8x the ego -> uncatchable): now
+# slower is genuinely slower, equal ~matched, faster only a little quicker so it is catchable.
+FAIR_PACE = {"static": 0.0, "slower": 0.80, "equal": 1.10, "faster": 1.35}
 PACE_KINDS = ("static", "slower", "equal", "faster")
 
 # Pace-DEPENDENT reward, per the intended behaviour for each opponent type:
@@ -149,6 +150,7 @@ SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-en
 ALPHA_R_REF = 0.111     # rad -- 0.75x the rear-tyre saturation peak (0.148)
 BETA_REF = 0.10         # rad -- soft body-sideslip / drift limit
 W_SLIP = 8.0            # weight of the slip risk penalty
+W_SPEED = 0.6           # reward for SPEED (less time per metre) -> pushes toward the limit
 LR_VEH = 0.1515         # CoG->rear axle [m], for the rear slip angle
 CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}
 
@@ -166,11 +168,12 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
     if contact:
         return float(r) - 15.0
     x = float(r)
+    x += W_SPEED * float(v_ego)                     # go FASTER (reduce time per metre)
     if just_passed:
         x += PASS_BONUS.get(kind, 7.0)
     if kind in ("static", "slower", "equal"):
-        if 0.0 < gap < 4.0 and v_ego > v_opp + 0.02:
-            x += 0.3 * float(v_ego - v_opp)        # commit to a passable overtake
+        if 0.0 < gap < 6.0 and v_ego > v_opp - 0.1:
+            x += 0.5 * (6.0 - gap)                 # reward CLOSING on a passable car (get closer)
         if kind == "equal" and -1.0 < gap < 3.0:
             x += 0.2                                # hold a good overtaking position
     elif kind == "faster":
@@ -219,7 +222,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         kind = PACE_KINDS[(seed + ep) % 4]
         v_opp = (FAIR_PACE if fair_opp else PACE)[kind] * ego_pace
         s0 = (seed % 4) * track.length / 4.0
-        v0 = 1.0 + 0.1 * (seed % 3)
+        v0 = 1.3 + 0.1 * (seed % 3)          # start near the ego's own pace, not crawling
         gap0 = 3.0 + 1.5 * (ep % 3)          # opponent starts a few m ahead
         if fair_opp:
             opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp,
