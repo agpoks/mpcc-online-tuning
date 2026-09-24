@@ -208,12 +208,19 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     if arm in ("ltc", "mlp"):
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, n_hidden, seed=seed)
         pol = WeightPolicy(cell, th0, lo, hi, seed=seed)
-        # prior 0.2 -> 0.3: the weak trust region let the tuner collapse to the
-        # crash-prone max-overtake corner (loose q_c, high k_v) over 5 laps. A stronger
-        # pull to START keeps it stable; the safety-first reward (contact -15, bounded
-        # catch-up) supplies the behaviour without needing the unstable corner.
+        # THE fix for "we get stuck on the values and don't explore more": the old call set
+        # explore=0.06 (CONTROL noise on steering/accel only) but theta_explore=0 and entropy=0,
+        # so the WEIGHTS were emitted deterministically and, once the tanh saturated at the box
+        # edge, the policy gradient (1-tanh^2 z) vanished and it was stuck. Now:
+        #  - theta_explore=0.15 : Gaussian noise ON THE WEIGHTS each tick -> actually try
+        #    different weight combinations (incl. higher k_v = faster) and learn from them;
+        #  - entropy=0.01 : anti-saturation bonus that pushes theta OFF a saturated bound so it
+        #    can settle interior instead of pinning to the corner.
+        # theta_prior lowered 0.3 -> 0.15 so the trust region does not fight the exploration.
+        # (frozen eval turns exploration off, so the banked net stays deterministic.)
         tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0,
-                            seed=seed, trust_region=0.01, theta_prior=0.3)
+                            seed=seed, trust_region=0.01, theta_prior=0.15,
+                            theta_explore=0.15, entropy=0.01)
 
     rng = np.random.default_rng(seed)
     rows = []
