@@ -99,27 +99,45 @@ def animate(d, arm, kind, out, stride=4, fps=20):
     ax.imshow(im, cmap="gray", extent=[ox, ox + W * res, oy, oy + H * res], origin="upper", zorder=0)
     ax.plot(L[:, 0], L[:, 1], color="0.5", lw=0.8, zorder=1); ax.plot(Rr[:, 0], Rr[:, 1], color="0.5", lw=0.8, zorder=1)
     vmin, vmax = float(EV.min()), float(EV.max() + 1e-6)
-    trail = LineCollection([], cmap="viridis", zorder=3, lw=3); trail.set_clim(vmin, vmax); ax.add_collection(trail)
+    from matplotlib import colormaps
+    _vir = colormaps["viridis"]
+    WIN = 90                                   # fading-trail window (frames of history shown)
+    ego_trail = LineCollection([], zorder=3, lw=3.2); ax.add_collection(ego_trail)     # ego, speed-coloured + fade
+    opp_trail = LineCollection([], zorder=3, lw=3.2); ax.add_collection(opp_trail)     # opponent, red + fade
     ego_dot, = ax.plot([], [], "o", color="white", mec="k", ms=11, zorder=5)
     opp_dot, = ax.plot([], [], "s", color="tab:red", mec="k", ms=11, zorder=5)
     circ = plt.Circle((0, 0), d["rad"], fill=False, ec="tab:red", ls="--", lw=1.3, zorder=4); ax.add_patch(circ)
     hud = ax.text(0.02, 0.98, "", transform=ax.transAxes, va="top", ha="left", fontsize=11,
                   family="monospace", bbox=dict(boxstyle="round", fc="white", alpha=0.85), zorder=6)
-    cb = fig.colorbar(trail, ax=ax, fraction=0.03, pad=0.02); cb.set_label("ego speed [m/s]")
+    import matplotlib as _mpl
+    _sm = _mpl.cm.ScalarMappable(cmap=_vir, norm=_mpl.colors.Normalize(vmin, vmax))
+    cb = fig.colorbar(_sm, ax=ax, fraction=0.03, pad=0.02); cb.set_label("ego speed [m/s]")
     ax.set_aspect("equal"); ax.axis("off")
     ax.set_title(f"race-mode: {arm} vs {kind} opponent")
+    OXa = np.asarray(d["OX"]).ravel(); OYa = np.asarray(d["OY"]).ravel()
 
     def frame(k):
         j = idx[k]
-        pts = np.column_stack([EX[:j + 1], EY[:j + 1]])
-        if len(pts) > 1:
-            seg = np.concatenate([pts[:-1, None, :], pts[1:, None, :]], axis=1)
-            trail.set_segments(seg); trail.set_array(EV[:j])
-        ego_dot.set_data([EX[j]], [EY[j]]); opp_dot.set_data([d["OX"][j]], [d["OY"][j]])
-        circ.center = (d["OX"][j], d["OY"][j])
+        lo = max(0, j - WIN)
+        # EGO fading trail: recent path, speed-coloured, alpha ramps up to the car head
+        ep = np.column_stack([EX[lo:j + 1], EY[lo:j + 1]])
+        if len(ep) > 1:
+            eseg = np.concatenate([ep[:-1, None, :], ep[1:, None, :]], axis=1)
+            a = np.linspace(0.04, 1.0, len(eseg))
+            sp = np.clip((EV[lo:lo + len(eseg)] - vmin) / (vmax - vmin), 0, 1)
+            ec = _vir(sp); ec[:, 3] = a
+            ego_trail.set_segments(eseg); ego_trail.set_color(ec)
+        # OPPONENT fading trail: red, same fade
+        op = np.column_stack([OXa[lo:j + 1], OYa[lo:j + 1]])
+        if len(op) > 1:
+            oseg = np.concatenate([op[:-1, None, :], op[1:, None, :]], axis=1)
+            oc = np.tile([0.85, 0.16, 0.16, 1.0], (len(oseg), 1)); oc[:, 3] = np.linspace(0.04, 0.85, len(oseg))
+            opp_trail.set_segments(oseg); opp_trail.set_color(oc)
+        ego_dot.set_data([EX[j]], [EY[j]]); opp_dot.set_data([OXa[j]], [OYa[j]])
+        circ.center = (OXa[j], OYa[j])
         st = "CONTACT" if d["CONTACT"][j] else ("AHEAD" if d["GAP"][j] < 0 else "behind")
         hud.set_text(f"{kind:<7} pace\ngap {d['GAP'][j]:+5.1f} m\npasses {d['PASS'][j]}\n{st}")
-        return trail, ego_dot, opp_dot, circ, hud
+        return ego_trail, opp_trail, ego_dot, opp_dot, circ, hud
 
     an = FuncAnimation(fig, frame, frames=len(idx), interval=1000 / fps, blit=False)
     Path(out).parent.mkdir(parents=True, exist_ok=True)

@@ -61,10 +61,20 @@ def main(argv=None):
     fig, ax = plt.subplots(figsize=(11, 9.5))
     ax.imshow(im, cmap="gray", extent=[ox, ox + W * res, oy, oy + H * res], origin="upper", zorder=0)
     ax.plot(L[:, 0], L[:, 1], color="0.5", lw=0.8, zorder=1); ax.plot(Rr[:, 0], Rr[:, 1], color="0.5", lw=0.8, zorder=1)
-    ax.plot(OX, OY, color="tab:red", lw=1.6, ls="--", zorder=2, label="opponent path")
+    import matplotlib as _mpl
+    from matplotlib import colormaps as _cmaps
+    # FADING driven paths: alpha ramps from faint (start) to bold (end) so the direction and
+    # recency of both cars' trajectories read at a glance.
+    opts = np.column_stack([OX, OY]); oseg = np.concatenate([opts[:-1, None, :], opts[1:, None, :]], axis=1)
+    oc = np.tile([0.85, 0.16, 0.16, 1.0], (len(oseg), 1)); oc[:, 3] = np.linspace(0.12, 0.95, len(oseg))
+    olc = LineCollection(oseg, colors=oc, lw=1.8, ls="--", zorder=2); ax.add_collection(olc)
+    ax.plot([], [], color="tab:red", ls="--", lw=1.8, label="opponent path")
     pts = np.column_stack([EX, EY]); seg = np.concatenate([pts[:-1, None, :], pts[1:, None, :]], axis=1)
-    lc = LineCollection(seg, cmap="viridis", lw=2.6, zorder=3); lc.set_array(EV[:-1]); ax.add_collection(lc)
-    cb = fig.colorbar(lc, ax=ax, fraction=0.03, pad=0.02); cb.set_label("ego speed [m/s]")
+    vmin, vmax = float(EV.min()), float(EV.max() + 1e-6)
+    ec = _cmaps["viridis"](np.clip((EV[:-1] - vmin) / (vmax - vmin), 0, 1)); ec[:, 3] = np.linspace(0.12, 1.0, len(seg))
+    lc = LineCollection(seg, colors=ec, lw=2.6, zorder=3); ax.add_collection(lc)
+    _sm = _mpl.cm.ScalarMappable(cmap="viridis", norm=_mpl.colors.Normalize(vmin, vmax))
+    cb = fig.colorbar(_sm, ax=ax, fraction=0.03, pad=0.02); cb.set_label("ego speed [m/s]")
     # snapshots of both cars + their separation link
     for j in np.linspace(0, len(EX) - 1, a.snapshots).astype(int):
         ax.plot([EX[j], OX[j]], [EY[j], OY[j]], color="k", lw=0.7, alpha=0.5, zorder=4)
