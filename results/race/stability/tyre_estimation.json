@@ -1,0 +1,17 @@
+{
+  "rear": {
+    "true": 0.1474,
+    "ekf": 0.1776,
+    "gp": 0.0833,
+    "gp_lowerbound": 0.0798,
+    "drove_to": 0.0824
+  },
+  "front": {
+    "true": 0.1474,
+    "ekf": 0.1635,
+    "gp": 0.1202,
+    "gp_lowerbound": 0.1202,
+    "drove_to": 0.3399
+  },
+  "note": "FRONT reaches its limit in cornering -> EKF & GP recover the peak. REAR does not (this car is understeer, the front saturates first) -> the rear peak is never sampled, so EKF EXTRAPOLATES and the GP stays conservative with a wide band -- exactly the one-pull-test limitation: you can only estimate a limit you actually approach. Set alpha_ref from the GP lower bound and RELAX it as the driven slip range grows."
+}
