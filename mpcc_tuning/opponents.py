@@ -151,18 +151,24 @@ class RacelineOpponent:
     def step(self, dt: float, ego=None) -> None:
         v = self._vlimit(self.s); self.speed = v
         self.s = (self.s + v * float(dt)) % self.track.length
-        # reactive overtake: ego just ahead AND we are faster -> move to the OPEN side
+        # MUTUAL avoidance: when the ego is close (ahead OR behind), yield to the side
+        # AWAY from where the ego is running, so the two cars separate laterally instead
+        # of fighting for the raceline. This makes the pass fair for BOTH: the ego can go
+        # around a slower/equal car, and a faster opponent gets room to come by.
         tgt = self.offset0
         if ego is not None:
-            ex, ey, ev = ego
+            ex, ey, _ = ego
             es = self.track.project(float(ex), float(ey))
             d = (es - self.s) % self.track.length
-            gap = d - self.track.length if d > self.track.length / 2 else d   # +ve: ego ahead
-            if 0.2 < gap < 3.0 and v > float(ev) + 0.05:
+            gap = d - self.track.length if d > self.track.length / 2 else d
+            if abs(gap) < 3.5:                                   # ego is nearby -> give room
+                ego_lat = float(self.track.lateral(float(ex), float(ey)))
                 wl, wr = self.track.width(self.track.wrap(self.s))
-                tgt = ((float(wr) - self.radius - 0.05) if wr > wl
-                       else -(float(wl) - self.radius - 0.05))
-        self.offset += float(np.clip(tgt - self.offset, -1.5 * dt, 1.5 * dt))
+                if ego_lat >= 0.0:                              # ego on +normal side -> go -normal
+                    tgt = -(float(wl) - self.radius - 0.05)
+                else:                                          # ego on -normal side -> go +normal
+                    tgt = (float(wr) - self.radius - 0.05)
+        self.offset += float(np.clip(tgt - self.offset, -2.0 * dt, 2.0 * dt))
 
     def pose(self) -> np.ndarray:
         s = self.s % self.track.length

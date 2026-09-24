@@ -138,27 +138,30 @@ CONTACT_R = 0.24
 
 
 SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-end)
-# RISK-AWARE term: a CERTAIN, GRADED per-tick cost of running near a limit, so the reward
-# optimum is INTERIOR (moderate aggression) instead of the box corner. This is the fix for
-# "the weights just run to the box edge and stop evolving": with only an occasional crash
-# penalty, aggression pays in expectation and the policy saturates the box wall; a continuous
-# margin penalty makes aggression cost something EVERY step, so the 8 weights settle at
-# interior, situation-dependent values (tight sector / near opponent -> back off; open -> push).
-RISK_WALL = 0.20    # start penalising when the wall clearance drops below this (m)
-RISK_OPP = 0.30     # start penalising when the body gap to the opponent drops below this (m)
-W_RISK = 4.0        # weight of the graded risk penalty
+# SLIP-BASED STABILITY RISK, calibrated offline from the real fitted tyre + geometry
+# (tools/handling_analysis.py -> results/race/stability/stability_limits.json): the RC car is
+# understeer-stable, so the binding limit is TYRE SATURATION at rear slip alpha_r ~ 0.148 rad
+# (8.5 deg). Penalise rear slip beyond 0.75x the peak and body sideslip beyond a soft drift
+# limit, EACH TICK -> a certain, graded, physically-grounded cost of running near the limit, so
+# the reward optimum is interior. The reference is scaled by the OPPONENT CLASS: vs a faster car
+# spend the full grip margin, vs a slower one keep more -> the risk BUDGET differs by opponent,
+# giving the tuner a reason to learn different weights per class.
+ALPHA_R_REF = 0.111     # rad -- 0.75x the rear-tyre saturation peak (0.148)
+BETA_REF = 0.10         # rad -- soft body-sideslip / drift limit
+W_SLIP = 8.0            # weight of the slip risk penalty
+LR_VEH = 0.1515         # CoG->rear axle [m], for the rear slip angle
+CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}
 
 
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
-                wall_margin=9.0, opp_gap=9.0):
-    """Safe-first behaviour reward + a continuous RISK term (interior optimum).
+                alpha_r=0.0, beta=0.0):
+    """Safe-first behaviour reward + a calibrated, class-scaled SLIP stability risk.
 
     - Contact strongly dominates (-15).
     - static/slower/equal: clean-pass bonus + a bounded closing reward.
     - faster: no pass bonus; catch up from far but hold SAFE_FOLLOW (follow, don't rear-end).
-    - RISK: -W_RISK * (how far inside RISK_WALL the wall clearance is + how far inside RISK_OPP
-      the opponent body gap is). Graded and paid every tick, so pushing the limit has a certain
-      cost -> the weights settle interior instead of pinning to the box edge.
+    - SLIP RISK: -W_SLIP*(max(0,|alpha_r|-scale*ALPHA_R_REF) + 0.5*max(0,|beta|-BETA_REF)) where
+      scale = CLASS_SCALE[kind]. Grounded in the tyre curve, paid every tick, budget by class.
     """
     if contact:
         return float(r) - 15.0
@@ -175,8 +178,9 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
             x += 0.3 * float(min(v_ego, v_opp + 0.5))   # close the gap from far (bounded)
         elif 0.0 < gap <= SAFE_FOLLOW:
             x -= 2.0 * float(SAFE_FOLLOW - gap)         # too close -> back off, follow safely
-    x -= W_RISK * (max(0.0, RISK_WALL - float(wall_margin))
-                   + max(0.0, RISK_OPP - float(opp_gap)))
+    scale = CLASS_SCALE.get(kind, 0.85)
+    x -= W_SLIP * (max(0.0, abs(float(alpha_r)) - scale * ALPHA_R_REF)
+                   + 0.5 * max(0.0, abs(float(beta)) - BETA_REF))
     return x
 
 
@@ -260,10 +264,10 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             s_ego = track.project(ex, ey)
             g = signed_gap(track, s_ego, opp.s)
             sec = int(track.sector(track.wrap(s_ego)))
-            # margins for the risk-aware reward: clearance to the wall and body gap to opponent
-            _lat = float(track.lateral(ex, ey)); _wl, _wr = track.width(track.wrap(s_ego))
-            wall_margin = min(float(_wr) - _lat, float(_wl) + _lat)
-            opp_gap = dist - CONTACT_R
+            # slip state for the calibrated stability risk: rear slip angle + body sideslip
+            _v = float(P._x[3]); _r = float(P._x[5]); _beta = float(P._x[6]) if P._x.size > 6 else 0.0
+            _vx = _v * np.cos(_beta); _vy = _v * np.sin(_beta)
+            _alpha_r = -np.arctan2(_vy - LR_VEH * _r, _vx) if _vx > 0.05 else 0.0
             sec_theta[sec] += np.exp(np.asarray(theta, float)); sec_theta_n[sec] += 1
             # contact = the two bodies actually touch (physical distance, not the keep-out)
             if dist < CONTACT_R and not contact:
@@ -288,7 +292,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             # `seen` was already set -- so the tuner never saw a pass reward before.
             r_shaped = race_reward(kind, r, just_passed, contact,
                                    float(P._x[3]), vo, g,
-                                   wall_margin=wall_margin, opp_gap=opp_gap)
+                                   alpha_r=_alpha_r, beta=_beta)
             if arm in ("ltc", "mlp"):
                 out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
                 if out[0] is None:
