@@ -136,6 +136,13 @@ PASS_BONUS = {"static": 7.0, "slower": 7.0, "equal": 10.0, "faster": 0.0}
 # body-to-body touch distance used only for detecting an actual collision.
 KEEPOUT_R = 0.36
 CONTACT_R = 0.24
+# The dynamic-MPCC speed comes from the v_ref reference profile (curvature-limited at a_lat)
+# scaled by k_v. The default a_lat=6.0 is only 55% of the real tyre grip (mu*g=10.8), so the car
+# was capped well below the limit and no weight could make it faster. Raise the reference profile
+# toward the real grip so the car HAS headroom to go quicker; the calibrated slip risk (ALPHA_R_REF,
+# from the handling/bifurcation analysis) is the safety bound that keeps it off the tyre-saturation
+# edge, and the class-dependent speed reward (W_SPEED_CLASS) decides how much of it to use per opponent.
+A_LAT_RACE = 9.0        # ~83% of the real tyre grip (was 6.0 = 55%)
 
 
 SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-end)
@@ -207,6 +214,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     th0 = np.asarray(st.theta(), float)
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, discrete=True, max_obstacles=1,
+                   a_lat_sectors=[A_LAT_RACE] * 4,   # raise the reference speed toward real grip
                    name=f"race_{arm}_{seed}")
     lo, hi = (B.adaptation_box("icra_t2_smooth", factor) if box == "adapt"
               else (THETA_LO, THETA_HI))
@@ -390,7 +398,8 @@ def main(argv=None):
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth")
     th0 = np.asarray(st.theta(), float)
     mp = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
-                    q_vref=st.q_vref, discrete=True, max_obstacles=1, name="race_pace")
+                    q_vref=st.q_vref, discrete=True, max_obstacles=1,
+                    a_lat_sectors=[A_LAT_RACE] * 4, name="race_pace")
     ego_pace = measure_pace(mp, track, th0, a.steps)
     _pace = FAIR_PACE if a.fair_opp else PACE
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; {'FAIR ' if a.fair_opp else ''}opponents "
