@@ -150,8 +150,15 @@ SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-en
 ALPHA_R_REF = 0.111     # rad -- 0.75x the rear-tyre saturation peak (0.148)
 BETA_REF = 0.10         # rad -- soft body-sideslip / drift limit
 W_SLIP = 8.0            # weight of the slip risk penalty
-W_SPEED = 0.6           # reward for SPEED (less time per metre) -> pushes toward the limit
 LR_VEH = 0.1515         # CoG->rear axle [m], for the rear slip angle
+# CLASS-DEPENDENT speed/risk trade-off, keyed on the tracked opponent class:
+#  - W_SPEED_CLASS: how hard to reward SPEED (less time per metre). Push HARD vs a faster/equal
+#    car (must go to the limit to keep up / make the pass), gently vs a slower one (no need).
+#    This pushes q_v UP and the damping weights r_a/r_dv DOWN as well as k_v -- all the knobs
+#    that make the car quicker -- so the OPTIMAL weights differ by opponent.
+#  - CLASS_SCALE: how much of the calibrated slip budget to spend -- looser vs faster (spend the
+#    grip margin), tighter vs slower (keep it). The stability analysis still BOUNDS the push.
+W_SPEED_CLASS = {"static": 0.3, "slower": 0.3, "equal": 0.7, "faster": 1.0}
 CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}
 
 
@@ -168,7 +175,7 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
     if contact:
         return float(r) - 15.0
     x = float(r)
-    x += W_SPEED * float(v_ego)                     # go FASTER (reduce time per metre)
+    x += W_SPEED_CLASS.get(kind, 0.5) * float(v_ego)   # go FASTER, harder vs faster/equal opponents
     if just_passed:
         x += PASS_BONUS.get(kind, 7.0)
     if kind in ("static", "slower", "equal"):
