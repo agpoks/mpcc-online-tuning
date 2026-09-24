@@ -1,0 +1,13 @@
+group,sector,attempts,passes,contacts,contact_per_pass
+all,0,2763,60,5,0.083
+all,1,0,0,0,0.0
+all,2,2027,51,10,0.196
+all,3,2371,48,9,0.188
+learned,0,943,20,5,0.25
+learned,1,0,0,0,0.0
+learned,2,537,21,5,0.238
+learned,3,714,20,4,0.2
+rule,0,879,21,0,0.0
+rule,1,0,0,0,0.0
+rule,2,633,14,3,0.214
+rule,3,813,15,4,0.267
