@@ -26,7 +26,8 @@ from mpcc_tuning import baselines as B
 from mpcc_tuning.acados_mpcc import AcadosMPCC
 from mpcc_tuning.plant_scuderia import ScuderiaPlant
 from mpcc_tuning.opponents import ObstacleTracker, Opponent
-from experiments.race_mode import race_features, PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R, CONTACT_R
+from experiments.race_mode import race_features, PACE, FAIR_PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R, CONTACT_R
+from mpcc_tuning.opponents import RacelineOpponent
 
 
 def drive(arm, kind, seed, steps, ego_pace):
@@ -42,9 +43,9 @@ def drive(arm, kind, seed, steps, ego_pace):
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, int(d["n_hidden"]), seed=seed)
         pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed)
         pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.reset()
-    v_opp = PACE[kind] * ego_pace
+    v_opp = FAIR_PACE[kind] * ego_pace
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.0 + 0.1 * (seed % 3)
-    opp = Opponent(track, s0=(s0 + 3.0) % track.length, speed=v_opp, offset=0.0, radius=KEEPOUT_R)
+    opp = RacelineOpponent(track, s0=(s0 + 3.0) % track.length, pace=v_opp, offset=0.0, radius=KEEPOUT_R, a_lat=2.5)
     tracker = ObstacleTracker(dt=0.05)
     P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
     P.reset(s0=s0, v0=v0); m.reset(); opp.reset()
@@ -61,12 +62,12 @@ def drive(arm, kind, seed, steps, ego_pace):
     EX, EY, EV, OX, OY, GAP, PASS, CONTACT = [], [], [], [], [], [], [], []
     passes = 0; contact = False; seen = False
     for _ in range(steps):
-        s5n, r, off, tr = P.step(u); opp.step(0.05)
-        ex, ey = float(P._x[0]), float(P._x[1]); ox, oy, rad = opp.keepout()
+        s5n, r, off, tr = P.step(u)
+        ex, ey = float(P._x[0]), float(P._x[1]); opp.step(0.05, ego=(ex, ey, float(P._x[3]))); ox, oy, rad = opp.keepout()
         g = signed_gap(track, track.project(ex, ey), opp.s)
         if float(np.hypot(ex - ox, ey - oy)) < CONTACT_R:
             contact = True
-        if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > v_opp:
+        if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > float(getattr(opp,'speed',v_opp)):
             passes += 1; seen = True
         elif g > 0.5:
             seen = False
