@@ -170,7 +170,7 @@ CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}
 
 
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
-                alpha_r=0.0, beta=0.0):
+                alpha_r=0.0, beta=0.0, return_parts=False):
     """Safe-first behaviour reward + a calibrated, class-scaled SLIP stability risk.
 
     - Contact strongly dominates (-15).
@@ -178,27 +178,35 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
     - faster: no pass bonus; catch up from far but hold SAFE_FOLLOW (follow, don't rear-end).
     - SLIP RISK: -W_SLIP*(max(0,|alpha_r|-scale*ALPHA_R_REF) + 0.5*max(0,|beta|-BETA_REF)) where
       scale = CLASS_SCALE[kind]. Grounded in the tyre curve, paid every tick, budget by class.
+
+    With ``return_parts=True`` also returns a dict of the additive components (base/speed/pass/
+    closing/slip/contact), so a diagnostic can see WHICH term -- if any -- actually differs by
+    class along the closed-loop trajectory (e.g. whether the slip risk ever activates at all).
     """
     if contact:
-        return float(r) - 15.0
-    x = float(r)
-    x += W_SPEED_CLASS.get(kind, 0.5) * float(v_ego)   # go FASTER, harder vs faster/equal opponents
-    if just_passed:
-        x += PASS_BONUS.get(kind, 7.0)
+        x = float(r) - 15.0
+        return (x, dict(base=float(r), speed=0.0, pass_b=0.0, closing=0.0, slip=0.0,
+                        contact=-15.0)) if return_parts else x
+    base = float(r)
+    speed = W_SPEED_CLASS.get(kind, 0.5) * float(v_ego)   # go FASTER, harder vs faster/equal opp
+    pass_b = PASS_BONUS.get(kind, 7.0) if just_passed else 0.0
+    closing = 0.0
     if kind in ("static", "slower", "equal"):
         if 0.0 < gap < 6.0 and v_ego > v_opp - 0.1:
-            x += 0.5 * (6.0 - gap)                 # reward CLOSING on a passable car (get closer)
+            closing += 0.5 * (6.0 - gap)               # reward CLOSING on a passable car
         if kind == "equal" and -1.0 < gap < 3.0:
-            x += 0.2                                # hold a good overtaking position
+            closing += 0.2                              # hold a good overtaking position
     elif kind == "faster":
         if gap > SAFE_FOLLOW:
-            x += 0.3 * float(min(v_ego, v_opp + 0.5))   # close the gap from far (bounded)
+            closing += 0.3 * float(min(v_ego, v_opp + 0.5))   # close the gap from far (bounded)
         elif 0.0 < gap <= SAFE_FOLLOW:
-            x -= 2.0 * float(SAFE_FOLLOW - gap)         # too close -> back off, follow safely
+            closing -= 2.0 * float(SAFE_FOLLOW - gap)         # too close -> back off, follow safely
     scale = CLASS_SCALE.get(kind, 0.85)
-    x -= W_SLIP * (max(0.0, abs(float(alpha_r)) - scale * ALPHA_R_REF)
-                   + 0.5 * max(0.0, abs(float(beta)) - BETA_REF))
-    return x
+    slip = -W_SLIP * (max(0.0, abs(float(alpha_r)) - scale * ALPHA_R_REF)
+                      + 0.5 * max(0.0, abs(float(beta)) - BETA_REF))
+    x = base + speed + pass_b + closing + slip
+    return (x, dict(base=base, speed=speed, pass_b=pass_b, closing=closing, slip=slip,
+                    contact=0.0)) if return_parts else x
 
 
 def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,

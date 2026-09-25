@@ -1,0 +1,12 @@
+{
+  "peaks": {
+    "k_v:slower": 0.3,
+    "k_v:equal": 0.6,
+    "k_v:faster": 0.75,
+    "q_c:slower": 0.5,
+    "q_c:equal": 2.0,
+    "q_c:faster": 2.0
+  },
+  "n_rows": 60,
+  "note": "If peaks[knob:slower]==peaks[knob:equal]==peaks[knob:faster] the reward's argmax does NOT move with class -> cause (A) reward, not learning."
+}
