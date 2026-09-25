@@ -168,9 +168,20 @@ LR_VEH = 0.1515         # CoG->rear axle [m], for the rear slip angle
 W_SPEED_CLASS = {"static": 0.3, "slower": 0.3, "equal": 0.7, "faster": 1.0}
 CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}
 
+# STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
+# NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
+# limit, so it has grip to spare. The 45-57% off-track is LATERAL corridor-departure under aggressive
+# weights, not corner over-speed. So we reward staying IN the corridor rather than slowing down --
+# and because the grip headroom is there, this should cut off-track WITHOUT costing pace/overtakes.
+# A graded near-edge penalty gives a gradient before it leaves; a terminal penalty makes actually
+# leaving cost the race (the return then prefers fast-AND-inside over fast-and-wide).
+EDGE_MARGIN = 0.20      # m: penalise within this distance of the corridor edge
+W_EDGE = 8.0            # penalty weight per metre inside the margin
+OFF_PENALTY = 15.0      # terminal cost of leaving the track (~= a contact)
+
 
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
-                alpha_r=0.0, beta=0.0, return_parts=False):
+                alpha_r=0.0, beta=0.0, off=False, edge_dist=None, return_parts=False):
     """Safe-first behaviour reward + a calibrated, class-scaled SLIP stability risk.
 
     - Contact strongly dominates (-15).
@@ -186,7 +197,7 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
     if contact:
         x = float(r) - 15.0
         return (x, dict(base=float(r), speed=0.0, pass_b=0.0, closing=0.0, slip=0.0,
-                        contact=-15.0)) if return_parts else x
+                        edge=0.0, off_pen=0.0, contact=-15.0)) if return_parts else x
     base = float(r)
     speed = W_SPEED_CLASS.get(kind, 0.5) * float(v_ego)   # go FASTER, harder vs faster/equal opp
     pass_b = PASS_BONUS.get(kind, 7.0) if just_passed else 0.0
@@ -204,9 +215,16 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
     scale = CLASS_SCALE.get(kind, 0.85)
     slip = -W_SLIP * (max(0.0, abs(float(alpha_r)) - scale * ALPHA_R_REF)
                       + 0.5 * max(0.0, abs(float(beta)) - BETA_REF))
-    x = base + speed + pass_b + closing + slip
+    # STAY-IN-THE-CORRIDOR: graded penalty within EDGE_MARGIN of the edge (a gradient before it
+    # leaves) + a terminal penalty for actually leaving. The car has grip to spare, so this trades
+    # nothing against pace -- it just stops the lateral wander out of the corridor.
+    edge = 0.0
+    if edge_dist is not None and float(edge_dist) < EDGE_MARGIN:
+        edge = -W_EDGE * (EDGE_MARGIN - float(edge_dist))
+    off_pen = -OFF_PENALTY if off else 0.0
+    x = base + speed + pass_b + closing + slip + edge + off_pen
     return (x, dict(base=base, speed=speed, pass_b=pass_b, closing=closing, slip=slip,
-                    contact=0.0)) if return_parts else x
+                    edge=edge, off_pen=off_pen, contact=0.0)) if return_parts else x
 
 
 def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
@@ -314,6 +332,12 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             s_ego = track.project(ex, ey)
             g = signed_gap(track, s_ego, opp.s)
             sec = int(track.sector(track.wrap(s_ego)))
+            # distance to the nearer corridor edge, for the STAY-IN shaping. Aligned to the PLANT's
+            # own off-track rule (plant_scuderia.py: off when lateral > wr-0.12 or -lateral > wl-0.12,
+            # a 0.12 m body margin per side), so edge_dist is EXACTLY the plant's signed clearance:
+            # >0 inside, <=0 at the boundary the plant flags off. Same lateral()/width() convention.
+            _lat = float(track.lateral(ex, ey)); _wl, _wr = track.width(track.wrap(s_ego))
+            edge_dist = min(float(_wr) - 0.12 - _lat, _lat + float(_wl) - 0.12)
             # slip state for the calibrated stability risk: rear slip angle + body sideslip
             _v = float(P._x[3]); _r = float(P._x[5]); _beta = float(P._x[6]) if P._x.size > 6 else 0.0
             v_sum += _v; v_max = max(v_max, _v); n_v += 1        # pace accumulation
@@ -343,7 +367,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             # `seen` was already set -- so the tuner never saw a pass reward before.
             r_shaped = race_reward(kind, r, just_passed, contact,
                                    float(P._x[3]), vo, g,
-                                   alpha_r=_alpha_r, beta=_beta)
+                                   alpha_r=_alpha_r, beta=_beta, off=off, edge_dist=edge_dist)
             if arm in ("ltc", "mlp"):
                 out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
                 if out[0] is None:
