@@ -230,7 +230,13 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     tuner = pol = None
     if arm in ("ltc", "mlp"):
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, n_hidden, seed=seed)
-        pol = WeightPolicy(cell, th0, lo, hi, seed=seed)
+        # CLASS-CONDITIONED RESIDUAL HEAD: theta = theta0 + span*tanh(G u) + Delta(class).
+        # The reward diagnostic (tools/reward_diagnostic.py) proved the reward's optimal weight
+        # DIFFERS by opponent class (k_v 0.30/0.60/0.75), but the saturated tanh readout collapsed
+        # every class to one corner. Delta(class) is a small per-class table the tuner learns
+        # directly (indexed by class), so it CAN emit different weights per class. Set each episode
+        # via tuner.set_class below.
+        pol = WeightPolicy(cell, th0, lo, hi, seed=seed, n_classes=len(PACE_KINDS))
         # THE fix for "we get stuck on the values and don't explore more": the old call set
         # explore=0.06 (CONTROL noise on steering/accel only) but theta_explore=0 and entropy=0,
         # so the WEIGHTS were emitted deterministically and, once the tanh saturated at the box
@@ -241,9 +247,18 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         #    can settle interior instead of pinning to the corner.
         # theta_prior lowered 0.3 -> 0.15 so the trust region does not fight the exploration.
         # (frozen eval turns exploration off, so the banked net stays deterministic.)
+        # RETURN critic, not MPCC. The class signal lives in the MEASURED return (the reward
+        # diagnostic showed the optimal weight differs by class), but the MPCC critic's gradient
+        # dJ*/dtheta points the SAME way for every class -- only its sign comes from reward -- so
+        # under it the class-residual head just drives every class to the same corner (measured:
+        # residuals saturated at -0.59 on all weights, class spread ~0). The return critic fits the
+        # actual return and moves theta via the theta-exploration that correlated with higher return
+        # FOR THIS CLASS, so different classes differentiate. See mpcc_tuning/ltc.py critic docs.
+        # alpha_delta / trust_region_delta give the low-dimensional per-class head its own budget.
         tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0,
                             seed=seed, trust_region=0.01, theta_prior=0.15,
-                            theta_explore=0.15, entropy=0.01)
+                            theta_explore=0.15, entropy=0.03, critic="return",
+                            alpha_delta=0.01, trust_region_delta=0.03)
 
     rng = np.random.default_rng(seed)
     rows = []
@@ -265,6 +280,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         s5 = P.reset(s0=s0, v0=v0); m.reset()
         if tuner is not None:
             tuner.reset()
+            tuner.set_class(PACE_KINDS.index(kind))   # index the class-residual head for this opponent
         opp.reset()
         tracker.update(opp.pose()[:2])
         m.set_obstacles([opp.keepout()])
@@ -352,7 +368,9 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         ndir = OUT / "nets"; ndir.mkdir(parents=True, exist_ok=True)
         np.savez(str(ndir / f"race_{arm}_{seed}.npz"), G=pol.G, cell_p=pol.cell.p,
                  th0=th0, n_hidden=pol.cell.n, arm=arm, seed=seed,
-                 lo=np.asarray(lo, float), hi=np.asarray(hi, float))
+                 lo=np.asarray(lo, float), hi=np.asarray(hi, float),
+                 D_class=(pol.D_class if pol.D_class is not None else np.zeros((0, 8))),
+                 delta_log=pol.delta_log)
     if dump_traj and traj:
         # per-opponent-kind trajectory (last episode of each kind) for the 2D paper plots,
         # so tools/race_2d.py can render WITHOUT re-driving (no acados).

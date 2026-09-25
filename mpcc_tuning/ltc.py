@@ -203,7 +203,8 @@ class WeightPolicy:
 
     def __init__(self, cell, theta0, lo, hi, out_scale: float = 0.5, seed: int = 0,
                  direct: bool = True,
-                 influence: str = "rflo", gauge_fix: bool = False):
+                 influence: str = "rflo", gauge_fix: bool = False,
+                 n_classes: int = 0, delta_log: float = 0.6):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
@@ -255,6 +256,26 @@ class WeightPolicy:
         self.gauge_fix = bool(gauge_fix)
         self._gauge0 = float(np.mean(self.theta0[list(self.COST_IDX)]))
         self.P = np.zeros_like(cell.p)      # dh/d(cell params)
+        # CLASS-CONDITIONED RESIDUAL HEAD.
+        #
+        # The measured failure (tools/reward_diagnostic.py): the reward's optimum
+        # weight DOES differ by opponent class (k_v 0.30/0.60/0.75 for
+        # slower/equal/faster), but the readout theta = theta0 + span*tanh(G u)
+        # collapses to ONE corner because, once tanh saturates, the class signal in
+        # the features can no longer move theta. So the situation-dependence the
+        # reward asks for cannot be expressed. This adds a small learned residual
+        # Delta(class) -- a (n_classes x 8) table indexed by the tracked class --
+        # that is ADDED after the squash: theta = theta0 + span*tanh(G u) +
+        # delta_log*tanh(D[class]). It is directly indexed, so different classes
+        # hold different weights even when G u is identical; delta_log bounds it
+        # (+-delta_log in log space, ~x1.8) and the sum is clipped back to the box.
+        # class is set per episode by the tuner (set_class); None -> no residual,
+        # so every existing caller is unchanged.
+        self.n_classes = int(n_classes)
+        self.delta_log = float(delta_log)
+        self.D_class = np.zeros((self.n_classes, len(self.theta0))) if self.n_classes > 0 else None
+        self.cls = None
+        self._last_dD = None
         self.reset()
 
     def reset(self):
@@ -339,6 +360,20 @@ class WeightPolicy:
             # policy other than the one that acted.
             self._sq = self._sq.copy()
             self._sq[idx] *= self._gauge_t
+        # CLASS-CONDITIONED RESIDUAL: theta += delta_log*tanh(D[cls]), clipped to
+        # the box. Where the clip bites, the total gradient is zero, so mask both
+        # the base squash (_sq) and the residual derivative (_dsq) by the in-box bit.
+        if self.D_class is not None and self.cls is not None:
+            td = np.tanh(self.D_class[self.cls])
+            self._dsq = self.delta_log * (1.0 - td ** 2)        # d(delta)/dD[cls]
+            self._cls_used = int(self.cls)
+            theta_un = theta + self.delta_log * td
+            theta = np.clip(theta_un, self.lo, self.hi)
+            inb = ((theta_un > self.lo) & (theta_un < self.hi)).astype(float)
+            self._sq = self._sq * inb
+            self._dsq = self._dsq * inb
+        else:
+            self._cls_used = None
         self._h = h
         return theta
 
@@ -356,6 +391,14 @@ class WeightPolicy:
         dG = np.outer(g, self._u)
         # only the recurrent part of the readout feeds back into the cell
         dcell = (g @ self.G[:, :self.cell.n])[:, None] * self.P
+        # class-residual gradient, STASHED so grads() keeps its 2-tuple contract
+        # for the four external callers: dQ/dD[cls] = dQ_dtheta * d(delta)/dD, only
+        # the active class's row is non-zero. The tuner reads self._last_dD.
+        if self.D_class is not None and self._cls_used is not None:
+            self._last_dD = np.zeros_like(self.D_class)
+            self._last_dD[self._cls_used] = np.asarray(dQ_dtheta, float) * self._dsq
+        else:
+            self._last_dD = None
         return dG, dcell
 
 
@@ -594,7 +637,9 @@ class PolicyTuner:
                  trust_region: float | None = None, theta_prior: float = 0.0,
                  theta_explore: float = 0.0, entropy: float = 0.0,
                  clock: str = "time", ds_ref: float = 0.10,
-                 critic: str = "mpcc", alpha_c: float = 1e-2):
+                 critic: str = "mpcc", alpha_c: float = 1e-2,
+                 alpha_delta: float | None = None,
+                 trust_region_delta: float | None = None):
         from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
         self.mpcc, self.pol = mpcc, policy
         self.gamma, self.lam, self.alpha = gamma, lam, alpha
@@ -731,20 +776,36 @@ class PolicyTuner:
         # there while the return collapses -- the same failure the global tuner
         # shows with an exact gradient.
         self.trust_region = trust_region
+        # The class-residual head gets its OWN learning rate and trust region,
+        # because it is low-dimensional (n_classes x 8), directly indexed, and each
+        # class is active only a fraction of the time -- so under G's shared, tiny
+        # budget it barely moves (measured: ~0.03 log spread after one episode per
+        # class, vs the ~0.9 the reward optimum wants). Defaulting to alpha /
+        # trust_region reproduces the coupled behaviour; race_mode sets them larger.
+        self.alpha_delta = float(alpha if alpha_delta is None else alpha_delta)
+        self.trust_region_delta = trust_region if trust_region_delta is None else trust_region_delta
         # A weak pull back towards the initial weights, which is the cheapest
         # thing that makes "stop moving" an equilibrium rather than a place the
         # dynamics never reach.
         self.theta_prior = float(theta_prior)
-        self._rms_G = self._rms_c = None
+        self._rms_G = self._rms_c = self._rms_D = None
         self.reset()
 
     def reset(self):
         self.pol.reset()
         self.eG = np.zeros_like(self.pol.G)
         self.ec = np.zeros_like(self.pol.cell.p)
+        # eligibility for the class-residual head (None when the policy has none)
+        self.eD = None if getattr(self.pol, "D_class", None) is None else np.zeros_like(self.pol.D_class)
         self.prev = None
         self.stats = {}
         self._acc_r, self._acc_ds = 0.0, 0.0
+
+    def set_class(self, cls) -> None:
+        """Tell the policy which opponent class this episode faces, so the
+        class-conditioned residual head is indexed correctly. cls is 0..n_classes-1
+        (static/slower/equal/faster) or None to disable the residual."""
+        self.pol.cls = None if cls is None else int(cls)
 
     def end_episode(self, score: float, crashed: bool = False,
                     tol: float = 0.0, validate: bool = True) -> str:
@@ -760,7 +821,8 @@ class PolicyTuner:
         """
         best = None if self._best is None else self._best[0]
         if not crashed and (best is None or score > best):
-            snap = (float(score), self.pol.G.copy(), self.pol.cell.p.copy())
+            snap = (float(score), self.pol.G.copy(), self.pol.cell.p.copy(),
+                    None if self.pol.D_class is None else self.pol.D_class.copy())
             if validate:
                 self._candidate = snap
                 return "validate"
@@ -775,17 +837,21 @@ class PolicyTuner:
         """Bank the candidate at its FROZEN score if that beats the incumbent."""
         if self._candidate is None:
             return False
-        _, G, cp = self._candidate
+        _, G, cp, dcl = self._candidate
         self._candidate = None
         if self._best is None or frozen_score > self._best[0]:
-            self._best = (float(frozen_score), G, cp)
+            self._best = (float(frozen_score), G, cp, dcl)
             return True
         return False
 
     def _restore(self):
-        _, G, cp = self._best
+        _, G, cp, dcl = self._best
         self.pol.G[...] = G
         self.pol.cell.p[...] = cp
+        if dcl is not None and self.pol.D_class is not None:
+            self.pol.D_class[...] = dcl
+            if self.eD is not None:
+                self.eD[...] = 0.0
         self.eG[...] = 0.0
         self.ec[...] = 0.0
         self.reverts += 1
@@ -821,6 +887,9 @@ class PolicyTuner:
         if which == "G":
             self._rms_G = a if self._rms_G is None else 0.99 * self._rms_G + 0.01 * a
             sc = np.maximum(self._rms_G, 1e-8)
+        elif which == "D":
+            self._rms_D = a if self._rms_D is None else 0.99 * self._rms_D + 0.01 * a
+            sc = np.maximum(self._rms_D, 1e-8)
         else:
             self._rms_c = a if self._rms_c is None else 0.99 * self._rms_c + 0.01 * a
             sc = np.maximum(self._rms_c, 1e-8)
@@ -900,6 +969,10 @@ class PolicyTuner:
             # pol.grads chains a d(.)/dtheta through the policy; here the
             # "gradient" is +eps/sigma^2, so no sign flip (the mpcc branch
             # negates because its gQ is dJ*/dtheta and V = -J*)
+            dD = None
+            if self.eD is not None and self.pol._last_dD is not None:
+                self.eD = gl_n * self.eD + self._norm(self.pol._last_dD, "D")
+                dD = self.alpha_delta * delta * self.eD
             self.eG = gl_n * self.eG + self._norm(dG, "G")
             self.ec = gl_n * self.ec + self._norm(dc, "c")
             dG = self.alpha * delta * self.eG
@@ -909,8 +982,14 @@ class PolicyTuner:
                 if n_ > self.trust_region:
                     f = self.trust_region / max(n_, 1e-12)
                     dG, dc = dG * f, dc * f
+            if dD is not None and self.trust_region_delta is not None:   # separate budget
+                nD = float(np.sqrt((dD ** 2).sum()))
+                if nD > self.trust_region_delta:
+                    dD = dD * (self.trust_region_delta / max(nD, 1e-12))
             self.pol.G += dG
             self.pol.cell.p += dc
+            if dD is not None:
+                self.pol.D_class += dD
             if self.theta_prior > 0:
                 self.pol.G *= (1.0 - self.alpha * self.theta_prior)
             self.pol.cell.clip()
@@ -920,7 +999,7 @@ class PolicyTuner:
             return self.act(next_feat, next_state5)
         gQ = self.mpcc.grad_theta(q, s, theta)
         if self.prev is not None:
-            pg, pq = self.prev
+            pg, pdD, pq = self.prev
             v_next = 0.0 if terminated else -q["value"]
             delta = float(np.clip(reward + g_n * v_next - (-pq),
                                   -self.delta_clip, self.delta_clip))
@@ -930,6 +1009,12 @@ class PolicyTuner:
             self.ec = gl_n * self.ec + self._norm(-dc, "c")
             dG = self.alpha * delta * self.eG
             dc = self.alpha * delta * self.ec
+            # class-residual head: same TD(lambda) update, on the per-class table,
+            # with its OWN learning rate (alpha_delta) so it is not starved by G.
+            dD = None
+            if self.eD is not None and pdD is not None:
+                self.eD = gl_n * self.eD + self._norm(-pdD, "D")
+                dD = self.alpha_delta * delta * self.eD
             if self.entropy > 0:
                 # d/dG of -sum(tanh(z)^2) with z = G h, which is
                 # -2 tanh(z) (1 - tanh^2 z) h^T -- zero in the middle of the
@@ -942,13 +1027,19 @@ class PolicyTuner:
                 if n > self.trust_region:
                     f = self.trust_region / max(n, 1e-12)
                     dG, dc = dG * f, dc * f
+            if dD is not None and self.trust_region_delta is not None:   # separate budget
+                nD = float(np.sqrt((dD ** 2).sum()))
+                if nD > self.trust_region_delta:
+                    dD = dD * (self.trust_region_delta / max(nD, 1e-12))
             self.pol.G += dG
             self.pol.cell.p += dc
+            if dD is not None:
+                self.pol.D_class += dD
             if self.theta_prior > 0:
                 self.pol.G *= (1.0 - self.alpha * self.theta_prior)
             self.pol.cell.clip()
             self.stats = {"delta": delta}
-        self.prev = (self.pol.grads(gQ), q["value"])
+        self.prev = (self.pol.grads(gQ), self.pol._last_dD, q["value"])
         if terminated:
             return None, None
         return self.act(next_feat, next_state5)

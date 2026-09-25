@@ -26,7 +26,7 @@ from mpcc_tuning import baselines as B
 from mpcc_tuning.acados_mpcc import AcadosMPCC
 from mpcc_tuning.plant_scuderia import ScuderiaPlant
 from mpcc_tuning.opponents import ObstacleTracker, Opponent
-from experiments.race_mode import race_features, PACE, FAIR_PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R, CONTACT_R
+from experiments.race_mode import race_features, PACE, FAIR_PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R, CONTACT_R, PACE_KINDS
 from mpcc_tuning.opponents import RacelineOpponent
 
 
@@ -41,8 +41,16 @@ def drive(arm, kind, seed, steps, ego_pace):
     if arm in ("ltc", "mlp"):
         d = np.load(ROOT / "results/race/nets" / f"race_{arm}_{seed}.npz")
         cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES, int(d["n_hidden"]), seed=seed)
-        pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed)
-        pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.reset()
+        dcl = d["D_class"] if "D_class" in d.files else np.zeros((0, 8))
+        ncls = int(dcl.shape[0])
+        pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls,
+                           delta_log=float(d["delta_log"]) if "delta_log" in d.files else 0.6)
+        pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]
+        if ncls > 0:
+            pol.D_class[...] = dcl
+        pol.reset()
+        if ncls > 0:                       # index the class-residual head for this opponent
+            pol.cls = PACE_KINDS.index(kind)
     v_opp = FAIR_PACE[kind] * ego_pace
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.0 + 0.1 * (seed % 3)
     opp = RacelineOpponent(track, s0=(s0 + 3.0) % track.length, pace=v_opp, offset=0.0, radius=KEEPOUT_R, a_lat=2.5)
