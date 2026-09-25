@@ -296,6 +296,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         passes = 0; contact = False; seen = False
         sec_attempt = np.zeros(4); sec_pass = np.zeros(4); sec_contact = np.zeros(4)
         theta_acc = np.zeros(8); n_th = 0        # mean emitted weights this episode
+        v_sum = 0.0; v_max = 0.0; n_v = 0        # ON-TRACK PACE (the racing objective, not clean%)
         sec_theta = np.zeros((4, 8)); sec_theta_n = np.zeros(4)   # weights BY SECTOR
         TEX = []; TEY = []; TEV = []; TOX = []; TOY = []; TG = []; TP = []   # trajectory (if dumping)
         for _ in range(steps):
@@ -315,6 +316,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             sec = int(track.sector(track.wrap(s_ego)))
             # slip state for the calibrated stability risk: rear slip angle + body sideslip
             _v = float(P._x[3]); _r = float(P._x[5]); _beta = float(P._x[6]) if P._x.size > 6 else 0.0
+            v_sum += _v; v_max = max(v_max, _v); n_v += 1        # pace accumulation
             _vx = _v * np.cos(_beta); _vy = _v * np.sin(_beta)
             _alpha_r = -np.arctan2(_vy - LR_VEH * _r, _vx) if _vx > 0.05 else 0.0
             sec_theta[sec] += np.exp(np.asarray(theta, float)); sec_theta_n[sec] += 1
@@ -357,6 +359,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         clean = (not off) and (not contact)
         rows.append(dict(ep=ep, kind=kind, laps=round(laps, 3), passes=int(passes),
                          contact=bool(contact), off=bool(off), clean=bool(clean),
+                         mean_speed=round(v_sum / max(n_v, 1), 3), max_speed=round(v_max, 3),
                          sec_attempt=sec_attempt.tolist(), sec_pass=sec_pass.tolist(),
                          sec_contact=sec_contact.tolist(),
                          theta_mean=(theta_acc / max(n_th, 1)).tolist(),
