@@ -175,7 +175,7 @@ A_LAT_RACE = 9.0        # ~83% of the real tyre grip (was 6.0 = 55%)
 # 1-2 cm that would hit the wall abruptly). Both rows soft -> no solve-rate collapse.
 CORRIDOR_SLACK_SCALE = 1.0        # inner buffer penalty (moderate -- usable for overtaking)
 CORRIDOR_EDGE_SAFETY = 0.01       # outer wall 1 cm inside the 0.12 off-line -> keep_edge 0.13
-CORRIDOR_OUTER_SCALE = 30.0       # outer-wall slack penalty (near-hard, but feasible)
+CORRIDOR_OUTER_SCALE = 60.0       # outer-wall slack penalty (near-hard; raised 30->60 as the learned aggressive policy bought off the 30x wall -> 38-57% off-track)
 CORRIDOR_INNER_SAFETY = 0.07      # inner buffer at car_half_width + this = 0.19
 CORRIDOR_KW = dict(two_layer_corridor=True, corridor_slack_scale=CORRIDOR_SLACK_SCALE,
                    corridor_safety=CORRIDOR_INNER_SAFETY, corridor_edge_safety=CORRIDOR_EDGE_SAFETY,
@@ -202,8 +202,17 @@ LR_VEH = 0.1515         # CoG->rear axle [m], for the rear slip angle
 #    that make the car quicker -- so the OPTIMAL weights differ by opponent.
 #  - CLASS_SCALE: how much of the calibrated slip budget to spend -- looser vs faster (spend the
 #    grip margin), tighter vs slower (keep it). The stability analysis still BOUNDS the push.
-W_SPEED_CLASS = {"static": 0.3, "slower": 0.3, "equal": 0.7, "faster": 1.0}
-CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}
+W_SPEED_CLASS = {"static": 0.3, "slower": 0.3, "equal": 0.7, "faster": 1.0}   # legacy buckets (kept)
+CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}    # -- superseded by diff
+# OVERTAKE-COMMITMENT + CONTINUOUS-RISK reward (2026-09-27). Instead of the fixed class buckets, the
+# risk/reward rides on the MEASURED difficulty diff = v_opp/v_ego (0 parked .. ~1 matched .. >1 faster):
+# a harder pass rewards MORE speed, allows MORE slip, and pays a bigger COMMITMENT reward (the speed
+# edge WHILE alongside) so pushing into a pass scores BEFORE it completes -- bridging the "valley of
+# death" where only a completed pass (bonus) or a crash (contact) scored, so the tuner learned to
+# FOLLOW instead of race (k_v collapsed vs equal). Contact while alongside/ahead is a racing incident,
+# not a careless rear-end, so it is penalised less. Diagnosis: results/race/race_phase1_dbound.json.
+ENGAGE_WINDOW = 3.0     # m: |gap| within which the overtake-commitment reward applies
+W_COMMIT = 1.5          # weight of the speed-edge-while-engaged (commitment) reward
 
 # STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
 # NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
@@ -219,7 +228,7 @@ OFF_PENALTY = 10.0      # run over-braked -- pace 2.0->1.6 and equal passes 0.9-
 
 
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
-                alpha_r=0.0, beta=0.0, off=False, edge_dist=None, return_parts=False):
+                alpha_r=0.0, beta=0.0, off=False, edge_dist=None, opp_pace=1.0, return_parts=False):
     """Safe-first behaviour reward + a calibrated, class-scaled SLIP stability risk.
 
     - Contact strongly dominates (-15).
@@ -232,25 +241,29 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
     closing/slip/contact), so a diagnostic can see WHICH term -- if any -- actually differs by
     class along the closed-loop trajectory (e.g. whether the slip risk ever activates at all).
     """
+    v_ego = float(v_ego); v_opp = float(v_opp)
+    # difficulty = the opponent's CHARACTERISTIC pace relative to the ego (STABLE per episode, e.g.
+    # FAIR_PACE[kind]: slower 0.8, matched 1.0, faster 1.35), NOT the jittery instantaneous v_opp/v_ego
+    # (which would drop the speed reward exactly when the ego accelerates to pass). 0 = parked.
+    diff = min(max(float(opp_pace), 0.0), 1.4)
     if contact:
-        x = float(r) - 15.0
-        return (x, dict(base=float(r), speed=0.0, pass_b=0.0, closing=0.0, slip=0.0,
-                        edge=0.0, off_pen=0.0, contact=-15.0)) if return_parts else x
+        # a committed pass (alongside/ahead) is a racing incident; a rear-end (opponent still ahead) is careless
+        pen = -8.0 if gap <= 0.3 else -15.0
+        x = float(r) + pen
+        return (x, dict(base=float(r), speed=0.0, pass_b=0.0, commit=0.0, closing=0.0, slip=0.0,
+                        edge=0.0, off_pen=0.0, contact=pen)) if return_parts else x
     base = float(r)
-    speed = W_SPEED_CLASS.get(kind, 0.5) * float(v_ego)   # go FASTER, harder vs faster/equal opp
-    pass_b = PASS_BONUS.get(kind, 7.0) if just_passed else 0.0
+    speed = (0.3 + 0.7 * min(diff, 1.2)) * v_ego            # reward speed MORE when the pass is harder
+    pass_b = (6.0 + 6.0 * diff) if just_passed else 0.0     # a pass vs a faster car is worth more
+    # VALLEY-OF-DEATH BRIDGE: reward the speed edge WHILE engaged (committing to the pass) -- continuous,
+    # so pushing into a pass pays before it completes, bigger when the opponent is faster.
+    commit = W_COMMIT * (v_ego - v_opp) * (0.5 + diff) if (abs(gap) < ENGAGE_WINDOW and v_ego > v_opp) else 0.0
     closing = 0.0
-    if kind in ("static", "slower", "equal"):
-        if 0.0 < gap < 6.0 and v_ego > v_opp - 0.1:
-            closing += 0.5 * (6.0 - gap)               # reward CLOSING on a passable car
-        if kind == "equal" and -1.0 < gap < 3.0:
-            closing += 0.2                              # hold a good overtaking position
-    elif kind == "faster":
-        if gap > SAFE_FOLLOW:
-            closing += 0.3 * float(min(v_ego, v_opp + 0.5))   # close the gap from far (bounded)
-        elif 0.0 < gap <= SAFE_FOLLOW:
-            closing -= 2.0 * float(SAFE_FOLLOW - gap)         # too close -> back off, follow safely
-    scale = CLASS_SCALE.get(kind, 0.85)
+    if 0.0 < gap < 6.0 and v_ego > v_opp - 0.1:
+        closing += 0.3 * (6.0 - gap)                       # close on a car ahead you can catch
+    if 0.0 < gap < SAFE_FOLLOW and v_ego <= v_opp + 0.1:
+        closing -= 1.0 * (SAFE_FOLLOW - gap)               # tailgating one you can't pass -> back off
+    scale = min(max(0.65 + 0.4 * diff, 0.65), 1.10)        # slip budget: LOOSER vs a faster opponent
     slip = -W_SLIP * (max(0.0, abs(float(alpha_r)) - scale * ALPHA_R_REF)
                       + 0.5 * max(0.0, abs(float(beta)) - BETA_REF))
     # STAY-IN-THE-CORRIDOR: graded penalty within EDGE_MARGIN of the edge (a gradient before it
@@ -260,8 +273,8 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
     if edge_dist is not None and float(edge_dist) < EDGE_MARGIN:
         edge = -W_EDGE * (EDGE_MARGIN - float(edge_dist))
     off_pen = -OFF_PENALTY if off else 0.0
-    x = base + speed + pass_b + closing + slip + edge + off_pen
-    return (x, dict(base=base, speed=speed, pass_b=pass_b, closing=closing, slip=slip,
+    x = base + speed + pass_b + commit + closing + slip + edge + off_pen
+    return (x, dict(base=base, speed=speed, pass_b=pass_b, commit=commit, closing=closing, slip=slip,
                     edge=edge, off_pen=off_pen, contact=0.0)) if return_parts else x
 
 
@@ -415,8 +428,9 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             # tick the pass COMPLETES (just_passed), which the old code missed because
             # `seen` was already set -- so the tuner never saw a pass reward before.
             r_shaped = race_reward(kind, r, just_passed, contact,
-                                   float(P._x[3]), vo, g,
-                                   alpha_r=_alpha_r, beta=_beta, off=off, edge_dist=edge_dist)
+                                   float(P._x[3]), vo, g, alpha_r=_alpha_r, beta=_beta,
+                                   off=off, edge_dist=edge_dist,
+                                   opp_pace=(FAIR_PACE if fair_opp else PACE)[kind])
             if arm in ("ltc", "mlp"):
                 out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
                 if out[0] is None:
