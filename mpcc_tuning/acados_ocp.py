@@ -76,6 +76,7 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
               name: str = "mpcc_tuning", vehicle: str = "kinematic",
               q_friction: float = 50.0, q_slip: float = 50.0,
               q_vref: float = 0.0,
+              corridor_slack_scale: float = 1.0,
               vy_soft: float = 0.5, friction_peak: float = 24.29,
               friction_peak_long: float = 23.186):
     """The MPCC as an :class:`AcadosOcp`.
@@ -431,7 +432,12 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     ocp.constraints.lsh = np.zeros(len(soft))
     ocp.constraints.ush = np.zeros(len(soft))
     Z = np.full(nh, 200.0); z = np.full(nh, 5.0)
-    Z[:n_cor], z[:n_cor] = 500.0, 10.0         # corridor rows held harder
+    # corridor rows held harder, and scalable: the diagnostic (tools/offtrack_diagnostic.py) showed
+    # off-track is the SOFT corridor being BOUGHT for progress at aggressive weights -- the plan
+    # dips below the boundary at a few stressed spots and the plant tracks it off (0 cm error, no
+    # model mismatch). corridor_slack_scale raises this penalty so the plan stays in. Hard corridor
+    # is NOT an option (solve rate collapses to ~2%, see above), so this is the tunable middle.
+    Z[:n_cor], z[:n_cor] = 500.0 * corridor_slack_scale, 10.0 * corridor_slack_scale
     Z, z = Z[soft], z[soft]
     ocp.cost.Zl = Z.copy(); ocp.cost.Zu = Z.copy()
     ocp.cost.zl = z.copy(); ocp.cost.zu = z.copy()

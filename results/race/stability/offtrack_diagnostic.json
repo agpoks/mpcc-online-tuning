@@ -1,0 +1,8 @@
+{
+  "n_ticks": 1140,
+  "plan_violates_frac": 0.012280701754385965,
+  "keep_violate_frac": 0.013157894736842105,
+  "mean_step1_cm": 0.037764504610171695,
+  "went_off": true,
+  "verdict": "A: soft-corridor violation (plan leaves)"
+}
