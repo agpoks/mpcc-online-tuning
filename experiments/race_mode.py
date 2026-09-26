@@ -166,6 +166,12 @@ CONTACT_R = 0.24
 # from the handling/bifurcation analysis) is the safety bound that keeps it off the tyre-saturation
 # edge, and the class-dependent speed reward (W_SPEED_CLASS) decides how much of it to use per opponent.
 A_LAT_RACE = 9.0        # ~83% of the real tyre grip (was 6.0 = 55%)
+# CORRIDOR SLACK SCALE: the off-track diagnostic (tools/offtrack_diagnostic.py) showed off-track is
+# the SOFT corridor being BOUGHT for progress at aggressive weights -- the plan dips out and the
+# plant tracks it off (0 cm error, no model mismatch). Raising the corridor slack penalty holds the
+# plan in: a sweep found scale>=3 stops the off-track in the diagnostic while the solve-fail rate
+# actually IMPROVES (2.4%->1.5%), so the controller is not slowed. 6x is the chosen middle.
+CORRIDOR_SLACK_SCALE = 6.0
 
 
 SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-end)
@@ -265,6 +271,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, discrete=True, max_obstacles=1,
                    a_lat_sectors=[A_LAT_RACE] * 4,   # raise the reference speed toward real grip
+                   corridor_slack_scale=CORRIDOR_SLACK_SCALE,  # hold the plan in the corridor
                    name=f"race_{arm}_{seed}")
     lo, hi = (B.adaptation_box("icra_t2_smooth", factor) if box == "adapt"
               else (THETA_LO, THETA_HI))
@@ -485,7 +492,8 @@ def main(argv=None):
     th0 = np.asarray(st.theta(), float)
     mp = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                     q_vref=st.q_vref, discrete=True, max_obstacles=1,
-                    a_lat_sectors=[A_LAT_RACE] * 4, name="race_pace")
+                    a_lat_sectors=[A_LAT_RACE] * 4,
+                    corridor_slack_scale=CORRIDOR_SLACK_SCALE, name="race_pace")
     ego_pace = measure_pace(mp, track, th0, a.steps)
     _pace = FAIR_PACE if a.fair_opp else PACE
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; {'FAIR ' if a.fair_opp else ''}opponents "
