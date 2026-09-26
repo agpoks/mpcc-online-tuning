@@ -139,7 +139,7 @@ PACE = {"static": 0.0, "slower": 0.55, "equal": 0.90, "faster": 1.20}
 # AND pays a grip cost for lateral moves, so the realised lap pace is well below the target.
 # Recalibrated DOWN (was 0.9/1.3/1.8, which made "faster" ~1.8x the ego -> uncatchable): now
 # slower is genuinely slower, equal ~matched, faster only a little quicker so it is catchable.
-FAIR_PACE = {"static": 0.0, "slower": 0.80, "equal": 1.10, "faster": 1.35}
+FAIR_PACE = {"static": 0.0, "slower": 0.80, "equal": 1.00, "faster": 1.35}  # equal = TRULY matched (was 1.10 = 10% faster, so "equal" was really "a bit faster" -> unpassable)
 PACE_KINDS = ("static", "slower", "equal", "faster")
 
 # Pace-DEPENDENT reward, per the intended behaviour for each opponent type:
@@ -356,10 +356,11 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         base = float(P.state5()[4]); off = tr = False
         passes = 0; contact = False; seen = False
         sec_attempt = np.zeros(4); sec_pass = np.zeros(4); sec_contact = np.zeros(4)
-        theta_acc = np.zeros(8); n_th = 0        # mean emitted weights this episode
+        nW = th0.shape[0]                        # number of tunable weights (8, or 9 with d_bound)
+        theta_acc = np.zeros(nW); n_th = 0       # mean emitted weights this episode
         v_sum = 0.0; v_max = 0.0; n_v = 0        # ON-TRACK PACE (the racing objective, not clean%)
         prev_g = None                            # for the gap-closing-rate feature
-        sec_theta = np.zeros((4, 8)); sec_theta_n = np.zeros(4)   # weights BY SECTOR
+        sec_theta = np.zeros((4, nW)); sec_theta_n = np.zeros(4)   # weights BY SECTOR
         TEX = []; TEY = []; TEV = []; TOX = []; TOY = []; TG = []; TP = []   # trajectory (if dumping)
         for _ in range(steps):
             theta_acc += np.exp(np.asarray(theta, float)); n_th += 1

@@ -94,7 +94,14 @@ from mpcc_tuning.model import (A_LAT_MAX as A_LAT_MAX_MOD,
 #: through a gap, large waits for a clean one. A behaviour policy that cannot
 #: vary it is deciding overtake-versus-follow entirely through q_v and q_c
 #: while the term that actually prices proximity stays frozen.
-WEIGHT_NAMES = ("q_c", "q_l", "q_v", "r_d", "r_a", "r_dv", "d_obs", "k_v")
+#: ``d_bound`` (9th) is the boundary analogue of ``d_obs``: the berth the driver insists on from the
+#: TRACK edge, in metres -- learned, per sector/class. It is deliberately a MARGIN, not a slack
+#: penalty, for the exact reason above: the slack penalty is inert (the solver just does not violate
+#: the soft corridor, so pricing it moves nothing), whereas the margin (how far inside to stay) is
+#: what actually moves the line. Small d_bound uses the full width to overtake; large stays central.
+#: The near-hard outer corridor wall stays fixed as the off-track backstop, so d_bound can go small
+#: for a pass without ever leaving the track -- same structure as d_obs over the fixed keep-out.
+WEIGHT_NAMES = ("q_c", "q_l", "q_v", "r_d", "r_a", "r_dv", "d_obs", "k_v", "d_bound")
 
 
 @dataclass
@@ -109,6 +116,7 @@ class MPCCWeights:
     r_dv: float = 0.1     # keep the progress rate near the actual speed
     d_obs: float = 0.15   # keep-out margin [m] -- how wide a berth an opponent gets
     k_v: float = 0.85     # fraction of the grip-limited corner speed it will use
+    d_bound: float = 0.07  # inner track-boundary margin [m] -- how far inside the corridor to stay
 
     def to_log(self) -> np.ndarray:
         return np.log(np.array([getattr(self, n) for n in WEIGHT_NAMES], dtype=float))

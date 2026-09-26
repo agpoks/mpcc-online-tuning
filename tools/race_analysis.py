@@ -88,12 +88,12 @@ try:
                 R=[r for x in d["runs"] if x["arm"]==arm for r in x["rows"]
                    if r["kind"]==k and "theta_mean" in r]
                 M.append(np.mean([r["theta_mean"] for r in R],axis=0)/start if R else np.ones(8))
-            M=np.array(M)                      # 4 kinds x 8 weights, relative to START
+            M=np.array(M)                      # 4 kinds x N weights, relative to START
             fig,ax=plt.subplots(figsize=(8,3.8))
             im=ax.imshow(np.log2(M).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")
             ax.set_xticks(range(4)); ax.set_xticklabels(KINDS)
-            ax.set_yticks(range(8)); ax.set_yticklabels(WEIGHT_NAMES)
-            for i in range(8):
+            ax.set_yticks(range(len(WEIGHT_NAMES))); ax.set_yticklabels(WEIGHT_NAMES)
+            for i in range(len(WEIGHT_NAMES)):
                 for j in range(4): ax.text(j,i,f"{M[j,i]:.2f}",ha="center",va="center",fontsize=7)
             ax.set_title(f"{arm}: emitted weights by opponent type (x START)")
             fig.colorbar(im,ax=ax,fraction=0.03,label="log2(weight / START)")
@@ -150,8 +150,8 @@ try:
                 im=ax.imshow(np.log2(rel).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")
                 im.cmap.set_bad("0.85")                      # NaN sectors shown grey (no data)
                 ax.set_xticks(range(4)); ax.set_xticklabels([f"S{i}" for i in range(4)])
-                ax.set_yticks(range(8)); ax.set_yticklabels(WEIGHT_NAMES)
-                for i in range(8):
+                ax.set_yticks(range(len(WEIGHT_NAMES))); ax.set_yticklabels(WEIGHT_NAMES)
+                for i in range(len(WEIGHT_NAMES)):
                     for j in range(4):
                         ax.text(j,i,("--" if np.isnan(rel[j,i]) else f"{rel[j,i]:.2f}"),ha="center",va="center",fontsize=7)
                 ax.set_title(f"{arm}: emitted weights BY SECTOR (x START)")

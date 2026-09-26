@@ -303,7 +303,10 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         # soft constraint is allowed to be violated slightly. So the plan aims
         # a little further inside than the rule requires.
         wl_s, wr_s = track.width(s)
-        keep = car_half_width + corridor_safety
+        # inner buffer margin: LEARNABLE (d_bound, the 9th weight) in two-layer mode, so the tuner
+        # sets how far inside to stay per sector/class -- small to use the width for a pass, large to
+        # stay central -- exactly analogous to d_obs over the opponent. Fixed corridor_safety otherwise.
+        keep = (car_half_width + _w["d_bound"]) if two_layer_corridor else (car_half_width + corridor_safety)
         h = [wl_s - keep - e_c,                # room to the left,  >= 0
              e_c + wr_s - keep]                # room to the right, >= 0
         n_cor = 2
@@ -378,7 +381,7 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     # and there is no control at the terminal node.
     if var_w:
         wl_e, wr_e = track.width(s)
-        keep_e = car_half_width + corridor_safety
+        keep_e = (car_half_width + _w["d_bound"]) if two_layer_corridor else (car_half_width + corridor_safety)
         h_e = [wl_e - keep_e - e_c, e_c + wr_e - keep_e]
         n_cor_e = 2
         if two_layer_corridor:                 # same near-hard edge wall at the terminal node
