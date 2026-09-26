@@ -176,8 +176,9 @@ CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}
 # A graded near-edge penalty gives a gradient before it leaves; a terminal penalty makes actually
 # leaving cost the race (the return then prefers fast-AND-inside over fast-and-wide).
 EDGE_MARGIN = 0.20      # m: penalise within this distance of the corridor edge
-W_EDGE = 8.0            # penalty weight per metre inside the margin
-OFF_PENALTY = 15.0      # terminal cost of leaving the track (~= a contact)
+W_EDGE = 5.5            # penalty weight per metre inside the margin (lightened from 8.0: the 8.0
+OFF_PENALTY = 10.0      # run over-braked -- pace 2.0->1.6 and equal passes 0.9->0.73. Lighter penalty
+                        # (~-30%) aims to keep mlp's stability gain while recovering the racing edge.
 
 
 def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
