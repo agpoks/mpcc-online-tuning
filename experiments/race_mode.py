@@ -84,15 +84,38 @@ def side_open(track, opponents, car_w=0.24):
             float(np.clip((max(room_r, room_l) - car_w) / car_w, -1.0, 1.0))]
 
 
-def race_features(track, s5, opponents=(), opp_speed_est=None):
-    """Base 18 features + 2 side-open features = 20. The base indices are left
-    untouched so fixed_schedule (which reads feat[7], feat[8], feat[14:18]) works."""
+def race_features(track, s5, opponents=(), opp_speed_est=None,
+                  slip=None, gap_rate=None, sector_suit=None):
+    """Base 18 + 2 side-open + 9 TEMPORAL/DYNAMIC = 29. Indices 0..19 are left
+    untouched so fixed_schedule (which reads feat[7], feat[8], feat[14:18]) works.
+
+    The 9 appended features are the history-dependent signals the policy previously
+    could NOT see (it only observed an instantaneous s5=[x,y,psi,v,s]); without them
+    memory has nothing to integrate and the recurrent LTC cannot beat the memoryless
+    MLP. They are, in order:
+      20  rear slip angle  alpha_r / ALPHA_R_REF          (signed; the drift the reward
+                                                           punishes but the policy could not observe)
+      21  body sideslip    beta / BETA_REF                (signed)
+      22  yaw rate         r / 3.0                        (signed)
+      23  gap closing rate d(gap)/dt                      (signed; <0 = closing on the opponent)
+      24  opponent speed   opp_speed_est / v_max          (the raw noisy tracked speed, not just
+                                                           the coarse class one-hot at 14:18)
+      25-28 per-sector overtake suitability  tanh(sec_pass - sec_contact)  (the "where can I
+                                                           overtake" map, accumulated over the race)
+    Neutral (0) when an arg is None, so the vector is always length 29."""
     from mpcc_tuning.ltc import features
     base = features(track, s5, opponents, opp_speed_est=opp_speed_est)
-    return np.concatenate([base, np.array(side_open(track, opponents), float)])
+    a_r, be, yr = slip if slip is not None else (0.0, 0.0, 0.0)
+    extra = [np.tanh(float(a_r) / ALPHA_R_REF), np.tanh(float(be) / BETA_REF),
+             np.tanh(float(yr) / 3.0),
+             np.tanh(float(gap_rate) / 1.0) if gap_rate is not None else 0.0,
+             np.tanh(float(opp_speed_est) / 4.0) if opp_speed_est is not None else 0.0]
+    ss = sector_suit if sector_suit is not None else (0.0, 0.0, 0.0, 0.0)
+    extra += [np.tanh(float(x)) for x in ss]
+    return np.concatenate([base, np.array(side_open(track, opponents), float), np.array(extra, float)])
 
 
-N_RACE_FEATURES = 20
+N_RACE_FEATURES = 29
 
 
 def measure_pace(m, track, th0, steps):
@@ -303,7 +326,11 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         opp.reset()
         tracker.update(opp.pose()[:2])
         m.set_obstacles([opp.keepout()])
-        feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed)
+        # initial slip (near zero at reset) for the enriched observation; no gap/sector history yet
+        _b0 = float(P._x[6]) if P._x.size > 6 else 0.0; _r0 = float(P._x[5]); _v0 = float(P._x[3])
+        _ar0 = -np.arctan2(_v0 * np.sin(_b0) - LR_VEH * _r0, _v0 * np.cos(_b0)) if _v0 * np.cos(_b0) > 0.05 else 0.0
+        feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed,
+                             slip=(_ar0, _b0, _r0))
         if arm in ("ltc", "mlp"):
             theta, u = tuner.act(feat, P.state_dyn())
         elif arm == "fixed":
@@ -316,6 +343,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         sec_attempt = np.zeros(4); sec_pass = np.zeros(4); sec_contact = np.zeros(4)
         theta_acc = np.zeros(8); n_th = 0        # mean emitted weights this episode
         v_sum = 0.0; v_max = 0.0; n_v = 0        # ON-TRACK PACE (the racing objective, not clean%)
+        prev_g = None                            # for the gap-closing-rate feature
         sec_theta = np.zeros((4, 8)); sec_theta_n = np.zeros(4)   # weights BY SECTOR
         TEX = []; TEY = []; TEV = []; TOX = []; TOY = []; TG = []; TP = []   # trajectory (if dumping)
         for _ in range(steps):
@@ -362,7 +390,11 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
                 TOX.append(ox); TOY.append(oy); TG.append(g); TP.append(passes)
             m.set_obstacles([opp.keepout()])
             tracker.update(opp.pose()[:2])
-            fn = race_features(track, s5n, [opp], opp_speed_est=tracker.speed)
+            gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0   # gap closing rate
+            prev_g = g
+            fn = race_features(track, s5n, [opp], opp_speed_est=tracker.speed,
+                               slip=(_alpha_r, _beta, _r), gap_rate=gr,
+                               sector_suit=(sec_pass - sec_contact))
             # pace-DEPENDENT shaped reward (race_reward): the pass bonus fires on the
             # tick the pass COMPLETES (just_passed), which the old code missed because
             # `seen` was already set -- so the tuner never saw a pass reward before.

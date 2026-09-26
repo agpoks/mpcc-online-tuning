@@ -26,7 +26,8 @@ from mpcc_tuning import baselines as B
 from mpcc_tuning.acados_mpcc import AcadosMPCC
 from mpcc_tuning.plant_scuderia import ScuderiaPlant
 from mpcc_tuning.opponents import ObstacleTracker, Opponent
-from experiments.race_mode import race_features, PACE, FAIR_PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R, CONTACT_R, PACE_KINDS
+from experiments.race_mode import (race_features, PACE, FAIR_PACE, signed_gap, N_RACE_FEATURES,
+                                    KEEPOUT_R, CONTACT_R, PACE_KINDS, LR_VEH)
 from mpcc_tuning.opponents import RacelineOpponent
 
 
@@ -59,30 +60,39 @@ def drive(arm, kind, seed, steps, ego_pace):
     P.reset(s0=s0, v0=v0); m.reset(); opp.reset()
     tracker.update(opp.pose()[:2]); m.set_obstacles([opp.keepout()])
 
-    def emit():
-        feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed)
+    def emit(slip=None, gap_rate=None, sector_suit=None):
+        feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed,
+                             slip=slip, gap_rate=gap_rate, sector_suit=sector_suit)
         if pol is not None:
             return np.asarray(pol.step(feat), float)
         if arm == "fixed":
             return fixed_schedule(feat, th0)
         return th0
-    theta = emit(); u = m.value(P.state_dyn(), theta)["u0"]
+    _b0 = float(P._x[6]) if P._x.size > 6 else 0.0; _r0 = float(P._x[5]); _v0 = float(P._x[3])
+    _ar0 = -np.arctan2(_v0 * np.sin(_b0) - LR_VEH * _r0, _v0 * np.cos(_b0)) if _v0 * np.cos(_b0) > 0.05 else 0.0
+    theta = emit(slip=(_ar0, _b0, _r0)); u = m.value(P.state_dyn(), theta)["u0"]
     EX, EY, EV, OX, OY, GAP, PASS, CONTACT = [], [], [], [], [], [], [], []
     passes = 0; contact = False; seen = False
+    sec_pass = np.zeros(4); sec_contact = np.zeros(4); prev_g = None
     for _ in range(steps):
         s5n, r, off, tr = P.step(u)
         ex, ey = float(P._x[0]), float(P._x[1]); opp.step(0.05, ego=(ex, ey, float(P._x[3]))); ox, oy, rad = opp.keepout()
-        g = signed_gap(track, track.project(ex, ey), opp.s)
-        if float(np.hypot(ex - ox, ey - oy)) < CONTACT_R:
-            contact = True
-        if g < 0 and abs(g) < track.length / 4 and not seen and float(P._x[3]) > float(getattr(opp,'speed',v_opp)):
-            passes += 1; seen = True
+        s_ego = track.project(ex, ey); g = signed_gap(track, s_ego, opp.s); sec = int(track.sector(track.wrap(s_ego)))
+        _v = float(P._x[3]); _r = float(P._x[5]); _beta = float(P._x[6]) if P._x.size > 6 else 0.0
+        _alpha_r = -np.arctan2(_v * np.sin(_beta) - LR_VEH * _r, _v * np.cos(_beta)) if _v * np.cos(_beta) > 0.05 else 0.0
+        vo = float(getattr(opp, 'speed', v_opp))
+        if float(np.hypot(ex - ox, ey - oy)) < CONTACT_R and not contact:
+            contact = True; sec_contact[sec] += 1
+        if g < 0 and abs(g) < track.length / 4 and not seen and _v > vo:
+            passes += 1; seen = True; sec_pass[sec] += 1
         elif g > 0.5:
             seen = False
-        EX.append(ex); EY.append(ey); EV.append(float(P._x[3])); OX.append(ox); OY.append(oy)
+        EX.append(ex); EY.append(ey); EV.append(_v); OX.append(ox); OY.append(oy)
         GAP.append(g); PASS.append(passes); CONTACT.append(contact)
         m.set_obstacles([opp.keepout()]); tracker.update(opp.pose()[:2])
-        theta = emit(); u = m.value(P.state_dyn(), theta)["u0"]
+        gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0; prev_g = g
+        theta = emit(slip=(_alpha_r, _beta, _r), gap_rate=gr, sector_suit=(sec_pass - sec_contact))
+        u = m.value(P.state_dyn(), theta)["u0"]
         if off or tr or contact:
             break
     return dict(EX=np.array(EX), EY=np.array(EY), EV=np.array(EV), OX=np.array(OX),
