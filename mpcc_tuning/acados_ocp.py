@@ -77,6 +77,9 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
               q_friction: float = 50.0, q_slip: float = 50.0,
               q_vref: float = 0.0,
               corridor_slack_scale: float = 1.0,
+              two_layer_corridor: bool = False,
+              corridor_edge_safety: float = 0.01,
+              corridor_outer_scale: float = 30.0,
               vy_soft: float = 0.5, friction_peak: float = 24.29,
               friction_peak_long: float = 23.186):
     """The MPCC as an :class:`AcadosOcp`.
@@ -304,6 +307,17 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         h = [wl_s - keep - e_c,                # room to the left,  >= 0
              e_c + wr_s - keep]                # room to the right, >= 0
         n_cor = 2
+        if two_layer_corridor:
+            # TWO-LAYER corridor: the inner rows above stay SOFT with a moderate penalty (the usable
+            # overtaking buffer, ~6 cm), and these two extra rows add a near-hard WALL 1 cm inside the
+            # plant's off-line (keep_edge = car_half_width + corridor_edge_safety). They are still SOFT
+            # (feasibility preserved -- a true hard row collapses the acados solve rate to ~2%), but
+            # carry a HUGE slack penalty (corridor_outer_scale), so the plan will not cross them. This
+            # stops the off-track buy-off at the EDGE without stiffening the interior the car needs to
+            # go around an opponent. See tools/offtrack_diagnostic.py.
+            keep_edge = car_half_width + corridor_edge_safety
+            h += [wl_s - keep_edge - e_c, e_c + wr_s - keep_edge]
+            n_cor = 4
     else:
         h = [e_c]                              # corridor, as in the NLP
         n_cor = 1
@@ -366,9 +380,14 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         wl_e, wr_e = track.width(s)
         keep_e = car_half_width + corridor_safety
         h_e = [wl_e - keep_e - e_c, e_c + wr_e - keep_e]
+        n_cor_e = 2
+        if two_layer_corridor:                 # same near-hard edge wall at the terminal node
+            keep_edge = car_half_width + corridor_edge_safety
+            h_e += [wl_e - keep_edge - e_c, e_c + wr_e - keep_edge]
+            n_cor_e = 4
     else:
         h_e = [e_c_lin if lin_corridor else e_c]
-    n_cor_e = 2 if var_w else 1
+        n_cor_e = 1
     if spline_mode == "spline" and not dyn:
         h_e.append(a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
     model.con_h_expr_e = ca.vertcat(*h_e)
@@ -438,6 +457,8 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     # model mismatch). corridor_slack_scale raises this penalty so the plan stays in. Hard corridor
     # is NOT an option (solve rate collapses to ~2%, see above), so this is the tunable middle.
     Z[:n_cor], z[:n_cor] = 500.0 * corridor_slack_scale, 10.0 * corridor_slack_scale
+    if two_layer_corridor:                     # rows 2,3 are the near-hard edge wall (huge penalty)
+        Z[2:n_cor], z[2:n_cor] = 500.0 * corridor_outer_scale, 10.0 * corridor_outer_scale
     Z, z = Z[soft], z[soft]
     ocp.cost.Zl = Z.copy(); ocp.cost.Zu = Z.copy()
     ocp.cost.zl = z.copy(); ocp.cost.zu = z.copy()
@@ -452,7 +473,9 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     ocp.constraints.lsh_e = np.zeros(nh_e)
     ocp.constraints.ush_e = np.zeros(nh_e)
     Ze = np.full(nh_e, 200.0); ze = np.full(nh_e, 5.0)
-    Ze[:n_cor_e], ze[:n_cor_e] = 500.0, 10.0
+    Ze[:n_cor_e], ze[:n_cor_e] = 500.0 * corridor_slack_scale, 10.0 * corridor_slack_scale
+    if two_layer_corridor:
+        Ze[2:n_cor_e], ze[2:n_cor_e] = 500.0 * corridor_outer_scale, 10.0 * corridor_outer_scale
     ocp.cost.Zl_e = Ze.copy(); ocp.cost.Zu_e = Ze.copy()
     ocp.cost.zl_e = ze.copy(); ocp.cost.zu_e = ze.copy()
 

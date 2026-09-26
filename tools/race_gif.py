@@ -28,7 +28,7 @@ from mpcc_tuning.plant_scuderia import ScuderiaPlant
 from mpcc_tuning.opponents import ObstacleTracker, Opponent
 from experiments.race_mode import (race_features, PACE, FAIR_PACE, signed_gap, N_RACE_FEATURES,
                                     KEEPOUT_R, CONTACT_R, PACE_KINDS, LR_VEH, A_LAT_RACE,
-                                    CORRIDOR_SLACK_SCALE)
+                                    CORRIDOR_KW)
 from mpcc_tuning.opponents import RacelineOpponent
 
 
@@ -40,7 +40,7 @@ def drive(arm, kind, seed, steps, ego_pace):
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, discrete=True, max_obstacles=1,
                    a_lat_sectors=[A_LAT_RACE] * 4,          # match training (was silently a_lat=6)
-                   corridor_slack_scale=CORRIDOR_SLACK_SCALE, name=f"gif_{arm}_{seed}")
+                   **CORRIDOR_KW, name=f"gif_{arm}_{seed}")
     pol = None
     if arm in ("ltc", "mlp"):
         d = np.load(ROOT / "results/race/nets" / f"race_{arm}_{seed}.npz")

@@ -166,12 +166,20 @@ CONTACT_R = 0.24
 # from the handling/bifurcation analysis) is the safety bound that keeps it off the tyre-saturation
 # edge, and the class-dependent speed reward (W_SPEED_CLASS) decides how much of it to use per opponent.
 A_LAT_RACE = 9.0        # ~83% of the real tyre grip (was 6.0 = 55%)
-# CORRIDOR SLACK SCALE: the off-track diagnostic (tools/offtrack_diagnostic.py) showed off-track is
-# the SOFT corridor being BOUGHT for progress at aggressive weights -- the plan dips out and the
-# plant tracks it off (0 cm error, no model mismatch). Raising the corridor slack penalty holds the
-# plan in: a sweep found scale>=3 stops the off-track in the diagnostic while the solve-fail rate
-# actually IMPROVES (2.4%->1.5%), so the controller is not slowed. 6x is the chosen middle.
-CORRIDOR_SLACK_SCALE = 6.0
+# CORRIDOR: off-track is the SOFT corridor being BOUGHT for progress (tools/offtrack_diagnostic.py):
+# the plan dips out and the plant tracks it off (0 cm error, no model mismatch). Uniformly stiffening
+# the corridor (scale 6) halved off-track but COST overtakes (the car would not use the width to go
+# around an opponent). TWO-LAYER fixes that: a moderate SOFT inner buffer (keep 0.19, scale 1) that
+# the car can still push into to overtake, plus a near-hard SOFT-HARD wall 1 cm inside the off-line
+# (keep 0.13, huge penalty) that the plan will not cross. Wide 6 cm buffer = reaction runway (not the
+# 1-2 cm that would hit the wall abruptly). Both rows soft -> no solve-rate collapse.
+CORRIDOR_SLACK_SCALE = 1.0        # inner buffer penalty (moderate -- usable for overtaking)
+CORRIDOR_EDGE_SAFETY = 0.01       # outer wall 1 cm inside the 0.12 off-line -> keep_edge 0.13
+CORRIDOR_OUTER_SCALE = 30.0       # outer-wall slack penalty (near-hard, but feasible)
+CORRIDOR_INNER_SAFETY = 0.07      # inner buffer at car_half_width + this = 0.19
+CORRIDOR_KW = dict(two_layer_corridor=True, corridor_slack_scale=CORRIDOR_SLACK_SCALE,
+                   corridor_safety=CORRIDOR_INNER_SAFETY, corridor_edge_safety=CORRIDOR_EDGE_SAFETY,
+                   corridor_outer_scale=CORRIDOR_OUTER_SCALE)
 
 
 SAFE_FOLLOW = 1.5   # metres: safe following gap behind a faster car (no rear-end)
@@ -271,7 +279,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                    q_vref=st.q_vref, discrete=True, max_obstacles=1,
                    a_lat_sectors=[A_LAT_RACE] * 4,   # raise the reference speed toward real grip
-                   corridor_slack_scale=CORRIDOR_SLACK_SCALE,  # hold the plan in the corridor
+                   **CORRIDOR_KW,                    # two-layer corridor: usable inner + edge wall
                    name=f"race_{arm}_{seed}")
     lo, hi = (B.adaptation_box("icra_t2_smooth", factor) if box == "adapt"
               else (THETA_LO, THETA_HI))
@@ -492,8 +500,7 @@ def main(argv=None):
     th0 = np.asarray(st.theta(), float)
     mp = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
                     q_vref=st.q_vref, discrete=True, max_obstacles=1,
-                    a_lat_sectors=[A_LAT_RACE] * 4,
-                    corridor_slack_scale=CORRIDOR_SLACK_SCALE, name="race_pace")
+                    a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW, name="race_pace")
     ego_pace = measure_pace(mp, track, th0, a.steps)
     _pace = FAIR_PACE if a.fair_opp else PACE
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; {'FAIR ' if a.fair_opp else ''}opponents "
