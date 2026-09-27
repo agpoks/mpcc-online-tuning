@@ -204,7 +204,8 @@ class WeightPolicy:
     def __init__(self, cell, theta0, lo, hi, out_scale: float = 0.5, seed: int = 0,
                  direct: bool = True,
                  influence: str = "rflo", gauge_fix: bool = False,
-                 n_classes: int = 0, delta_log: float = 0.6):
+                 n_classes: int = 0, delta_log: float = 0.6,
+                 kv_floor: float = 0.0, kv_floor_classes=()):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
@@ -276,6 +277,13 @@ class WeightPolicy:
         self.D_class = np.zeros((self.n_classes, len(self.theta0))) if self.n_classes > 0 else None
         self.cls = None
         self._last_dD = None
+        # CLASS-CONDITIONED k_v FLOOR: vs a near-matched/faster opponent (the classes in
+        # kv_floor_classes) the emitted k_v may not drop below kv_floor -- you cannot overtake a
+        # same-speed car by claiming LESS grip than your own baseline. Fixes the weak (bimodal) ltc
+        # seeds that got stuck at low k_v vs equal and never passed; mlp already emits k_v above it.
+        self.kv_idx = WEIGHT_NAMES.index("k_v")
+        self.kv_floor = float(np.log(kv_floor)) if kv_floor > 0 else None
+        self.kv_floor_classes = set(int(c) for c in kv_floor_classes)
         self.reset()
 
     def reset(self):
@@ -374,6 +382,12 @@ class WeightPolicy:
             self._dsq = self._dsq * inb
         else:
             self._cls_used = None
+        # apply the class-conditioned k_v floor (after base+residual), masking the gradient like a clip
+        if self.kv_floor is not None and self.cls in self.kv_floor_classes and theta[self.kv_idx] < self.kv_floor:
+            theta = np.array(theta, float); theta[self.kv_idx] = self.kv_floor
+            self._sq = self._sq.copy(); self._sq[self.kv_idx] = 0.0
+            if self._cls_used is not None:
+                self._dsq = self._dsq.copy(); self._dsq[self.kv_idx] = 0.0
         self._h = h
         return theta
 

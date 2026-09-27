@@ -213,6 +213,12 @@ CLASS_SCALE = {"static": 0.6, "slower": 0.7, "equal": 0.85, "faster": 1.0}    # 
 # not a careless rear-end, so it is penalised less. Diagnosis: results/race/race_phase1_dbound.json.
 ENGAGE_WINDOW = 3.0     # m: |gap| within which the overtake-commitment reward applies
 W_COMMIT = 1.5          # weight of the speed-edge-while-engaged (commitment) reward
+# k_v FLOOR for near-matched opponents (equal, faster): the emitted grip-claim may not drop below this
+# vs a car you must OUTPACE to pass -- fixes the bimodal ltc seeds that got stuck at low k_v (<baseline
+# 0.45) vs equal and never passed. 0.50 sits just above baseline (an edge over a matched car) and well
+# below the grip limit (safe). static/slower do not get it (no extra speed needed to pass a slow car).
+KV_FLOOR = 0.50
+KV_FLOOR_CLASSES = (2, 3)   # PACE_KINDS indices: equal, faster
 
 # STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
 # NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
@@ -311,7 +317,8 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         # every class to one corner. Delta(class) is a small per-class table the tuner learns
         # directly (indexed by class), so it CAN emit different weights per class. Set each episode
         # via tuner.set_class below.
-        pol = WeightPolicy(cell, th0, lo, hi, seed=seed, n_classes=len(PACE_KINDS))
+        pol = WeightPolicy(cell, th0, lo, hi, seed=seed, n_classes=len(PACE_KINDS),
+                           kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES)
         # THE fix for "we get stuck on the values and don't explore more": the old call set
         # explore=0.06 (CONTROL noise on steering/accel only) but theta_explore=0 and entropy=0,
         # so the WEIGHTS were emitted deterministically and, once the tanh saturated at the box
