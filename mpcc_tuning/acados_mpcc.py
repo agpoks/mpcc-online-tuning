@@ -77,7 +77,8 @@ class AcadosMPCC:
         self.max_obstacles = int(max_obstacles)
         self._obs = None
         self._nx = self.ocp.model.x.shape[0]
-        self._n_theta = 8
+        from mpcc_tuning.mpcc import WEIGHT_NAMES
+        self._n_theta = len(WEIGHT_NAMES)   # was hardcoded 8; must track WEIGHT_NAMES (now 9 with d_bound)
         self._model = DynamicBicycle(dt=self.dt)
         # SOLVER-FAILURE FALLBACK.
         #
@@ -319,7 +320,15 @@ class AcadosMPCC:
             return np.asarray(
                 self.sv.eval_and_get_optimal_value_gradient("p_global"),
                 float).ravel()[:self._n_theta]
-        return self._grad(self.sv, lambda k: p)
+        # The envelope form drops the constraint-multiplier term, so it only produces gradients for
+        # the COST weights and returns fewer than n_theta entries once a CONSTRAINT weight (d_bound)
+        # is added. Pad the missing (constraint-only) weights with 0 -- their envelope gradient IS 0
+        # under this approximation -- so the vector matches the 9-dim policy. (Use the native gradient,
+        # or the return critic, to actually LEARN d_bound.)
+        g = np.asarray(self._grad(self.sv, lambda k: p), float).ravel()
+        if g.size < self._n_theta:
+            g = np.concatenate([g, np.zeros(self._n_theta - g.size)])
+        return g[:self._n_theta]
 
     def gradient_is_exact(self) -> tuple[bool, str]:
         if self.theta_global:

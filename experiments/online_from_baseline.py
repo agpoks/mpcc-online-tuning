@@ -118,7 +118,7 @@ def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
      clock, keep_best, kb_tol, eval_eps, critic, theta_explore, explore,
-     validate, init_policy, plant_mu, mu_local, geom_narrow) = job
+     validate, init_policy, plant_mu, mu_local, geom_narrow, two_layer) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -158,11 +158,24 @@ def one(job):
     th0 = np.asarray(st.theta(), float)
     _use_vref = bool(getattr(t, "use_optimiser_vref", False))
     _alat_ref = getattr(t, "a_lat_ref", None)   # conservative reference so k_v is headroom
+    # QUALIFYING WITH THE TWO-LAYER CORRIDOR (--two-layer): a fast qualifying lap wants to use the
+    # FULL track width (racing line / apex) while staying on track. The two-layer corridor + the
+    # learnable d_bound (9th weight) let the solo tuner learn the boundary berth for a faster CLEAN
+    # lap, exactly as in race mode -- an inner soft buffer it can push into + a near-hard outer wall.
+    # Copied from experiments/race_mode.CORRIDOR_KW (+ wall 60) to avoid importing the race harness.
+    corridor_kw = (dict(two_layer_corridor=True, corridor_slack_scale=1.0, corridor_safety=0.07,
+                        corridor_edge_safety=0.01, corridor_outer_scale=60.0) if two_layer else {})
+    # d_bound (the 9th weight) is a CONSTRAINT param; the envelope gradient explicitly drops the
+    # constraint-multiplier term ("exact only while theta stays out of the constraints") and returns
+    # an 8-vector, so it cannot learn d_bound and mismatches the 9-dim policy. The NATIVE gradient
+    # (theta as p_global; acados' own dV*/dtheta, which carries the multiplier) handles it -> force it
+    # whenever the two-layer corridor is on. Standard qualifying keeps whatever --grad asked for.
     m = AcadosMPCC(m_track, horizon=st.horizon, dt=0.05, vehicle="dynamic",
-                   q_vref=st.q_vref, theta_global=(grad == "native"),
+                   q_vref=st.q_vref, theta_global=(grad == "native" or two_layer),
                    discrete=True, use_track_vref=_use_vref,
                    a_lat_sectors=([float(_alat_ref)] * 4 if _alat_ref else None),
-                   name=f"onl_{track_name}_{seed}_{int(learn)}")
+                   **corridor_kw,
+                   name=f"onl_{track_name}_{seed}_{int(learn)}_{int(two_layer)}")
 
     from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
     lim = np.array([STEER_MAX, ACCEL_MAX])
@@ -376,6 +389,10 @@ def main(argv=None):
                     help="path to a narrowed-corridor .npz: the plant collision "
                     "boundary uses it while the controller plans on the nominal "
                     "track (geometry use-case -- the wall moved, tuner must adapt)")
+    ap.add_argument("--two-layer", action="store_true",
+                    help="QUALIFYING with the two-layer corridor + learnable d_bound (9th weight): "
+                         "the solo tuner learns the track-boundary berth for a faster CLEAN lap "
+                         "(inner soft buffer it can use for the racing line + near-hard outer wall)")
     ap.add_argument("--mu-local", type=float, default=1.0,
                     help="LOCAL grip drop: <1 sets tyre friction to this value "
                          "inside the two preset T2 corners (s=60.1, 52.4), 1.0 "
@@ -409,7 +426,7 @@ def main(argv=None):
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
              a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
              a.eval_episodes, a.critic, a.theta_explore, a.explore,
-             a.validate, a.init_policy, a.plant_mu, a.mu_local, a.geom_narrow)
+             a.validate, a.init_policy, a.plant_mu, a.mu_local, a.geom_narrow, a.two_layer)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
