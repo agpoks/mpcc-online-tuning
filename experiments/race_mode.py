@@ -139,7 +139,7 @@ PACE = {"static": 0.0, "slower": 0.55, "equal": 0.90, "faster": 1.20}
 # AND pays a grip cost for lateral moves, so the realised lap pace is well below the target.
 # Recalibrated DOWN (was 0.9/1.3/1.8, which made "faster" ~1.8x the ego -> uncatchable): now
 # slower is genuinely slower, equal ~matched, faster only a little quicker so it is catchable.
-FAIR_PACE = {"static": 0.0, "slower": 0.80, "equal": 1.00, "faster": 1.10}  # equal = matched; faster = only a TOUCH quicker (was 1.35 = uncatchable, over-pulled the chase and starved equal). Tight realistic spread 0.8/1.0/1.1.
+FAIR_PACE = {"static": 0.0, "slower": 0.80, "equal": 1.00, "faster": 1.05}  # equal = matched; faster = only 5% quicker (catchable; was 1.35 = uncatchable, over-pulled the chase and starved equal). Tight realistic spread 0.8/1.0/1.05.
 PACE_KINDS = ("static", "slower", "equal", "faster")
 
 # Pace-DEPENDENT reward, per the intended behaviour for each opponent type:
