@@ -28,7 +28,8 @@ from mpcc_tuning.plant_scuderia import ScuderiaPlant
 from mpcc_tuning.opponents import ObstacleTracker, Opponent
 from experiments.race_mode import (race_features, PACE, FAIR_PACE, signed_gap, N_RACE_FEATURES,
                                     KEEPOUT_R, CONTACT_R, PACE_KINDS, LR_VEH, A_LAT_RACE,
-                                    CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES)
+                                    CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES,
+                                    KV_CEIL, KV_CEIL_CLASSES)
 from mpcc_tuning.opponents import RacelineOpponent
 
 
@@ -49,7 +50,8 @@ def drive(arm, kind, seed, steps, ego_pace):
         ncls = int(dcl.shape[0])
         pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls,
                            delta_log=float(d["delta_log"]) if "delta_log" in d.files else 0.6,
-                           kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES)
+                           kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES,
+                           kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES)
         pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]
         if ncls > 0:
             pol.D_class[...] = dcl

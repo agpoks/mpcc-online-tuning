@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from mpcc_tuning.model import KinematicBicycle
 from mpcc_tuning.mpcc import MPCC, WEIGHT_NAMES, MPCCWeights
-from mpcc_tuning.opponents import Opponent
+from mpcc_tuning.opponents import Opponent, RacelineOpponent
 from mpcc_tuning.track import Track
 
 
@@ -195,6 +195,48 @@ def test_opponent_moves_at_its_own_speed(track):
     for _ in range(10):
         o.step(0.05)
     assert abs(o.s - 1.0) < 1e-9
+
+
+def _ego_pose_at(track, s, lat):
+    """Ego (x, y, psi) sitting at arc-length ``s`` and lateral ``lat`` (lateral() convention)."""
+    p = np.array(track.pos(s % track.length)).ravel()
+    psi = float(track.tangent_angle(s % track.length))
+    n = np.array([-np.sin(psi), np.cos(psi)])
+    return float(p[0] + lat * n[0]), float(p[1] + lat * n[1]), psi
+
+
+@pytest.mark.parametrize("ego_lat", [0.30, -0.30])
+def test_raceline_opponent_never_steers_into_the_ego(track, ego_lat):
+    """A racing opponent may not crash into us on purpose.
+
+    With the ego pinned alongside (same arc-length) on one side, the opponent's
+    lateral position must never move TOWARD the ego -- so the signed lateral gap
+    to the ego never shrinks, step after step. This is the hard invariant the
+    clamp in RacelineOpponent.step guarantees, independent of the yield heuristic.
+    """
+    o = RacelineOpponent(track, s0=4.0, pace=1.2, offset=0.0)
+    o.reset()
+    prev_sep = abs(ego_lat - o.offset)
+    for _ in range(60):
+        ego = _ego_pose_at(track, o.s, ego_lat)   # keep the ego wheel-to-wheel as the opp advances
+        o.step(0.05, ego=ego)
+        sep = abs(ego_lat - o.offset)
+        # separation may only grow or hold (a tiny numerical slack), never close
+        assert sep >= prev_sep - 1e-9, f"opponent closed on the ego: sep {sep:.4f} < {prev_sep:.4f}"
+        # and it must be on the OPPOSITE side of the ego (or centre), never past it onto the ego's side
+        assert o.offset * np.sign(ego_lat) <= 1e-9, f"opponent crossed onto the ego's side: offset {o.offset:.4f}"
+        prev_sep = sep
+
+
+def test_raceline_opponent_recentres_when_the_ego_is_gone(track):
+    """The invariant must not freeze the opponent off-line: with no ego close it
+    eases back toward its nominal offset (here 0)."""
+    o = RacelineOpponent(track, s0=4.0, pace=1.2, offset=0.0)
+    o.reset()
+    o.offset = 0.4                   # perturb it off its nominal line
+    for _ in range(120):
+        o.step(0.05, ego=None)       # nobody alongside
+    assert abs(o.offset) < 0.05, f"opponent did not ease back to its line: offset {o.offset:.4f}"
 
 
 def test_plant_ends_the_episode_on_a_collision(track):

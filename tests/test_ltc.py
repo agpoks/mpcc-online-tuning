@@ -148,6 +148,40 @@ def test_gradient_survives_at_the_bound():
     assert np.abs(dcell).sum() > 0.0, "no gradient for the cell at the bound"
 
 
+def test_kv_floor_and_ceiling_bound_the_grip_claim_per_class():
+    """The class-conditioned k_v band: for equal/faster (floor+ceiling classes) the emitted grip
+    claim stays inside [floor, ceil]; other classes are free. The floor stops the bimodal seeds
+    passing by claiming LESS grip; the ceiling stops the aggressive seed OVER-claiming off the line.
+    Both mask the gradient at the bound (like a box clip) so the learner is not pushed past it.
+    """
+    kvi = WEIGHT_NAMES.index("k_v")
+    KVF, KVC = 0.50, 0.62
+    cell = LTCCell(N_FEATURES, 12, seed=0)
+    pol = WeightPolicy(cell, TH0, THETA_LO, THETA_HI, seed=0, n_classes=4,
+                       kv_floor=KVF, kv_floor_classes=(2, 3),
+                       kv_ceil=KVC, kv_ceil_classes=(2, 3))
+    rng = np.random.default_rng(0)
+    pol.cls = 2                                        # a banded class (equal)
+    n_bound = 0
+    for _ in range(80):
+        th = pol.step(rng.normal(0.0, 3.0, N_FEATURES))   # extreme features -> saturate both ways
+        kv = float(np.exp(th[kvi]))
+        assert KVF - 1e-6 <= kv <= KVC + 1e-6, f"equal-class k_v {kv:.3f} left the band [{KVF},{KVC}]"
+        if abs(kv - KVF) < 1e-9 or abs(kv - KVC) < 1e-9:   # the clamp bound this step
+            assert pol._sq[kvi] == 0.0, "gradient not masked at the k_v bound"
+            n_bound += 1
+    assert n_bound > 0, "the k_v band never bound -- test is not exercising the clamp"
+
+    pol.cls = 0                                        # an unbanded class (slower)
+    saw_below = saw_above = False
+    for _ in range(80):
+        th = pol.step(rng.normal(0.0, 3.0, N_FEATURES))
+        kv = float(np.exp(th[kvi]))
+        saw_below |= kv < KVF - 1e-3
+        saw_above |= kv > KVC + 1e-3
+    assert saw_below and saw_above, "slower class must be free of the equal-class k_v band"
+
+
 def test_ltc_leak_is_below_one_by_construction():
     """The influence series converges without an arbitrary cap."""
     cell = LTCCell(N_FEATURES, 16, seed=1)

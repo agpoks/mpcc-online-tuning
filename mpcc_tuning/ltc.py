@@ -205,7 +205,8 @@ class WeightPolicy:
                  direct: bool = True,
                  influence: str = "rflo", gauge_fix: bool = False,
                  n_classes: int = 0, delta_log: float = 0.6,
-                 kv_floor: float = 0.0, kv_floor_classes=()):
+                 kv_floor: float = 0.0, kv_floor_classes=(),
+                 kv_ceil: float = 0.0, kv_ceil_classes=()):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
@@ -284,6 +285,14 @@ class WeightPolicy:
         self.kv_idx = WEIGHT_NAMES.index("k_v")
         self.kv_floor = float(np.log(kv_floor)) if kv_floor > 0 else None
         self.kv_floor_classes = set(int(c) for c in kv_floor_classes)
+        # CLASS-CONDITIONED k_v CEILING (symmetric to the floor): vs a near-matched/faster opponent
+        # the emitted k_v may not rise ABOVE kv_ceil either. k_v is grip UTILISATION; above the ceiling
+        # the STD plant over-claims grip and drifts off the racing line at speed (the corridor probe
+        # showed seed-2's off-track is grip over-claim at k_v~0.76, NOT a corridor buy-off). The floor
+        # gives the passing speed edge, the ceiling keeps it inside what the plant can hold -> together
+        # they define the safe racing band for near-matched opponents.
+        self.kv_ceil = float(np.log(kv_ceil)) if kv_ceil > 0 else None
+        self.kv_ceil_classes = set(int(c) for c in kv_ceil_classes)
         self.reset()
 
     def reset(self):
@@ -385,6 +394,12 @@ class WeightPolicy:
         # apply the class-conditioned k_v floor (after base+residual), masking the gradient like a clip
         if self.kv_floor is not None and self.cls in self.kv_floor_classes and theta[self.kv_idx] < self.kv_floor:
             theta = np.array(theta, float); theta[self.kv_idx] = self.kv_floor
+            self._sq = self._sq.copy(); self._sq[self.kv_idx] = 0.0
+            if self._cls_used is not None:
+                self._dsq = self._dsq.copy(); self._dsq[self.kv_idx] = 0.0
+        # and the symmetric class-conditioned k_v ceiling (over-claim -> off the line), same masking
+        if self.kv_ceil is not None and self.cls in self.kv_ceil_classes and theta[self.kv_idx] > self.kv_ceil:
+            theta = np.array(theta, float); theta[self.kv_idx] = self.kv_ceil
             self._sq = self._sq.copy(); self._sq[self.kv_idx] = 0.0
             if self._cls_used is not None:
                 self._dsq = self._dsq.copy(); self._dsq[self.kv_idx] = 0.0

@@ -155,21 +155,39 @@ class RacelineOpponent:
         # does not flap between sides, a limited lateral RATE, and -- crucially -- a GRIP COST:
         # moving sideways uses tyre grip that is then unavailable to go forward, so a lateral
         # manoeuvre SLOWS the car (a real car sliding across the track loses speed).
+        #
+        # SAFETY INVARIANT (a racing opponent may not crash into us on purpose): whenever the ego
+        # is alongside (arc-length overlap), the opponent's lateral step is CLAMPED so it can only
+        # move AWAY from the ego's side or hold -- never toward it. This makes non-ramming a hard
+        # guarantee, not just a property of the yield heuristic: even if the recentre pull toward
+        # offset0 or a mis-picked side would close the lateral gap, the clamp forbids it. A contact
+        # can then only come from the EGO closing on a yielding car, never from the opponent
+        # steering in. tests/test_obstacles.py asserts the invariant.
         CLEAR = 0.45                                  # how far to ease aside [m] (not to the wall)
         LAT_RATE = 0.8                                # max lateral speed [m/s] (grip-limited)
+        DEAD = 0.05                                   # ego-lateral deadband for "which side is it on"
         tgt = self.offset0
+        ego_lat = None; alongside = False
         if ego is not None:
             ex, ey, _ = ego
             es = self.track.project(float(ex), float(ey))
             d = (es - self.s) % self.track.length
             gap = d - self.track.length if d > self.track.length / 2 else d
-            if abs(gap) < 3.5:
+            alongside = abs(gap) < 3.5
+            if alongside:
                 ego_lat = float(self.track.lateral(float(ex), float(ey)))
                 wl, wr = self.track.width(self.track.wrap(self.s))
-                side = -1.0 if ego_lat >= 0.10 else (1.0 if ego_lat <= -0.10 else np.sign(self.offset) or 1.0)
+                side = -1.0 if ego_lat >= DEAD else (1.0 if ego_lat <= -DEAD else np.sign(self.offset) or 1.0)
                 room = (float(wr) if side > 0 else float(wl)) - self.radius - 0.05
                 tgt = side * min(CLEAR, max(room, 0.0))
         step_lat = float(np.clip(tgt - self.offset, -LAT_RATE * dt, LAT_RATE * dt))
+        # invariant: alongside the ego, the opponent may not steer INTO it. If the ego is on the
+        # +lateral side it may only move - (away) or hold; on the -side, only + or hold.
+        if alongside and ego_lat is not None:
+            if ego_lat > DEAD:
+                step_lat = min(step_lat, 0.0)
+            elif ego_lat < -DEAD:
+                step_lat = max(step_lat, 0.0)
         self.offset += step_lat
         lat_speed = abs(step_lat) / max(dt, 1e-3)
         self.speed = float(max(0.0, v * (1.0 - 0.4 * lat_speed / max(v, 0.3))))   # grip cost of moving sideways

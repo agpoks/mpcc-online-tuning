@@ -219,6 +219,14 @@ W_COMMIT = 1.5          # weight of the speed-edge-while-engaged (commitment) re
 # below the grip limit (safe). static/slower do not get it (no extra speed needed to pass a slow car).
 KV_FLOOR = 0.50
 KV_FLOOR_CLASSES = (2, 3)   # PACE_KINDS indices: equal, faster
+# k_v CEILING for the same near-matched/faster classes: the grip-claim may not rise ABOVE this either.
+# k_v is grip UTILISATION; the corridor probe (tools/kv_ceiling_probe.py) showed seed-2's off-track is
+# grip OVER-CLAIM -- at k_v~0.76 the STD plant drifts off the racing line at speed even solo (NOT a
+# corridor buy-off; the plan stays inside). seed 1 passed the FASTER car at k_v~0.50, so the floor is
+# already enough to overtake -- the ceiling only removes the unrecoverable over-drive. Floor+ceiling
+# together are the safe racing band. Value pinned from the k_v-ceiling sweep (highest k_v on the line).
+KV_CEIL = 0.62
+KV_CEIL_CLASSES = (2, 3)
 
 # STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
 # NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
@@ -318,7 +326,8 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         # directly (indexed by class), so it CAN emit different weights per class. Set each episode
         # via tuner.set_class below.
         pol = WeightPolicy(cell, th0, lo, hi, seed=seed, n_classes=len(PACE_KINDS),
-                           kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES)
+                           kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES,
+                           kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES)
         # THE fix for "we get stuck on the values and don't explore more": the old call set
         # explore=0.06 (CONTROL noise on steering/accel only) but theta_explore=0 and entropy=0,
         # so the WEIGHTS were emitted deterministically and, once the tanh saturated at the box
