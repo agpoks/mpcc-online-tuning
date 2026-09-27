@@ -87,7 +87,7 @@ try:
             for k in KINDS:
                 R=[r for x in d["runs"] if x["arm"]==arm for r in x["rows"]
                    if r["kind"]==k and "theta_mean" in r]
-                M.append(np.mean([r["theta_mean"] for r in R],axis=0)/start if R else np.ones(8))
+                M.append(np.mean([r["theta_mean"] for r in R],axis=0)/start if R else np.ones(len(WEIGHT_NAMES)))
             M=np.array(M)                      # 4 kinds x N weights, relative to START
             fig,ax=plt.subplots(figsize=(8,3.8))
             im=ax.imshow(np.log2(M).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")
@@ -114,7 +114,7 @@ try:
         for arm in ["ltc","mlp"]:
             runs=[x for x in d["runs"] if x["arm"]==arm]
             if not runs: continue
-            neps=max(len(x["rows"]) for x in runs); curve=np.full((neps,8),np.nan)
+            neps=max(len(x["rows"]) for x in runs); curve=np.full((neps,len(WEIGHT_NAMES)),np.nan)
             for e in range(neps):
                 vals=[x["rows"][e]["theta_mean"] for x in runs
                       if e<len(x["rows"]) and "theta_mean" in x["rows"][e]]
@@ -132,10 +132,10 @@ try:
             for arm in ["ltc","mlp"]:
                 runs=[x for x in d["runs"] if x["arm"]==arm]
                 if not runs: continue
-                M=np.zeros((4,8)); cnt=np.zeros(4)
+                M=np.zeros((4,len(WEIGHT_NAMES))); cnt=np.zeros(4)
                 for x in runs:
                     for r in x["rows"][len(x["rows"])//2:]:      # last-half episodes = converged
-                        st_=np.array(r.get("sec_theta",np.zeros((4,8))))
+                        st_=np.array(r.get("sec_theta",np.zeros((4,len(WEIGHT_NAMES)))))
                         for s in range(4):
                             if st_[s].any(): M[s]+=st_[s]; cnt[s]+=1
                 seen=[s for s in range(4) if cnt[s]>0]     # only sectors the car visits
@@ -144,7 +144,7 @@ try:
                     else: continue                          # no samples -> not an "all-zero" row
                     wtr.writerow([arm,s]+[round(float(v),4) for v in M[s]]
                                  +[round(float(v),3) for v in (M[s]/start)])
-                rel=np.full((4,8),np.nan)                   # empty sectors stay blank (NaN)
+                rel=np.full((4,len(WEIGHT_NAMES)),np.nan)                   # empty sectors stay blank (NaN)
                 for s in seen: rel[s]=M[s]/start
                 fig,ax=plt.subplots(figsize=(8,3.8))
                 im=ax.imshow(np.log2(rel).T,cmap="RdBu_r",vmin=-1.2,vmax=1.2,aspect="auto")

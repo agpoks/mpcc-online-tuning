@@ -1,0 +1,9 @@
+arm,kind,passes,contact_frac,n
+ltc,static,3.6,0.0,10
+ltc,slower,1.091,0.0,11
+ltc,equal,1.0,0.0,11
+ltc,faster,0.2,0.1,10
+mlp,static,3.7,0.0,10
+mlp,slower,1.364,0.091,11
+mlp,equal,0.909,0.0,11
+mlp,faster,0.4,0.0,10
