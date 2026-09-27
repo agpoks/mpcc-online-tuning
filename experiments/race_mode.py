@@ -139,7 +139,7 @@ PACE = {"static": 0.0, "slower": 0.55, "equal": 0.90, "faster": 1.20}
 # AND pays a grip cost for lateral moves, so the realised lap pace is well below the target.
 # Recalibrated DOWN (was 0.9/1.3/1.8, which made "faster" ~1.8x the ego -> uncatchable): now
 # slower is genuinely slower, equal ~matched, faster only a little quicker so it is catchable.
-FAIR_PACE = {"static": 0.0, "slower": 0.80, "equal": 1.00, "faster": 1.35}  # equal = TRULY matched (was 1.10 = 10% faster, so "equal" was really "a bit faster" -> unpassable)
+FAIR_PACE = {"static": 0.0, "slower": 0.80, "equal": 1.00, "faster": 1.10}  # equal = matched; faster = only a TOUCH quicker (was 1.35 = uncatchable, over-pulled the chase and starved equal). Tight realistic spread 0.8/1.0/1.1.
 PACE_KINDS = ("static", "slower", "equal", "faster")
 
 # Pace-DEPENDENT reward, per the intended behaviour for each opponent type:
@@ -263,6 +263,11 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
         closing += 0.3 * (6.0 - gap)                       # close on a car ahead you can catch
     if 0.0 < gap < SAFE_FOLLOW and v_ego <= v_opp + 0.1:
         closing -= 1.0 * (SAFE_FOLLOW - gap)               # tailgating one you can't pass -> back off
+    # NEAR-MATCHED (equal / barely-faster): reward HOLDING a good overtaking position, so the tuner
+    # sets up and commits to the hard pass instead of abandoning it -- recovers ltc's equal-passing,
+    # which the pure chase reward had starved (equal dipped to 0.55 while it over-invested in faster).
+    if 0.85 <= diff <= 1.2 and -1.0 < gap < 3.0:
+        closing += 0.4
     scale = min(max(0.65 + 0.4 * diff, 0.65), 1.10)        # slip budget: LOOSER vs a faster opponent
     slip = -W_SLIP * (max(0.0, abs(float(alpha_r)) - scale * ALPHA_R_REF)
                       + 0.5 * max(0.0, abs(float(beta)) - BETA_REF))
