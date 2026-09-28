@@ -262,24 +262,33 @@ def tikz_race_states(seed, kind):
 \addplot[black, dotted, line width=0.4pt, forget plot] coordinates {{({t[0]:.2f},0) ({t[-1]:.2f},0)}};
 \addplot[color=c{kind}, line width=0.9pt] coordinates {{{C(L['GAP'])}}};"""
     beta = np.degrees(L["BETA"]); yaw = np.degrees(L["R"]) / 10.0
-    p3 = rf"""\nextgroupplot[ylabel={{$\beta$ [deg], $\dot\psi/10$}}, xlabel={{time [s]}},
+    p3 = rf"""\nextgroupplot[ylabel={{$\beta$ [deg], $\dot\psi/10$}},
   legend style={{at={{(0.98,0.95)}}, anchor=north east, draw=none, font=\scriptsize}}, legend columns=2]
 {vline(np.concatenate([beta, yaw]))}
 \addplot[color=c{kind}, line width=0.8pt] coordinates {{{C(beta)}}};
 \addlegendentry{{$\beta$}}
 \addplot[color=cslower, line width=0.8pt] coordinates {{{C(yaw)}}};
 \addlegendentry{{$\dot\psi/10$}}"""
+    th = np.asarray(L["THETA"]); kv = th[:, 7]; qv = th[:, 2]
+    p4 = rf"""\nextgroupplot[ylabel={{emitted weight}}, xlabel={{time [s]}},
+  legend style={{at={{(0.98,0.95)}}, anchor=north east, draw=none, font=\scriptsize}}, legend columns=2]
+{vline(np.concatenate([kv, qv]))}
+\addplot[color=cequal, line width=0.8pt] coordinates {{{C(kv)}}};
+\addlegendentry{{$k_v$}}
+\addplot[color=cstatic!50!red, line width=0.8pt] coordinates {{{C(qv)}}};
+\addlegendentry{{$q_v$}}"""
     body = rf"""\begin{{tikzpicture}}
 \begin{{groupplot}}[
-  group style={{group size=1 by 3, vertical sep=0.5cm,
+  group style={{group size=1 by 4, vertical sep=0.45cm,
     xlabels at=edge bottom, xticklabels at=edge bottom}},
-  width=8.0cm, height=2.6cm, tick label style={{font=\scriptsize}},
+  width=8.0cm, height=2.3cm, tick label style={{font=\scriptsize}},
   ylabel style={{font=\footnotesize}}, title style={{font=\small}},
   grid=both, grid style={{gray!15}},
 ]
 {p1}
 {p2}
 {p3}
+{p4}
 \end{{groupplot}}
 \end{{tikzpicture}}"""
     write(f"fig_race_states_{kind}", body)

@@ -191,13 +191,92 @@ def redrive(seed, kind, steps=2400, gap0=3.0):
     return arr
 
 
-def get_states(seed, kind, redrive_flag, **kw):
-    cache = OUT / f"states_ltc_{seed}_{kind}.npz"
+def redrive_online(seed, kind, steps=2400, gap0=3.0):
+    """The ONLINE method itself: run the PolicyTuner (explore + learn each tick) starting from the
+    banked net, seeded so it is reproducible. This is what the paper is about -- the policy adapts
+    the MPCC weights to the race and, via exploration the critic reinforces, actually overtakes.
+    Logs ego + opponent states AND the emitted weights per tick (to show the online adaptation)."""
+    from mpcc_tuning.acados_mpcc import AcadosMPCC
+    from mpcc_tuning.plant_scuderia import ScuderiaPlant
+    from mpcc_tuning.opponents import RacelineOpponent, ObstacleTracker
+    from mpcc_tuning.ltc import LTCCell, WeightPolicy, PolicyTuner
+    from experiments.race_mode import (race_features, race_reward, FAIR_PACE, signed_gap,
+                                        N_RACE_FEATURES, KEEPOUT_R, CONTACT_R, PACE_KINDS, LR_VEH,
+                                        A_LAT_RACE, CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES,
+                                        KV_CEIL, KV_CEIL_CLASSES)
+    track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth")
+    m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref,
+                   discrete=True, max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW,
+                   name=f"paperon_ltc_{seed}")
+    d = np.load(ROOT / "results/race/nets" / f"race_ltc_{seed}.npz")
+    cell = LTCCell(N_RACE_FEATURES, int(d["n_hidden"]), seed=seed)
+    dcl = d["D_class"]; ncls = int(dcl.shape[0])
+    pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls,
+                       delta_log=float(d["delta_log"]),
+                       kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES,
+                       kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES)
+    pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.D_class[...] = dcl
+    tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0, seed=seed,
+                        trust_region=0.01, theta_prior=0.15, theta_explore=0.15, entropy=0.03,
+                        critic="return", alpha_delta=0.01, trust_region_delta=0.03)
+    tuner.reset(); tuner.set_class(PACE_KINDS.index(kind))
+    ego_pace = 1.65; v_opp = FAIR_PACE[kind] * ego_pace
+    s0 = (seed % 4) * track.length / 4.0; v0 = 1.3 + 0.1 * (seed % 3)
+    opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp, offset=0.0,
+                           radius=KEEPOUT_R, a_lat=2.5)
+    tracker = ObstacleTracker(dt=0.05); P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
+    P.reset(s0=s0, v0=v0); m.reset(); opp.reset(); tracker.update(opp.pose()[:2]); m.set_obstacles([opp.keepout()])
+    _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
+    _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
+    feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed, slip=(_ar, _b, _r))
+    theta, u = tuner.act(feat, P.state_dyn())
+    LOGK = ["EX", "EY", "EPSI", "S", "V", "BETA", "R", "ALR", "GAP", "PASS", "OX", "OY", "OPSI", "OV"]
+    log = {k: [] for k in LOGK}; logT = []
+    passes = 0; seen = False; contact = False; prev_g = None; sec_pass = np.zeros(4); sec_ct = np.zeros(4)
+    for _ in range(steps):
+        s5n, r, off, tr = P.step(u)
+        ex, ey = float(P._x[0]), float(P._x[1]); epsi = float(P.state5()[2])
+        opp.step(0.05, ego=(ex, ey, float(P._x[3]))); ox, oy, rad = opp.keepout(); opsi = float(opp.pose()[2])
+        s_ego = track.project(ex, ey); g = signed_gap(track, s_ego, opp.s); sec = int(track.sector(track.wrap(s_ego)))
+        _lat = float(track.lateral(ex, ey)); _wl, _wr = track.width(track.wrap(s_ego))
+        edge_dist = min(float(_wr) - 0.12 - _lat, _lat + float(_wl) - 0.12)
+        _v = float(P._x[3]); _r = float(P._x[5]); _b = float(P._x[6])
+        _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
+        vo = float(getattr(opp, "speed", v_opp))
+        if np.hypot(ex - ox, ey - oy) < CONTACT_R:
+            contact = True
+        just_passed = False
+        if g < 0 and abs(g) < track.length / 4 and not seen and _v > vo:
+            passes += 1; seen = True; sec_pass[sec] += 1; just_passed = True
+        elif g > 0.5:
+            seen = False
+        for kk, val in zip(LOGK, [ex, ey, epsi, s_ego, _v, _b, _r, _ar, g, passes, ox, oy, opsi, vo]):
+            log[kk].append(val)
+        logT.append(np.exp(theta))
+        m.set_obstacles([opp.keepout()]); tracker.update(opp.pose()[:2])
+        gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0; prev_g = g
+        fn = race_features(track, s5n, [opp], opp_speed_est=tracker.speed,
+                           slip=(_ar, _b, _r), gap_rate=gr, sector_suit=(sec_pass - sec_ct))
+        r_shaped = race_reward(kind, r, just_passed, contact, _v, vo, g, alpha_r=_ar, beta=_b,
+                               off=off, edge_dist=edge_dist, opp_pace=FAIR_PACE[kind])
+        out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
+        if out[0] is None:
+            break
+        theta, u = out
+    arr = {k: np.asarray(v, float) for k, v in log.items()}
+    arr["THETA"] = np.asarray(logT, float); arr["off"] = np.asarray([off])
+    np.savez(OUT / f"states_online_ltc_{seed}_{kind}.npz", **arr)
+    return arr
+
+
+def get_states(seed, kind, redrive_flag, online=True, **kw):
+    tag = "online_" if online else ""
+    cache = OUT / f"states_{tag}ltc_{seed}_{kind}.npz"
     if cache.exists() and not redrive_flag:
         z = np.load(cache)
         if "OV" in z.files:                       # cache has the opponent states -> reuse
             return {k: z[k] for k in z.files}
-    return redrive(seed, kind, **kw)
+    return (redrive_online if online else redrive)(seed, kind, **kw)
 
 
 # --------------------------------------------------------------------------- track drawing
@@ -375,11 +454,14 @@ def race_window(L):
 
 
 def fig_race_states(seed, kind, redrive_flag):
-    """Ego AND opponent states through the race: speeds, gap (pass marked), our slip & yaw-rate."""
+    """The ONLINE method through a race: ego vs opponent speeds, gap (pass marked), our slip & yaw,
+    and the WEIGHTS the policy emits online (k_v, q_v) -- so you see it adapt / burst into the pass."""
+    from experiments.race_mode import KV_FLOOR, KV_CEIL
     L = get_states(seed, kind, redrive_flag)
     sl = race_window(L); t = np.arange(len(L["V"]))[sl] * 0.05
     pas = np.asarray(L["PASS"]); jumps = [j for j in (np.where(np.diff(pas) > 0)[0] + 1) if j < sl.stop]
-    fig, axs = plt.subplots(3, 1, figsize=(3.5, 4.0), sharex=True)
+    th = L["THETA"][sl]; kvi = WEIGHT_NAMES.index("k_v"); qvi = WEIGHT_NAMES.index("q_v")
+    fig, axs = plt.subplots(4, 1, figsize=(3.5, 5.2), sharex=True)
     ke = KCOL.get(kind, "#009E73")
     axs[0].plot(t, L["V"][sl], color=ke, lw=1.1, label="ego")
     axs[0].plot(t, L["OV"][sl], color="0.5", lw=1.1, ls="--", label=f"{KIND_LABEL[kind]} opp.")
@@ -391,7 +473,12 @@ def fig_race_states(seed, kind, redrive_flag):
     axs[2].plot(t, np.degrees(L["BETA"][sl]), color=ke, lw=1.0, label=r"$\beta$")
     axs[2].plot(t, np.degrees(L["R"][sl]) / 10.0, color="#0072B2", lw=1.0, label=r"$\dot\psi/10$", alpha=0.9)
     axs[2].set_ylabel(r"$\beta$ [deg], $\dot\psi/10$"); axs[2].legend(fontsize=6, ncol=2, loc="upper right")
-    axs[2].set_xlabel("time [s]")
+    # online-emitted weights: k_v (grip claim, the overtake lever) and q_v (progress)
+    axs[3].plot(t, th[:, kvi], color="#009E73", lw=1.0, label=r"$k_v$")
+    axs[3].plot(t, th[:, qvi], color="#CC79A7", lw=1.0, label=r"$q_v$")
+    axs[3].axhline(KV_FLOOR, color="#009E73", ls=":", lw=0.6); axs[3].axhline(KV_CEIL, color="#009E73", ls=":", lw=0.6)
+    axs[3].set_ylabel("emitted weight"); axs[3].legend(fontsize=6, ncol=2, loc="upper right")
+    axs[3].set_xlabel("time [s]")
     for a in axs:
         a.grid(True, alpha=0.25); a.tick_params(labelsize=7)
         for j in jumps:
@@ -399,7 +486,8 @@ def fig_race_states(seed, kind, redrive_flag):
     if len(jumps):
         axs[0].text(jumps[0] * 0.05, axs[0].get_ylim()[1], "overtake", fontsize=6, color="#D55E00",
                     ha="center", va="bottom")
-    fig.suptitle(f"Racing a {KIND_LABEL[kind]} opponent: ego vs opponent states (seed {seed})", y=0.98, fontsize=9)
+    fig.suptitle(f"Online tuning vs a {KIND_LABEL[kind]} opponent: states + emitted weights (seed {seed})",
+                 y=0.99, fontsize=8.5)
     fig.tight_layout()
     save(fig, f"fig_race_states_{kind}")
 

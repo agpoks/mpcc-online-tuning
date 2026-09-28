@@ -17,7 +17,7 @@ PAPER = ROOT / "results/race/paper"
 
 
 def gif_from_cache(seed, kind, stride=6, fps=20):
-    z = np.load(PAPER / f"states_ltc_{seed}_{kind}.npz")
+    z = np.load(PAPER / f"states_online_ltc_{seed}_{kind}.npz")   # the ONLINE method's run
     EX, EY, OX, OY = z["EX"], z["EY"], z["OX"], z["OY"]
     cg = np.hypot(EX - OX, EY - OY) < CONTACT_R
     d = dict(EX=EX, EY=EY, EV=z["V"], OX=OX, OY=OY,
