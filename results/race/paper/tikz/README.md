@@ -8,12 +8,19 @@ Files:
 - `fig_track_states_traces.tex` groupplot: our states v, beta, yaw-rate along the lap
 - `fig_track_traj.tex` (+ `traj_ltc_0_<kind>.dat`) track corridor + speed-coloured trajectory
 
-Each .tex is a standalone document: `pdflatex fig_learn_over_rounds.tex` compiles it to PDF.
-To use in the paper, lift the `tikzpicture` and ensure the preamble has:
+Each .tex is a standalone document: `pdflatex fig_learn_over_rounds.tex` (or
+`tectonic fig_learn_over_rounds.tex`) compiles it to a cropped PDF.
+
+To include in the paper, put this in the preamble:
 
     \usepackage{pgfplots}
     \pgfplotsset{compat=1.18}
     \usepgfplotslibrary{groupplots,colormaps}
+    \usepackage{standalone}          % makes \input of these files work as-is
+
+then `\input{tikz/fig_learn_over_rounds.tex}` -- the standalone package turns the
+\documentclass/\begin{document} wrapper into a no-op when included, so the same file
+compiles standalone AND drops into the paper. (Or just lift the tikzpicture by hand.)
 
 `fig_track_traj.tex` reads its `traj_*.dat` from the same folder (keep them together).
 Matching PDFs (from matplotlib) are one level up in `results/race/paper/`.

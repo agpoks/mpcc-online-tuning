@@ -95,7 +95,6 @@ def tikz_by_opponent(runs):
 {chr(10).join(cells)}
 {xt}
 {yt}
-\node[font=\small, rotate=90] at (-0.95,{nk/2}) {{opponent}};
 {chr(10).join(sw)}
 \node[font=\tiny, anchor=west] at ({cb_x+0.45},{nk}) {{$+{vmax:.1f}$}};
 \node[font=\tiny, anchor=west] at ({cb_x+0.45},0) {{$-{vmax:.1f}$}};
@@ -162,7 +161,8 @@ def tikz_state_traces(seed, kinds):
     b2 = block("R", deg, r"$\dot\psi$ [deg/s]") + "\n" + r"\legend{" + ",".join(kinds) + "}"
     body = rf"""\begin{{tikzpicture}}
 \begin{{groupplot}}[
-  group style={{group size=1 by 3, vertical sep=0.7cm}},
+  group style={{group size=1 by 3, vertical sep=0.45cm,
+    xlabels at=edge bottom, xticklabels at=edge bottom}},
   width=8.0cm, height=2.6cm, xlabel={{lap distance $s$ [m]}},
   tick label style={{font=\scriptsize}}, ylabel style={{font=\footnotesize}},
   title style={{font=\small}}, grid=both, grid style={{gray!15}},
@@ -239,12 +239,19 @@ Files:
 - `fig_track_states_traces.tex` groupplot: our states v, beta, yaw-rate along the lap
 - `fig_track_traj.tex` (+ `traj_ltc_{seed}_<kind>.dat`) track corridor + speed-coloured trajectory
 
-Each .tex is a standalone document: `pdflatex fig_learn_over_rounds.tex` compiles it to PDF.
-To use in the paper, lift the `tikzpicture` and ensure the preamble has:
+Each .tex is a standalone document: `pdflatex fig_learn_over_rounds.tex` (or
+`tectonic fig_learn_over_rounds.tex`) compiles it to a cropped PDF.
+
+To include in the paper, put this in the preamble:
 
     \\usepackage{{pgfplots}}
     \\pgfplotsset{{compat=1.18}}
     \\usepgfplotslibrary{{groupplots,colormaps}}
+    \\usepackage{{standalone}}          % makes \\input of these files work as-is
+
+then `\\input{{tikz/fig_learn_over_rounds.tex}}` -- the standalone package turns the
+\\documentclass/\\begin{{document}} wrapper into a no-op when included, so the same file
+compiles standalone AND drops into the paper. (Or just lift the tikzpicture by hand.)
 
 `fig_track_traj.tex` reads its `traj_*.dat` from the same folder (keep them together).
 Matching PDFs (from matplotlib) are one level up in `results/race/paper/`.
