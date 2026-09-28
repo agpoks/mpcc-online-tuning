@@ -281,40 +281,38 @@ def fig_track_states(seed, kinds, redrive_flag):
     nk = len(kinds)
     fig = plt.figure(figsize=(7.16, 3.1))
     gs = fig.add_gridspec(1, nk + 1, width_ratios=[2.0] * nk + [1.5], wspace=0.30)
-    # per-kind track panels
-    vall = np.concatenate([logs[k]["V"] for k in kinds])
-    vmin, vmax = float(vall.min()), float(vall.max())
+    # per-kind track panels -- each with its OWN speed colour range (so the speed VARIATION shows
+    # in every panel, instead of being washed out by the fastest panel on a shared scale)
     from matplotlib import colormaps
+    from matplotlib.lines import Line2D
     cmap = colormaps["viridis"]
     for c, k in enumerate(kinds):
         ax = fig.add_subplot(gs[0, c]); track_background(ax)
         L = logs[k]; ex, ey, v = L["EX"], L["EY"], L["V"]
-        # faded full-lap ghost
-        ax.plot(ex, ey, color="0.25", lw=0.5, alpha=0.25, zorder=2)
-        # speed-coloured trajectory
+        vlo, vhi = float(v.min()), float(v.max())
+        # ego: a THIN, slightly TRANSPARENT speed-coloured line
         pts = np.column_stack([ex, ey]); seg = np.concatenate([pts[:-1, None], pts[1:, None]], axis=1)
-        lc = LineCollection(seg, cmap=cmap, norm=plt.Normalize(vmin, vmax), lw=2.6, zorder=3)
+        lc = LineCollection(seg, cmap=cmap, norm=plt.Normalize(vlo, vhi), lw=1.3, alpha=0.85, zorder=3)
         lc.set_array(v[:-1]); ax.add_collection(lc)
-        # opponent path as a THIN black core drawn ON TOP of the (thicker) ego colour trajectory:
-        # where they share the racing line you see the ego colour with a black centre; where they
-        # diverge (a pass) you see two separate lines.
-        ax.plot(L["OX"], L["OY"], color="k", lw=0.6, alpha=0.95, zorder=6)
+        # opponent: thin black line on top -> visible where the paths diverge (the overtake)
+        ax.plot(L["OX"], L["OY"], color="k", lw=0.7, alpha=0.9, zorder=6)
         pas = np.asarray(L["PASS"]); jumps = np.where(np.diff(pas) > 0)[0] + 1
         if len(jumps):
-            ax.scatter(ex[jumps], ey[jumps], marker="*", s=60, c="#D55E00",
-                       edgecolors="k", linewidths=0.4, zorder=7)
-        ax.set_title(f"vs {KIND_LABEL[k]} opponent", fontsize=8)
-        if c == 0:
-            from matplotlib.lines import Line2D
-            h = [Line2D([0], [0], color=cmap(0.6), lw=1.8, label="ego (colour = speed)"),
-                 Line2D([0], [0], color="k", lw=0.9, label="opponent")]
-            if len(jumps):
-                h.append(Line2D([0], [0], marker="*", color="#D55E00", lw=0, mec="k", ms=7, label="overtake"))
-            ax.legend(handles=h, loc="lower left", fontsize=5.5, handletextpad=0.3, borderpad=0.2)
-    # colourbar for speed
-    sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin, vmax))
-    cax = fig.add_axes([0.045, -0.02, 0.30, 0.03])
-    cb = fig.colorbar(sm, cax=cax, orientation="horizontal"); cb.set_label("ego speed [m/s]", fontsize=7)
+            ax.scatter(ex[jumps], ey[jumps], marker="*", s=90, c="#D55E00",
+                       edgecolors="k", linewidths=0.5, zorder=7)
+        ax.set_title(f"vs {KIND_LABEL[k]} opponent", fontsize=8, pad=2)
+        # per-panel speed colour bar just under the panel
+        cax = ax.inset_axes([0.08, -0.07, 0.84, 0.035])
+        cb = fig.colorbar(matplotlib.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vlo, vhi)),
+                          cax=cax, orientation="horizontal")
+        cb.set_ticks([round(vlo, 1), round(vhi, 1)]); cb.ax.tick_params(labelsize=5.5, length=1.5)
+        cb.set_label("speed [m/s]", fontsize=5.5, labelpad=1)
+    # one shared legend ABOVE the panels (not overlapping any track)
+    h = [Line2D([0], [0], color=cmap(0.6), lw=1.6, label="ego (colour = speed)"),
+         Line2D([0], [0], color="k", lw=0.8, label="opponent"),
+         Line2D([0], [0], marker="*", color="#D55E00", lw=0, mec="k", ms=7, label="overtake")]
+    fig.legend(handles=h, loc="upper center", bbox_to_anchor=(0.42, 1.0), ncol=3,
+               fontsize=6.5, frameon=False, handletextpad=0.3, columnspacing=1.2)
     # state traces panel (use the first kind for clarity, all states vs lap distance)
     axs = gs[0, nk].subgridspec(3, 1, hspace=0.32)
     a0 = fig.add_subplot(axs[0]); a1 = fig.add_subplot(axs[1]); a2 = fig.add_subplot(axs[2])
@@ -419,6 +417,7 @@ if __name__ == "__main__":
     fig_learn_by_opponent(runs)
     fig_learn_over_rounds(runs)
     fig_track_states(a.seed, a.kinds, a.redrive)
-    fig_overtake_snapshots(a.seed, a.overtake_kind, a.redrive)
+    for ok in ("slower", "equal", "faster"):
+        fig_overtake_snapshots(a.seed, ok, a.redrive)   # skips kinds with no overtake
     for rk in ("slower", "equal", "faster"):
         fig_race_states(a.seed, rk, a.redrive)

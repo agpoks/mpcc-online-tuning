@@ -192,11 +192,10 @@ def corridor_edges(n=900):
 def tikz_track_traj(seed, kinds):
     L, Rr = corridor_edges()
     edge = lambda A: " ".join(f"({x:.3f},{y:.3f})" for x, y in A)
-    vall = np.concatenate([P.get_states(seed, k, False)["V"] for k in kinds])
-    vmin, vmax = float(vall.min()), float(vall.max())
     panels = []
     for c, k in enumerate(kinds):
         Lg = P.get_states(seed, k, False); ex, ey, v = Lg["EX"], Lg["EY"], Lg["V"]
+        vlo, vhi = float(v.min()), float(v.max())          # PER-PANEL speed range
         # trajectory table (downsampled) -> its own .dat
         ds = 3; tbl = "x y v\n" + "\n".join(f"{ex[i]:.4f} {ey[i]:.4f} {v[i]:.4f}" for i in range(0, len(ex), ds))
         (TZ / f"traj_ltc_{seed}_{k}.dat").write_text(tbl)
@@ -207,35 +206,30 @@ def tikz_track_traj(seed, kinds):
         if len(jumps):
             pc = " ".join(f"({ex[j]:.3f},{ey[j]:.3f})" for j in jumps)
             passmark = rf"\addplot[only marks, mark=star, mark size=2.6pt, color=cfaster, forget plot] coordinates {{{pc}}};"
-        opts = "title={vs " + k + " opponent}"
-        legend = ""
-        if c == 0:
-            opts += r", legend style={draw=none, font=\scriptsize, at={(0.02,0.02)}, anchor=south west, cells={anchor=west}}"
-            legend = (r"\addlegendimage{line width=1.6pt, color=green!55!black}\addlegendentry{ego ($=$ speed)}"
-                      "\n\\addlegendimage{black, line width=0.7pt}\\addlegendentry{opponent}")
-            if len(jumps):
-                legend += "\n\\addlegendimage{only marks, mark=star, color=cfaster}\\addlegendentry{overtake}"
+        # per-panel colour bar (its own speed range) just below the panel
+        opts = (rf"title={{vs {k} opponent}}, point meta min={vlo:.3f}, point meta max={vhi:.3f}, "
+                rf"colorbar horizontal, colorbar style={{width=2.6cm, height=0.16cm, "
+                rf"xtick={{{vlo:.1f},{vhi:.1f}}}, tick label style={{font=\tiny}}, "
+                rf"xlabel={{v [m/s]}}, xlabel style={{font=\tiny, yshift=2pt}}, "
+                rf"at={{(0.5,-0.03)}}, anchor=north}}")
         panels.append(rf"""\nextgroupplot[{opts}]
 \addplot[gray!70, line width=0.5pt, forget plot] coordinates {{{edge(L)}}};
 \addplot[gray!70, line width=0.5pt, forget plot] coordinates {{{edge(Rr)}}};
-\addplot[mesh, point meta=explicit, line width=2.1pt, forget plot] table[x=x,y=y,meta=v] {{traj_ltc_{seed}_{k}.dat}};
-\addplot[black, line width=0.5pt, forget plot] coordinates {{{opp_path}}};
-{passmark}
-{legend}""")
+\addplot[mesh, point meta=explicit, line width=1.1pt, opacity=0.9, forget plot] table[x=x,y=y,meta=v] {{traj_ltc_{seed}_{k}.dat}};
+\addplot[black, line width=0.6pt, forget plot] coordinates {{{opp_path}}};
+{passmark}""")
     body = rf"""\begin{{tikzpicture}}
 \begin{{groupplot}}[
-  group style={{group size={len(kinds)} by 1, horizontal sep=0.35cm}},
-  width=4.7cm, height=4.7cm, axis equal image, hide axis,
-  colormap/viridis, point meta min={vmin:.3f}, point meta max={vmax:.3f},
-  title style={{font=\small}},
+  group style={{group size={len(kinds)} by 1, horizontal sep=0.55cm}},
+  width=4.6cm, height=4.6cm, axis equal image, hide axis,
+  colormap/viridis, title style={{font=\small, yshift=-2pt}},
 ]
 {chr(10).join(panels)}
 \end{{groupplot}}
-\begin{{axis}}[hide axis, scale only axis, height=0pt, width=0pt,
-  colormap/viridis, colorbar horizontal, point meta min={vmin:.3f}, point meta max={vmax:.3f},
-  colorbar style={{width=5cm, xlabel={{ego speed [m/s]}}, xlabel style={{font=\footnotesize}}, at={{(0.5,-0.12)}}, anchor=north}}]
-\addplot[draw=none] coordinates {{(0,0)}};
-\end{{axis}}
+\node[anchor=south, font=\scriptsize, inner sep=2pt] at (current bounding box.north)
+  {{\textcolor{{green!55!black}}{{\rule[0.35ex]{{0.35cm}}{{1.2pt}}}}~ego (colour $=$ speed)\quad
+    \rule[0.35ex]{{0.35cm}}{{0.6pt}}~opponent\quad
+    \textcolor{{cfaster}}{{$\star$}}~overtake}};
 \end{{tikzpicture}}"""
     write("fig_track_traj", body)
 
@@ -402,5 +396,6 @@ if __name__ == "__main__":
     tikz_track_traj(a.seed, a.kinds)
     for rk in a.race_kinds:
         tikz_race_states(a.seed, rk)
-    tikz_overtake(a.seed, "slower")
+    for ok in ("slower", "equal", "faster"):
+        tikz_overtake(a.seed, ok)                # skips kinds with no overtake
     write_readme(a.seed, a.kinds)

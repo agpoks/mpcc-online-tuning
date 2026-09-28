@@ -217,7 +217,11 @@ W_COMMIT = 1.5          # weight of the speed-edge-while-engaged (commitment) re
 # vs a car you must OUTPACE to pass -- fixes the bimodal ltc seeds that got stuck at low k_v (<baseline
 # 0.45) vs equal and never passed. 0.50 sits just above baseline (an edge over a matched car) and well
 # below the grip limit (safe). static/slower do not get it (no extra speed needed to pass a slow car).
-KV_FLOOR = 0.50
+KV_FLOOR = 0.56             # was 0.50 -- too low: it gave ego ~1.6 m/s, BELOW the equal opponent's
+                            # own pace (1.65), so the deployed net sat at the floor and could not
+                            # overtake a matched car (defeating the floor's purpose). 0.56 gives the
+                            # ego ~1.77 m/s -> a real edge over equal (1.65) and faster (1.72), still
+                            # inside the ceiling (0.62) so it stays on the racing line.
 KV_FLOOR_CLASSES = (2, 3)   # PACE_KINDS indices: equal, faster
 # k_v CEILING for the same near-matched/faster classes: the grip-claim may not rise ABOVE this either.
 # k_v is grip UTILISATION; the corridor probe (tools/kv_ceiling_probe.py) showed seed-2's off-track is
