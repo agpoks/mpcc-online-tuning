@@ -13,7 +13,7 @@
 \begin{groupplot}[
   group style={group size=2 by 1, horizontal sep=0.5cm},
   width=6.0cm, height=6.0cm, axis equal image, hide axis,
-  colormap/viridis, point meta min=1.273, point meta max=1.797,
+  colormap/viridis, point meta min=1.273, point meta max=1.885,
   title style={font=\small},
 ]
 \nextgroupplot[title={vs equal opponent}]
@@ -28,7 +28,7 @@
 
 \end{groupplot}
 \begin{axis}[hide axis, scale only axis, height=0pt, width=0pt,
-  colormap/viridis, colorbar horizontal, point meta min=1.273, point meta max=1.797,
+  colormap/viridis, colorbar horizontal, point meta min=1.273, point meta max=1.885,
   colorbar style={width=5cm, xlabel={ego speed [m/s]}, xlabel style={font=\footnotesize}, at={(0.5,-0.12)}, anchor=north}]
 \addplot[draw=none] coordinates {(0,0)};
 \end{axis}

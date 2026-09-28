@@ -119,8 +119,8 @@ def one_lap(S):
 
 
 # --------------------------------------------------------------------------- re-drive (states)
-def redrive(seed, kind, steps=1600):
-    """Frozen banked-net re-drive; log trajectory + states + emitted weights. Cached to npz."""
+def redrive(seed, kind, steps=2400, gap0=3.0):
+    """Frozen banked-net re-drive; log trajectory + ego AND opponent states + emitted weights."""
     cache = OUT / f"states_ltc_{seed}_{kind}.npz"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
@@ -146,7 +146,7 @@ def redrive(seed, kind, steps=1600):
     ego_pace = 1.65   # measured ego solo pace in the reward5 run log; opponent speeds scale off it
     v_opp = FAIR_PACE[kind] * ego_pace
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.3 + 0.1 * (seed % 3)
-    opp = RacelineOpponent(track, s0=(s0 + 3.0) % track.length, pace=v_opp, offset=0.0,
+    opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp, offset=0.0,
                            radius=KEEPOUT_R, a_lat=2.5)
     tracker = ObstacleTracker(dt=0.05); P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
     P.reset(s0=s0, v0=v0); m.reset(); opp.reset(); tracker.update(opp.pose()[:2]); m.set_obstacles([opp.keepout()])
@@ -158,13 +158,15 @@ def redrive(seed, kind, steps=1600):
     _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
     _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
     theta = emit((_ar, _b, _r)); u = m.value(P.state_dyn(), theta)["u0"]
-    log = {k: [] for k in ["EX", "EY", "S", "V", "BETA", "R", "ALR", "GAP", "PASS", "OX", "OY"]}
+    LOGK = ["EX", "EY", "EPSI", "S", "V", "BETA", "R", "ALR", "GAP", "PASS", "OX", "OY", "OPSI", "OV"]
+    log = {k: [] for k in LOGK}
     logT = []
     passes = 0; seen = False; prev_g = None; sec_pass = np.zeros(4); sec_ct = np.zeros(4)
     for _ in range(steps):
         s5n, r, off, tr = P.step(u)
-        ex, ey = float(P._x[0]), float(P._x[1]); opp.step(0.05, ego=(ex, ey, float(P._x[3])))
-        ox, oy, rad = opp.keepout(); s_ego = track.project(ex, ey)
+        ex, ey = float(P._x[0]), float(P._x[1]); epsi = float(P.state5()[2])
+        opp.step(0.05, ego=(ex, ey, float(P._x[3])))
+        ox, oy, rad = opp.keepout(); opsi = float(opp.pose()[2]); s_ego = track.project(ex, ey)
         g = signed_gap(track, s_ego, opp.s); sec = int(track.sector(track.wrap(s_ego)))
         _v = float(P._x[3]); _r = float(P._x[5]); _b = float(P._x[6])
         _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
@@ -173,8 +175,8 @@ def redrive(seed, kind, steps=1600):
             passes += 1; seen = True; sec_pass[sec] += 1
         elif g > 0.5:
             seen = False
-        for k, val in zip(["EX", "EY", "S", "V", "BETA", "R", "ALR", "GAP", "PASS", "OX", "OY"],
-                          [ex, ey, s_ego, _v, _b, _r, _ar, g, passes, ox, oy]):
+        for k, val in zip(LOGK,
+                          [ex, ey, epsi, s_ego, _v, _b, _r, _ar, g, passes, ox, oy, opsi, vo]):
             log[k].append(val)
         logT.append(np.exp(theta))
         m.set_obstacles([opp.keepout()]); tracker.update(opp.pose()[:2])
@@ -189,11 +191,13 @@ def redrive(seed, kind, steps=1600):
     return arr
 
 
-def get_states(seed, kind, redrive_flag):
+def get_states(seed, kind, redrive_flag, **kw):
     cache = OUT / f"states_ltc_{seed}_{kind}.npz"
     if cache.exists() and not redrive_flag:
-        return {k: np.load(cache)[k] for k in np.load(cache).files}
-    return redrive(seed, kind)
+        z = np.load(cache)
+        if "OV" in z.files:                       # cache has the opponent states -> reuse
+            return {k: z[k] for k in z.files}
+    return redrive(seed, kind, **kw)
 
 
 # --------------------------------------------------------------------------- track drawing
@@ -213,6 +217,19 @@ def track_background(ax):
     ax.plot(L[:, 0], L[:, 1], color="0.35", lw=0.7, zorder=1)
     ax.plot(Rr[:, 0], Rr[:, 1], color="0.35", lw=0.7, zorder=1)
     ax.set_aspect("equal"); ax.axis("off")
+
+
+def draw_car(ax, x, y, psi, color, alpha=1.0, scale=1.0, z=6, ec="k"):
+    """A small oriented car glyph (body rectangle + nose) at (x,y) heading psi."""
+    from matplotlib.patches import Polygon
+    l, w = 0.34 * scale, 0.18 * scale
+    body = np.array([[-l / 2, -w / 2], [l / 2, -w / 2], [l / 2 + 0.10 * scale, 0],
+                     [l / 2, w / 2], [-l / 2, w / 2]])
+    c, s = np.cos(psi), np.sin(psi)
+    R = np.array([[c, -s], [s, c]])
+    pts = body @ R.T + np.array([x, y])
+    ax.add_patch(Polygon(pts, closed=True, facecolor=color, edgecolor=ec,
+                         lw=0.5, alpha=alpha, zorder=z))
 
 
 # =========================================================================== FIGURES
@@ -278,12 +295,15 @@ def fig_track_states(seed, kinds, redrive_flag):
         pts = np.column_stack([ex, ey]); seg = np.concatenate([pts[:-1, None], pts[1:, None]], axis=1)
         lc = LineCollection(seg, cmap=cmap, norm=plt.Normalize(vmin, vmax), lw=1.6, zorder=3)
         lc.set_array(v[:-1]); ax.add_collection(lc)
-        # opponent path (faint) + pass markers
-        ax.plot(L["OX"], L["OY"], color="#D55E00", lw=0.6, alpha=0.35, zorder=2)
+        # opponent path in GREY + grey car glyphs sampled along it (where the opponent is)
+        ax.plot(L["OX"], L["OY"], color="0.55", lw=0.8, alpha=0.7, zorder=2)
+        step = max(1, len(ex) // 7)
+        for j in range(step, len(ex) - 1, step):
+            draw_car(ax, L["OX"][j], L["OY"][j], L["OPSI"][j], color="0.6", alpha=0.9, scale=1.0, z=4)
         pas = np.asarray(L["PASS"]); jumps = np.where(np.diff(pas) > 0)[0] + 1
         if len(jumps):
-            ax.scatter(ex[jumps], ey[jumps], marker="*", s=45, c="#D55E00",
-                       edgecolors="k", linewidths=0.4, zorder=6, label="overtake")
+            ax.scatter(ex[jumps], ey[jumps], marker="*", s=55, c="#D55E00",
+                       edgecolors="k", linewidths=0.4, zorder=7, label="overtake")
         ax.set_title(f"vs {KIND_LABEL[k]} opponent", fontsize=8)
         if c == 0 and len(jumps):
             ax.legend(loc="lower left", fontsize=6, handletextpad=0.2)
@@ -309,10 +329,84 @@ def fig_track_states(seed, kinds, redrive_flag):
     save(fig, "fig_track_states")
 
 
+def fig_overtake_snapshots(seed, kind, redrive_flag, nshots=5):
+    """A strip of single-shot frames of the OVERTAKE: both cars (ego colour, opponent grey)
+    as oriented glyphs on the local track, from just-behind to just-ahead."""
+    from matplotlib import colormaps
+    L = get_states(seed, kind, redrive_flag)
+    pas = np.asarray(L["PASS"]); jumps = np.where(np.diff(pas) > 0)[0] + 1
+    if not len(jumps):
+        print(f"  (no overtake in seed {seed} vs {kind}; skipping snapshots)"); return
+    jp = int(jumps[0])
+    span = 34                                       # +-1.7 s around the pass
+    ticks = np.linspace(max(0, jp - span), min(len(L["EX"]) - 1, jp + span), nshots).astype(int)
+    ex, ey, ev = L["EX"], L["EY"], L["V"]
+    cmap = colormaps["viridis"]; vmin, vmax = float(ev.min()), float(ev.max())
+    # common zoom window over all shown frames (both cars)
+    xs = np.concatenate([ex[ticks], L["OX"][ticks]]); ys = np.concatenate([ey[ticks], L["OY"][ticks]])
+    pad = 0.9
+    xlim = (xs.min() - pad, xs.max() + pad); ylim = (ys.min() - pad, ys.max() + pad)
+    fig, axs = plt.subplots(1, nshots, figsize=(7.16, 7.16 / nshots * (ylim[1] - ylim[0]) / (xlim[1] - xlim[0]) + 0.5))
+    for a, t in zip(axs, ticks):
+        track_background(a)
+        lo = max(0, t - 22)
+        a.plot(ex[lo:t + 1], ey[lo:t + 1], color="0.15", lw=0.8, alpha=0.5, zorder=2)     # ego trail
+        a.plot(L["OX"][lo:t + 1], L["OY"][lo:t + 1], color="0.6", lw=0.8, alpha=0.5, zorder=2)
+        draw_car(a, L["OX"][t], L["OY"][t], L["OPSI"][t], color="0.6", z=5)                 # opponent grey
+        draw_car(a, ex[t], ey[t], L["EPSI"][t], color=cmap((ev[t] - vmin) / (vmax - vmin + 1e-9)), z=6)  # ego
+        a.set_xlim(*xlim); a.set_ylim(*ylim); a.set_aspect("equal"); a.axis("off")
+        dt = (t - jp) * 0.05
+        a.set_title(("pass" if abs(t - jp) <= (ticks[1] - ticks[0]) / 2 else f"$t={dt:+.1f}$ s"), fontsize=8)
+    sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin, vmax))
+    cb = fig.colorbar(sm, ax=axs, fraction=0.02, pad=0.01); cb.set_label("ego speed [m/s]", fontsize=7)
+    fig.suptitle(rf"Overtaking a {KIND_LABEL[kind]} opponent (grey) -- single shots (LTC, seed {seed})", y=1.04)
+    save(fig, f"fig_overtake_{kind}")
+
+
+def race_window(L):
+    """Slice up to the first lap-wrap of the gap (ego laps the opponent) so the pass is legible."""
+    g = np.asarray(L["GAP"]); Lt = float(Track.icra_t2_smooth().length)
+    for i in range(1, len(g)):
+        if g[i] - g[i - 1] > Lt / 2:
+            return slice(0, i)
+    return slice(0, len(g))
+
+
+def fig_race_states(seed, kind, redrive_flag):
+    """Ego AND opponent states through the race: speeds, gap (pass marked), our slip & yaw-rate."""
+    L = get_states(seed, kind, redrive_flag)
+    sl = race_window(L); t = np.arange(len(L["V"]))[sl] * 0.05
+    pas = np.asarray(L["PASS"]); jumps = [j for j in (np.where(np.diff(pas) > 0)[0] + 1) if j < sl.stop]
+    fig, axs = plt.subplots(3, 1, figsize=(3.5, 4.0), sharex=True)
+    ke = KCOL.get(kind, "#009E73")
+    axs[0].plot(t, L["V"][sl], color=ke, lw=1.1, label="ego")
+    axs[0].plot(t, L["OV"][sl], color="0.5", lw=1.1, ls="--", label=f"{KIND_LABEL[kind]} opp.")
+    axs[0].set_ylabel(r"$v$ [m/s]"); axs[0].legend(fontsize=6, ncol=2, loc="lower right")
+    axs[1].plot(t, L["GAP"][sl], color=ke, lw=1.1); axs[1].axhline(0, color="0.6", lw=0.6, ls=":")
+    axs[1].set_ylabel("gap [m]"); axs[1].text(0.02, 0.9, "opp. ahead", transform=axs[1].transAxes,
+                                              fontsize=5.5, va="top", color="0.4")
+    axs[1].text(0.02, 0.12, "ego ahead", transform=axs[1].transAxes, fontsize=5.5, color="0.4")
+    axs[2].plot(t, np.degrees(L["BETA"][sl]), color=ke, lw=1.0, label=r"$\beta$")
+    axs[2].plot(t, np.degrees(L["R"][sl]) / 10.0, color="#0072B2", lw=1.0, label=r"$\dot\psi/10$", alpha=0.9)
+    axs[2].set_ylabel(r"$\beta$ [deg], $\dot\psi/10$"); axs[2].legend(fontsize=6, ncol=2, loc="upper right")
+    axs[2].set_xlabel("time [s]")
+    for a in axs:
+        a.grid(True, alpha=0.25); a.tick_params(labelsize=7)
+        for j in jumps:
+            a.axvline(t[0] + (j) * 0.05, color="#D55E00", lw=0.8, ls="-", alpha=0.7, zorder=0)
+    if len(jumps):
+        axs[0].text(jumps[0] * 0.05, axs[0].get_ylim()[1], "overtake", fontsize=6, color="#D55E00",
+                    ha="center", va="bottom")
+    fig.suptitle(f"Racing a {KIND_LABEL[kind]} opponent: ego vs opponent states (seed {seed})", y=0.98, fontsize=9)
+    fig.tight_layout()
+    save(fig, f"fig_race_states_{kind}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--kinds", nargs="+", default=["equal", "faster"])
+    ap.add_argument("--overtake-kind", default="slower")
     ap.add_argument("--redrive", action="store_true")
     a = ap.parse_args()
     ieee_style()
@@ -321,3 +415,6 @@ if __name__ == "__main__":
     fig_learn_by_opponent(runs)
     fig_learn_over_rounds(runs)
     fig_track_states(a.seed, a.kinds, a.redrive)
+    fig_overtake_snapshots(a.seed, a.overtake_kind, a.redrive)
+    fig_race_states(a.seed, a.overtake_kind, a.redrive)
+    fig_race_states(a.seed, "equal", a.redrive)

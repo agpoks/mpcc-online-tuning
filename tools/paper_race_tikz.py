@@ -228,6 +228,57 @@ def tikz_track_traj(seed, kinds):
     write("fig_track_traj", body)
 
 
+def tikz_race_states(seed, kind):
+    """Ego vs opponent states through a race (speeds, gap, our slip+yaw) vs time, pass marked."""
+    L0 = P.get_states(seed, kind, False)
+    sl = P.race_window(L0); L = {k: v[sl] if hasattr(v, "__len__") and len(v) == len(L0["V"]) else v for k, v in L0.items()}
+    n = len(L["V"]); t = np.arange(n) * 0.05
+    pas = np.asarray(L["PASS"]); jumps = np.where(np.diff(pas) > 0)[0] + 1
+    tpass = t[jumps[0]] if len(jumps) else None
+    ds = 3
+    def C(y):
+        return " ".join(f"({t[i]:.3f},{y[i]:.4f})" for i in range(0, n, ds))
+    def vline(vals):
+        if tpass is None:
+            return ""
+        lo, hi = float(np.min(vals)), float(np.max(vals)); pad = 0.08 * (hi - lo + 1e-9)
+        return rf"\addplot[cfaster, line width=0.8pt, forget plot] coordinates {{({tpass:.3f},{lo-pad:.3f}) ({tpass:.3f},{hi+pad:.3f})}};"
+    v_all = np.concatenate([L["V"], L["OV"]])
+    p1 = rf"""\nextgroupplot[ylabel={{$v$ [m/s]}}, title={{ego vs {kind} opponent}},
+  legend style={{at={{(0.5,1.35)}}, anchor=south, draw=none, font=\scriptsize}}, legend columns=2]
+{vline(v_all)}
+\addplot[color=c{kind}, line width=0.9pt] coordinates {{{C(L['V'])}}};
+\addlegendentry{{ego}}
+\addplot[color=gray, dashed, line width=0.9pt] coordinates {{{C(L['OV'])}}};
+\addlegendentry{{opponent}}"""
+    p2 = rf"""\nextgroupplot[ylabel={{gap [m]}}]
+{vline(L['GAP'])}
+\addplot[black, dotted, line width=0.4pt, forget plot] coordinates {{({t[0]:.2f},0) ({t[-1]:.2f},0)}};
+\addplot[color=c{kind}, line width=0.9pt] coordinates {{{C(L['GAP'])}}};"""
+    beta = np.degrees(L["BETA"]); yaw = np.degrees(L["R"]) / 10.0
+    p3 = rf"""\nextgroupplot[ylabel={{$\beta$ [deg], $\dot\psi/10$}}, xlabel={{time [s]}},
+  legend style={{at={{(0.98,0.95)}}, anchor=north east, draw=none, font=\scriptsize}}, legend columns=2]
+{vline(np.concatenate([beta, yaw]))}
+\addplot[color=c{kind}, line width=0.8pt] coordinates {{{C(beta)}}};
+\addlegendentry{{$\beta$}}
+\addplot[color=cslower, line width=0.8pt] coordinates {{{C(yaw)}}};
+\addlegendentry{{$\dot\psi/10$}}"""
+    body = rf"""\begin{{tikzpicture}}
+\begin{{groupplot}}[
+  group style={{group size=1 by 3, vertical sep=0.5cm,
+    xlabels at=edge bottom, xticklabels at=edge bottom}},
+  width=8.0cm, height=2.6cm, tick label style={{font=\scriptsize}},
+  ylabel style={{font=\footnotesize}}, title style={{font=\small}},
+  grid=both, grid style={{gray!15}},
+]
+{p1}
+{p2}
+{p3}
+\end{{groupplot}}
+\end{{tikzpicture}}"""
+    write(f"fig_race_states_{kind}", body)
+
+
 def write_readme(seed, kinds):
     txt = f"""# TikZ / pgfplots source for the race-mode paper figures
 
@@ -264,6 +315,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--kinds", nargs="+", default=["equal", "faster"])
+    ap.add_argument("--race-kinds", nargs="+", default=["slower", "equal"])
     a = ap.parse_args()
     runs, _ = P.load_runs("ltc")
     print("tikz ->", TZ)
@@ -271,4 +323,6 @@ if __name__ == "__main__":
     tikz_over_rounds(runs)
     tikz_state_traces(a.seed, a.kinds)
     tikz_track_traj(a.seed, a.kinds)
+    for rk in a.race_kinds:
+        tikz_race_states(a.seed, rk)
     write_readme(a.seed, a.kinds)
