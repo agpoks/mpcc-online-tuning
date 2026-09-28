@@ -416,5 +416,5 @@ if __name__ == "__main__":
     fig_learn_over_rounds(runs)
     fig_track_states(a.seed, a.kinds, a.redrive)
     fig_overtake_snapshots(a.seed, a.overtake_kind, a.redrive)
-    fig_race_states(a.seed, a.overtake_kind, a.redrive)
-    fig_race_states(a.seed, "equal", a.redrive)
+    for rk in ("slower", "equal", "faster"):
+        fig_race_states(a.seed, rk, a.redrive)

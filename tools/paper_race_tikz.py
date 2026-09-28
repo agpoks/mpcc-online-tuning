@@ -200,6 +200,10 @@ def tikz_track_traj(seed, kinds):
         # trajectory table (downsampled) -> its own .dat
         ds = 3; tbl = "x y v\n" + "\n".join(f"{ex[i]:.4f} {ey[i]:.4f} {v[i]:.4f}" for i in range(0, len(ex), ds))
         (TZ / f"traj_ltc_{seed}_{k}.dat").write_text(tbl)
+        # opponent (grey): its path + markers "where the opponent is"
+        opp_path = " ".join(f"({Lg['OX'][i]:.3f},{Lg['OY'][i]:.3f})" for i in range(0, len(ex), ds))
+        stp = max(1, len(ex) // 8)
+        opp_marks = " ".join(f"({Lg['OX'][i]:.3f},{Lg['OY'][i]:.3f})" for i in range(stp, len(ex) - 1, stp))
         pas = np.asarray(Lg["PASS"]); jumps = np.where(np.diff(pas) > 0)[0] + 1
         passmark = ""
         if len(jumps):
@@ -208,6 +212,8 @@ def tikz_track_traj(seed, kinds):
         panels.append(rf"""\nextgroupplot[title={{vs {k} opponent}}]
 \addplot[gray!70, line width=0.5pt] coordinates {{{edge(L)}}};
 \addplot[gray!70, line width=0.5pt] coordinates {{{edge(Rr)}}};
+\addplot[gray!55, line width=0.6pt] coordinates {{{opp_path}}};
+\addplot[only marks, mark=square*, mark size=1.3pt, color=gray] coordinates {{{opp_marks}}};
 \addplot[mesh, point meta=explicit, line width=1.3pt] table[x=x,y=y,meta=v] {{traj_ltc_{seed}_{k}.dat}};
 {passmark}""")
     body = rf"""\begin{{tikzpicture}}
@@ -380,7 +386,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--kinds", nargs="+", default=["equal", "faster"])
-    ap.add_argument("--race-kinds", nargs="+", default=["slower", "equal"])
+    ap.add_argument("--race-kinds", nargs="+", default=["slower", "equal", "faster"])
     a = ap.parse_args()
     runs, _ = P.load_runs("ltc")
     print("tikz ->", TZ)
