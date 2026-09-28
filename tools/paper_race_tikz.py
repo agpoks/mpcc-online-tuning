@@ -195,31 +195,37 @@ def tikz_track_traj(seed, kinds):
     vall = np.concatenate([P.get_states(seed, k, False)["V"] for k in kinds])
     vmin, vmax = float(vall.min()), float(vall.max())
     panels = []
-    for k in kinds:
+    for c, k in enumerate(kinds):
         Lg = P.get_states(seed, k, False); ex, ey, v = Lg["EX"], Lg["EY"], Lg["V"]
         # trajectory table (downsampled) -> its own .dat
         ds = 3; tbl = "x y v\n" + "\n".join(f"{ex[i]:.4f} {ey[i]:.4f} {v[i]:.4f}" for i in range(0, len(ex), ds))
         (TZ / f"traj_ltc_{seed}_{k}.dat").write_text(tbl)
-        # opponent (grey): its path + markers "where the opponent is"
+        # opponent path -> a thin BLACK line drawn ON TOP of the ego trajectory (so it is visible)
         opp_path = " ".join(f"({Lg['OX'][i]:.3f},{Lg['OY'][i]:.3f})" for i in range(0, len(ex), ds))
-        stp = max(1, len(ex) // 8)
-        opp_marks = " ".join(f"({Lg['OX'][i]:.3f},{Lg['OY'][i]:.3f})" for i in range(stp, len(ex) - 1, stp))
         pas = np.asarray(Lg["PASS"]); jumps = np.where(np.diff(pas) > 0)[0] + 1
         passmark = ""
         if len(jumps):
             pc = " ".join(f"({ex[j]:.3f},{ey[j]:.3f})" for j in jumps)
-            passmark = rf"\addplot[only marks, mark=star, mark size=2.6pt, color=cfaster] coordinates {{{pc}}};"
-        panels.append(rf"""\nextgroupplot[title={{vs {k} opponent}}]
-\addplot[gray!70, line width=0.5pt] coordinates {{{edge(L)}}};
-\addplot[gray!70, line width=0.5pt] coordinates {{{edge(Rr)}}};
-\addplot[gray!55, line width=0.6pt] coordinates {{{opp_path}}};
-\addplot[only marks, mark=square*, mark size=1.3pt, color=gray] coordinates {{{opp_marks}}};
-\addplot[mesh, point meta=explicit, line width=1.3pt] table[x=x,y=y,meta=v] {{traj_ltc_{seed}_{k}.dat}};
-{passmark}""")
+            passmark = rf"\addplot[only marks, mark=star, mark size=2.6pt, color=cfaster, forget plot] coordinates {{{pc}}};"
+        opts = "title={vs " + k + " opponent}"
+        legend = ""
+        if c == 0:
+            opts += r", legend style={draw=none, font=\scriptsize, at={(0.02,0.02)}, anchor=south west, cells={anchor=west}}"
+            legend = (r"\addlegendimage{line width=1.6pt, color=green!55!black}\addlegendentry{ego ($=$ speed)}"
+                      "\n\\addlegendimage{black, line width=0.7pt}\\addlegendentry{opponent}")
+            if len(jumps):
+                legend += "\n\\addlegendimage{only marks, mark=star, color=cfaster}\\addlegendentry{overtake}"
+        panels.append(rf"""\nextgroupplot[{opts}]
+\addplot[gray!70, line width=0.5pt, forget plot] coordinates {{{edge(L)}}};
+\addplot[gray!70, line width=0.5pt, forget plot] coordinates {{{edge(Rr)}}};
+\addplot[mesh, point meta=explicit, line width=2.1pt, forget plot] table[x=x,y=y,meta=v] {{traj_ltc_{seed}_{k}.dat}};
+\addplot[black, line width=0.5pt, forget plot] coordinates {{{opp_path}}};
+{passmark}
+{legend}""")
     body = rf"""\begin{{tikzpicture}}
 \begin{{groupplot}}[
-  group style={{group size={len(kinds)} by 1, horizontal sep=0.5cm}},
-  width=6.0cm, height=6.0cm, axis equal image, hide axis,
+  group style={{group size={len(kinds)} by 1, horizontal sep=0.35cm}},
+  width=4.7cm, height=4.7cm, axis equal image, hide axis,
   colormap/viridis, point meta min={vmin:.3f}, point meta max={vmax:.3f},
   title style={{font=\small}},
 ]
@@ -385,7 +391,7 @@ Matching PDFs (from matplotlib) are one level up in `results/race/paper/`.
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--kinds", nargs="+", default=["equal", "faster"])
+    ap.add_argument("--kinds", nargs="+", default=["slower", "equal", "faster"])
     ap.add_argument("--race-kinds", nargs="+", default=["slower", "equal", "faster"])
     a = ap.parse_args()
     runs, _ = P.load_runs("ltc")
