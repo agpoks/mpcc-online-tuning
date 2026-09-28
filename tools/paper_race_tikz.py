@@ -279,6 +279,69 @@ def tikz_race_states(seed, kind):
     write(f"fig_race_states_{kind}", body)
 
 
+def _carpoly(x, y, psi, l=0.34, w=0.18, nose=0.10):
+    pts = [(-l / 2, -w / 2), (l / 2, -w / 2), (l / 2 + nose, 0.0), (l / 2, w / 2), (-l / 2, w / 2)]
+    c, s = np.cos(psi), np.sin(psi)
+    return [(x + bx * c - by * s, y + bx * s + by * c) for bx, by in pts]
+
+
+def tikz_overtake(seed, kind, nshots=5):
+    """Overtake single-shots in pure TikZ: corridor edges (vector) + both cars as filled car
+    glyphs (ego speed-coloured, opponent grey), from just-behind to just-ahead. No raster map."""
+    import matplotlib
+    L = P.get_states(seed, kind, False)
+    pas = np.asarray(L["PASS"]); jumps = np.where(np.diff(pas) > 0)[0] + 1
+    if not len(jumps):
+        print(f"  (no overtake vs {kind}; skipping tikz snapshots)"); return
+    jp = int(jumps[0]); span = 34
+    ex, ey, ev = L["EX"], L["EY"], L["V"]
+    ticks = np.linspace(max(0, jp - span), min(len(ex) - 1, jp + span), nshots).astype(int)
+    xs = np.concatenate([ex[ticks], L["OX"][ticks]]); ys = np.concatenate([ey[ticks], L["OY"][ticks]])
+    # SQUARE window centred on the action, so panels are equal-scaled and titles fit
+    cx, cy = 0.5 * (xs.min() + xs.max()), 0.5 * (ys.min() + ys.max())
+    half = 0.5 * max(xs.max() - xs.min(), ys.max() - ys.min()) + 0.8
+    xmin, xmax, ymin, ymax = cx - half, cx + half, cy - half, cy + half
+    Le, Re = corridor_edges(1100)
+    edge = lambda A: " ".join(f"({x:.3f},{y:.3f})" for x, y in A)
+    vmin, vmax = float(ev.min()), float(ev.max())
+    vir = matplotlib.colormaps["viridis"]
+    coldefs, panels = [], []
+    for i, t in enumerate(ticks):
+        r, g, b, _ = vir((ev[t] - vmin) / (vmax - vmin + 1e-9))
+        coldefs.append(rf"\definecolor{{ego{i}}}{{rgb}}{{{r:.3f},{g:.3f},{b:.3f}}}")
+        lo = max(0, t - 22)
+        etrail = " ".join(f"({ex[j]:.3f},{ey[j]:.3f})" for j in range(lo, t + 1))
+        otrail = " ".join(f"({L['OX'][j]:.3f},{L['OY'][j]:.3f})" for j in range(lo, t + 1))
+        egoc = "(axis cs:" + ") -- (axis cs:".join(f"{x:.3f},{y:.3f}" for x, y in _carpoly(ex[t], ey[t], L["EPSI"][t])) + ")"
+        oppc = "(axis cs:" + ") -- (axis cs:".join(f"{x:.3f},{y:.3f}" for x, y in _carpoly(L["OX"][t], L["OY"][t], L["OPSI"][t])) + ")"
+        dt = (t - jp) * 0.05
+        title = "pass" if abs(t - jp) <= (ticks[1] - ticks[0]) / 2 else rf"$t={dt:+.1f}$\,s"
+        panels.append(rf"""\nextgroupplot[title={{{title}}}]
+\addplot[gray!70, line width=0.4pt] coordinates {{{edge(Le)}}};
+\addplot[gray!70, line width=0.4pt] coordinates {{{edge(Re)}}};
+\addplot[black!55, line width=0.5pt] coordinates {{{etrail}}};
+\addplot[gray, line width=0.5pt] coordinates {{{otrail}}};
+\fill[gray!65, draw=black, line width=0.3pt] {oppc} -- cycle;
+\fill[ego{i}, draw=black, line width=0.3pt] {egoc} -- cycle;""")
+    body = rf"""\begin{{tikzpicture}}
+{chr(10).join(coldefs)}
+\begin{{groupplot}}[
+  group style={{group size={nshots} by 1, horizontal sep=0.15cm}},
+  width=3.1cm, height=3.1cm, hide axis, scale only axis, enlargelimits=false,
+  xmin={xmin:.2f}, xmax={xmax:.2f}, ymin={ymin:.2f}, ymax={ymax:.2f},
+  title style={{font=\small, yshift=-2pt}}, clip=true,
+]
+{chr(10).join(panels)}
+\end{{groupplot}}
+\begin{{axis}}[hide axis, scale only axis, height=0pt, width=0pt,
+  colormap/viridis, colorbar horizontal, point meta min={vmin:.3f}, point meta max={vmax:.3f},
+  colorbar style={{width=4cm, height=0.28cm, xlabel={{ego speed [m/s]}}, xlabel style={{font=\footnotesize}}, at={{(0.5,-0.2)}}, anchor=north}}]
+\addplot[draw=none] coordinates {{(0,0)}};
+\end{{axis}}
+\end{{tikzpicture}}"""
+    write(f"fig_overtake_{kind}", body)
+
+
 def write_readme(seed, kinds):
     txt = f"""# TikZ / pgfplots source for the race-mode paper figures
 
@@ -289,6 +352,8 @@ Files:
 - `fig_learn_over_rounds.tex`   groupplot: key weights learning over episodes, per opponent class
 - `fig_track_states_traces.tex` groupplot: our states v, beta, yaw-rate along the lap
 - `fig_track_traj.tex` (+ `traj_ltc_{seed}_<kind>.dat`) track corridor + speed-coloured trajectory
+- `fig_race_states_<kind>.tex`   ego vs opponent states through a race (speeds, gap, our slip+yaw)
+- `fig_overtake_<kind>.tex`   overtake single-shots: corridor + both cars as glyphs (ego colour, opp grey)
 
 Each .tex is a standalone document: `pdflatex fig_learn_over_rounds.tex` (or
 `tectonic fig_learn_over_rounds.tex`) compiles it to a cropped PDF.
@@ -325,4 +390,5 @@ if __name__ == "__main__":
     tikz_track_traj(a.seed, a.kinds)
     for rk in a.race_kinds:
         tikz_race_states(a.seed, rk)
+    tikz_overtake(a.seed, "slower")
     write_readme(a.seed, a.kinds)

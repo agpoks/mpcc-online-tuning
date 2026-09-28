@@ -7,6 +7,8 @@ Files:
 - `fig_learn_over_rounds.tex`   groupplot: key weights learning over episodes, per opponent class
 - `fig_track_states_traces.tex` groupplot: our states v, beta, yaw-rate along the lap
 - `fig_track_traj.tex` (+ `traj_ltc_0_<kind>.dat`) track corridor + speed-coloured trajectory
+- `fig_race_states_<kind>.tex`   ego vs opponent states through a race (speeds, gap, our slip+yaw)
+- `fig_overtake_<kind>.tex`   overtake single-shots: corridor + both cars as glyphs (ego colour, opp grey)
 
 Each .tex is a standalone document: `pdflatex fig_learn_over_rounds.tex` (or
 `tectonic fig_learn_over_rounds.tex`) compiles it to a cropped PDF.
