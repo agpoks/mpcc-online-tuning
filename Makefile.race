@@ -1,0 +1,72 @@
+# Reproducibility driver for the race-mode online-tuning results and paper figures.
+#   make -f Makefile.race all        # train -> analysis -> figures -> tikz -> gifs
+#   make -f Makefile.race figures    # just re-make the paper PDFs from the banked nets
+# Every target prints the exact command it runs. Override any VAR on the command line, e.g.
+#   make -f Makefile.race train SEEDS=3 EPISODES=14
+#
+# The pipeline is deterministic: the STD plant is deterministic and every RNG is seeded, so a
+# given (code, params, seed) regenerates identical nets, JSON, figures and GIFs. Seeds vary the
+# scenario PHYSICALLY (start s0/v0 + opponent placement), not just an RNG draw.
+
+# ---- environment (acados C-codegen stack) -- override to match your machine -----------------
+ACADOS_SOURCE_DIR ?= /home/poxx/acados-v060
+SCUDERIA         ?= /home/poxx/github/scuderia_gym_jax
+export ACADOS_SOURCE_DIR
+export LD_LIBRARY_PATH := $(ACADOS_SOURCE_DIR)/lib
+export PYTHONPATH := $(ACADOS_SOURCE_DIR)/interfaces/acados_template:$(SCUDERIA):.
+export OMP_NUM_THREADS := 1
+export XLA_PYTHON_CLIENT_PREALLOCATE := false
+PY ?= python3
+
+# ---- canonical experiment parameters (the paper's policy) -----------------------------------
+# The policy constants (KV_FLOOR=0.56, KV_CEIL=0.62, A_LAT_RACE=9.0, FAIR_PACE 0.8/1.0/1.05,
+# two-layer corridor) live in experiments/race_mode.py -- single source of truth, not duplicated
+# here. Change them there and re-run `make -f Makefile.race all`.
+ARMS     ?= ltc mlp
+SEEDS    ?= 3
+EPISODES ?= 14
+STEPS    ?= 4000
+JOBS     ?= 3
+RUN      ?= results/race/race_phase1.json     # canonical training output (nets + json + traj)
+FIGSEED  ?= 0                                  # which seed the per-case paper figures use
+
+.PHONY: all train analysis figures tikz gifs figures-all clean-figures print-config
+
+all: train analysis figures-all
+	@echo "== reproduced: training + analysis + figures + tikz + gifs =="
+
+print-config:
+	@echo "ACADOS_SOURCE_DIR=$(ACADOS_SOURCE_DIR)  SCUDERIA=$(SCUDERIA)"
+	@echo "ARMS='$(ARMS)' SEEDS=$(SEEDS) EPISODES=$(EPISODES) STEPS=$(STEPS) JOBS=$(JOBS)"
+	@echo "RUN=$(RUN)  FIGSEED=$(FIGSEED)"
+	@$(PY) -c "from experiments.race_mode import KV_FLOOR,KV_CEIL,A_LAT_RACE,FAIR_PACE; print('KV_FLOOR',KV_FLOOR,'KV_CEIL',KV_CEIL,'A_LAT_RACE',A_LAT_RACE,'FAIR_PACE',FAIR_PACE)"
+
+# 1) TRAIN: online RL over $(EPISODES) episodes/seed -> results/race/nets/race_<arm>_<seed>.npz,
+#    the $(RUN) JSON (per-episode rows) and results/race/traj/ dumps.
+train:
+	$(PY) experiments/race_mode.py --arms $(ARMS) --seeds $(SEEDS) --episodes $(EPISODES) \
+	    --steps $(STEPS) --jobs $(JOBS) --fair-opp --dump-traj --out $(RUN)
+
+# 2) ANALYSIS: CSV tables + the learning figures (by-opponent, over-episodes, sectors).
+analysis:
+	$(PY) tools/race_analysis.py $(notdir $(RUN))
+	$(PY) tools/race_table.py $(RUN)
+
+# 3) FIGURES: the paper PDFs+PNGs. Re-drives the ONLINE policy (explore+learn) from the banked
+#    nets, seeded -> reproducible. Caches state logs so re-runs are instant (delete
+#    results/race/paper/states_online_*.npz to force a fresh re-drive).
+figures:
+	$(PY) tools/paper_race_learning.py --seed $(FIGSEED)
+
+# 4) TIKZ: pgfplots .tex of the same figures (into results/race/paper/tikz/).
+tikz:
+	$(PY) tools/paper_race_tikz.py --seed $(FIGSEED)
+
+# 5) GIFS: per-case race animations from the same online caches.
+gifs:
+	$(PY) tools/paper_race_gifs.py --seed $(FIGSEED)
+
+figures-all: figures tikz gifs
+
+clean-figures:                       # drop the re-drive caches so `figures` re-simulates
+	rm -f results/race/paper/states_online_ltc_*.npz results/race/paper/states_ltc_*.npz

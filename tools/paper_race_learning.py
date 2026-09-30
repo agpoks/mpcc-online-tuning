@@ -143,7 +143,8 @@ def redrive(seed, kind, steps=2400, gap0=3.0):
                        kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES)
     pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.D_class[...] = dcl
     pol.reset(); pol.cls = PACE_KINDS.index(kind)
-    ego_pace = 1.65   # measured ego solo pace in the reward5 run log; opponent speeds scale off it
+    from experiments.race_mode import measure_pace
+    ego_pace = measure_pace(m, track, th0, 2000)   # MEASURED (same as training) -> reproducible
     v_opp = FAIR_PACE[kind] * ego_pace
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.3 + 0.1 * (seed % 3)
     opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp, offset=0.0,
@@ -200,11 +201,11 @@ def redrive_online(seed, kind, steps=2400, gap0=3.0):
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
     from mpcc_tuning.opponents import RacelineOpponent, ObstacleTracker
     from mpcc_tuning.ltc import LTCCell, WeightPolicy, PolicyTuner
-    from experiments.race_mode import (race_features, race_reward, FAIR_PACE, signed_gap,
+    from experiments.race_mode import (race_features, race_reward, FAIR_PACE, signed_gap, measure_pace,
                                         N_RACE_FEATURES, KEEPOUT_R, CONTACT_R, PACE_KINDS, LR_VEH,
                                         A_LAT_RACE, CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES,
                                         KV_CEIL, KV_CEIL_CLASSES)
-    track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth")
+    track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth"); th0 = np.asarray(st.theta(), float)
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref,
                    discrete=True, max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW,
                    name=f"paperon_ltc_{seed}")
@@ -220,7 +221,7 @@ def redrive_online(seed, kind, steps=2400, gap0=3.0):
                         trust_region=0.01, theta_prior=0.15, theta_explore=0.15, entropy=0.03,
                         critic="return", alpha_delta=0.01, trust_region_delta=0.03)
     tuner.reset(); tuner.set_class(PACE_KINDS.index(kind))
-    ego_pace = 1.65; v_opp = FAIR_PACE[kind] * ego_pace
+    ego_pace = measure_pace(m, track, th0, 2000); v_opp = FAIR_PACE[kind] * ego_pace   # MEASURED
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.3 + 0.1 * (seed % 3)
     opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp, offset=0.0,
                            radius=KEEPOUT_R, a_lat=2.5)
