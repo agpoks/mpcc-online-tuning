@@ -1,6 +1,7 @@
 """IEEE-publication figures for the race-mode online-tuning result.
 
-Three figures, all from the LTC arm of results/race/race_phase1_reward5.json plus a frozen re-drive
+Three figures, all from the LTC arm of the canonical run (results/race/race_phase1.json; override
+with RACE_RUN_JSON) plus an online re-drive
 of the banked nets (results/race/nets/race_ltc_<seed>.npz):
 
   fig_learn_by_opponent   how the emitted weights differ by OPPONENT class (heatmap, log2 vs START)
@@ -63,8 +64,11 @@ def save(fig, name):
 
 
 # --------------------------------------------------------------------------- data
+RUN_JSON = os.environ.get("RACE_RUN_JSON", "results/race/race_phase1.json")  # canonical run
+
+
 def load_runs(arm="ltc"):
-    d = json.load(open(ROOT / "results/race/race_phase1_reward5.json"))
+    d = json.load(open(ROOT / RUN_JSON))
     return [r for r in d["runs"] if r["arm"] == arm], d
 
 
