@@ -64,7 +64,6 @@ from mpcc_tuning.mpcc import WEIGHT_NAMES
 
 def build_ocp(track, horizon: int = 12, dt: float = 0.15,
               a_lat_grip: float = 6.0 * 1.0, a_lat_sectors=None,
-              grip_hard: float = 0.0, grip_hard_scale: float = 60.0,
               use_track_vref: bool = False,
               soft_corridor: bool = True,
               lin_corridor: bool = False,
@@ -344,17 +343,6 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     if spline_mode == "spline" and not dyn:
         kap = ca.fabs(track.curvature_sym(track.wrap(s)))
         h.append(a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
-    # PHYSICAL corner-speed limit for the DYNAMIC model: v^2*kappa <= grip_hard, i.e.
-    # v <= sqrt(grip_hard/kappa). NOT scaled by k_v -- it is the known handling/grip maximum
-    # (A_LAT_MAX), so the plan can never command a corner speed the plant cannot hold (the cause of
-    # the 10-lap over-speed slide). k_v stays free. Near-hard (soft + huge slack penalty), same as
-    # the corridor wall, to keep the solve feasible. Off by default (grip_hard=0).
-    grip_row_idx = None
-    if dyn and grip_hard > 0.0 and spline_mode == "spline":
-        if kap is None:
-            kap = ca.fabs(track.curvature_sym(track.wrap(s)))
-        grip_row_idx = len(h)
-        h.append(grip_hard - v ** 2 * kap)
     for j in range(max_obstacles):
         ox, oy, r_raw = obs[stride * j], obs[stride * j + 1], obs[stride * j + 2]
         r_eff = r_raw + d_obs                  # inactive slot: r_raw = -d_obs
@@ -405,11 +393,6 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
         n_cor_e = 1
     if spline_mode == "spline" and not dyn:
         h_e.append(a_lat_grip - v ** 2 * kap / (k_v ** 2 + 1e-9))
-    grip_row_idx_e = None
-    if dyn and grip_hard > 0.0 and spline_mode == "spline":
-        _kape = ca.fabs(track.curvature_sym(track.wrap(s)))
-        grip_row_idx_e = len(h_e)
-        h_e.append(grip_hard - v ** 2 * _kape)
     model.con_h_expr_e = ca.vertcat(*h_e)
     nh_e = len(h_e)
     nh = len(h)
@@ -479,8 +462,6 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     Z[:n_cor], z[:n_cor] = 500.0 * corridor_slack_scale, 10.0 * corridor_slack_scale
     if two_layer_corridor:                     # rows 2,3 are the near-hard edge wall (huge penalty)
         Z[2:n_cor], z[2:n_cor] = 500.0 * corridor_outer_scale, 10.0 * corridor_outer_scale
-    if grip_row_idx is not None:               # the physical corner-speed limit -> near-hard
-        Z[grip_row_idx], z[grip_row_idx] = 500.0 * grip_hard_scale, 10.0 * grip_hard_scale
     Z, z = Z[soft], z[soft]
     ocp.cost.Zl = Z.copy(); ocp.cost.Zu = Z.copy()
     ocp.cost.zl = z.copy(); ocp.cost.zu = z.copy()
@@ -498,8 +479,6 @@ def build_ocp(track, horizon: int = 12, dt: float = 0.15,
     Ze[:n_cor_e], ze[:n_cor_e] = 500.0 * corridor_slack_scale, 10.0 * corridor_slack_scale
     if two_layer_corridor:
         Ze[2:n_cor_e], ze[2:n_cor_e] = 500.0 * corridor_outer_scale, 10.0 * corridor_outer_scale
-    if grip_row_idx_e is not None:
-        Ze[grip_row_idx_e], ze[grip_row_idx_e] = 500.0 * grip_hard_scale, 10.0 * grip_hard_scale
     ocp.cost.Zl_e = Ze.copy(); ocp.cost.Zu_e = Ze.copy()
     ocp.cost.zl_e = ze.copy(); ocp.cost.zu_e = ze.copy()
 

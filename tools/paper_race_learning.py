@@ -126,13 +126,8 @@ def one_lap(S):
 
 
 # --------------------------------------------------------------------------- re-drive (states)
-def redrive(seed, kind, steps=2400, gap0=3.0, tag='', kv_override=None):
-    """Frozen banked-net re-drive; log trajectory + ego AND opponent states + emitted weights.
-    kv_override: if set, CAP the emitted k_v at this value each tick (probe a lower speed target)."""
-    _kvlog = float(np.log(kv_override)) if kv_override else None
-    import os as _os
-    QF = float(_os.environ.get("RACE_Q_FRICTION", "0"))   # >0 -> strengthen the (soft) friction map
-    GH = float(_os.environ.get("RACE_GRIP_HARD", "0"))    # >0 -> near-hard corner-speed limit a_lat=GH
+def redrive(seed, kind, steps=2400, gap0=3.0, tag=''):
+    """Frozen banked-net re-drive; log trajectory + ego AND opponent states + emitted weights."""
     cache = OUT / f"states_ltc_{seed}_{kind}.npz"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
@@ -143,11 +138,9 @@ def redrive(seed, kind, steps=2400, gap0=3.0, tag='', kv_override=None):
                                         CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES)
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth")
     th0 = np.asarray(st.theta(), float)
-    _qf = {"q_friction": QF} if QF > 0 else {}
-    _gh = {"grip_hard": GH} if GH > 0 else {}
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref,
-                   discrete=True, max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW, **_qf, **_gh,
-                   name=f"paper_ltc_{seed}" + (f"_qf{int(QF)}" if QF > 0 else "") + (f"_gh{GH:g}".replace('.','p') if GH > 0 else ""))
+                   discrete=True, max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW,
+                   name=f"paper_ltc_{seed}")
     d = np.load(ROOT / "results/race/nets" / f"race_ltc_{seed}.npz")
     cell = LTCCell(N_RACE_FEATURES, int(d["n_hidden"]), seed=seed)
     dcl = d["D_class"]; ncls = int(dcl.shape[0])
@@ -169,10 +162,7 @@ def redrive(seed, kind, steps=2400, gap0=3.0, tag='', kv_override=None):
     def emit(slip, gap_rate=None, sec_suit=None):
         feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed,
                              slip=slip, gap_rate=gap_rate, sector_suit=sec_suit)
-        th = np.asarray(pol.step(feat), float)
-        if _kvlog is not None and th[7] > _kvlog:       # cap k_v (index 7) at the override
-            th = th.copy(); th[7] = _kvlog
-        return th
+        return np.asarray(pol.step(feat), float)
     _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
     _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
     theta = emit((_ar, _b, _r)); u = m.value(P.state_dyn(), theta)["u0"]
