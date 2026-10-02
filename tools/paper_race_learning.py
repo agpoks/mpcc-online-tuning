@@ -126,7 +126,7 @@ def one_lap(S):
 
 
 # --------------------------------------------------------------------------- re-drive (states)
-def redrive(seed, kind, steps=2400, gap0=3.0):
+def redrive(seed, kind, steps=2400, gap0=3.0, tag=''):
     """Frozen banked-net re-drive; log trajectory + ego AND opponent states + emitted weights."""
     cache = OUT / f"states_ltc_{seed}_{kind}.npz"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
@@ -195,11 +195,11 @@ def redrive(seed, kind, steps=2400, gap0=3.0):
             break
     arr = {k: np.asarray(v, float) for k, v in log.items()}
     arr["THETA"] = np.asarray(logT, float); arr["off"] = np.asarray([off])
-    np.savez(cache, **arr)
+    np.savez(OUT / f"states{tag}_ltc_{seed}_{kind}.npz", **arr)
     return arr
 
 
-def redrive_online(seed, kind, steps=2400, gap0=3.0):
+def redrive_online(seed, kind, steps=2400, gap0=3.0, tag=""):
     """The ONLINE method itself: run the PolicyTuner (explore + learn each tick) starting from the
     banked net, seeded so it is reproducible. This is what the paper is about -- the policy adapts
     the MPCC weights to the race and, via exploration the critic reinforces, actually overtakes.
@@ -273,7 +273,7 @@ def redrive_online(seed, kind, steps=2400, gap0=3.0):
         theta, u = out
     arr = {k: np.asarray(v, float) for k, v in log.items()}
     arr["THETA"] = np.asarray(logT, float); arr["off"] = np.asarray([off])
-    np.savez(OUT / f"states_online_ltc_{seed}_{kind}.npz", **arr)
+    np.savez(OUT / f"states_online{tag}_ltc_{seed}_{kind}.npz", **arr)
     return arr
 
 
