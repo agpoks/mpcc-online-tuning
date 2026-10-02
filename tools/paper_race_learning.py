@@ -56,9 +56,12 @@ def ieee_style():
     })
 
 
+FIG_SUFFIX = os.environ.get("FIG_SUFFIX", "")   # e.g. "_5seed" to keep a seed-count variant
+
+
 def save(fig, name):
     for e in ("pdf", "png"):
-        fig.savefig(OUT / f"{name}.{e}")
+        fig.savefig(OUT / f"{name}{FIG_SUFFIX}.{e}")
     plt.close(fig)
     print(f"  wrote {name}.pdf/.png")
 
@@ -503,12 +506,16 @@ if __name__ == "__main__":
     ap.add_argument("--kinds", nargs="+", default=["slower", "equal", "faster"])
     ap.add_argument("--overtake-kind", default="slower")
     ap.add_argument("--redrive", action="store_true")
+    ap.add_argument("--learning-only", action="store_true",
+                    help="only the seed-aggregated learning figures (no per-case re-drive)")
     a = ap.parse_args()
     ieee_style()
     runs, _ = load_runs("ltc")
-    print("figures ->", OUT)
+    print(f"figures -> {OUT}  (run={RUN_JSON}, suffix='{FIG_SUFFIX}')")
     fig_learn_by_opponent(runs)
     fig_learn_over_rounds(runs)
+    if a.learning_only:
+        raise SystemExit(0)
     fig_track_states(a.seed, a.kinds, a.redrive)
     for ok in ("slower", "equal", "faster"):
         fig_overtake_snapshots(a.seed, ok, a.redrive)   # skips kinds with no overtake

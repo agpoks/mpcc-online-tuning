@@ -70,3 +70,16 @@ figures-all: figures tikz gifs
 
 clean-figures:                       # drop the re-drive caches so `figures` re-simulates
 	rm -f results/race/paper/states_online_ltc_*.npz results/race/paper/states_ltc_*.npz
+
+# seed-count VIEWS so you can CHOOSE 5 vs 6 seeds. The N-seed result is the first N seeds of the
+# deterministic canonical run (no retraining; seeds 0..N-1 are bit-identical), so it is provably
+# consistent. Produces *_5seed tables + learning figures beside the default 6-seed ones, plus a
+# 5-vs-6 comparison. SEED5=5 can be overridden.
+SEED5 ?= 5
+seed-variants:
+	$(PY) tools/race_subset.py $(SEED5)                              # race_phase1_$(SEED5)seed.json
+	$(PY) tools/race_analysis.py race_phase1_$(SEED5)seed.json       # *_$(SEED5)seed CSVs + weight figs
+	RACE_RUN_JSON=results/race/race_phase1_$(SEED5)seed.json FIG_SUFFIX=_$(SEED5)seed \
+	    $(PY) tools/paper_race_learning.py --learning-only           # fig_learn_*_$(SEED5)seed
+	$(PY) tools/race_seed_compare.py $(SEED5) 6                      # results/race/seed_choice.md
+	@echo "== 5-seed view + 5-vs-6 comparison written (6-seed stays the default race_phase1.*) =="
