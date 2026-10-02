@@ -230,7 +230,11 @@ KV_FLOOR_CLASSES = (2, 3)   # PACE_KINDS indices: equal, faster
 # already enough to overtake -- the ceiling only removes the unrecoverable over-drive. Floor+ceiling
 # together are the safe racing band. Value pinned from the k_v-ceiling sweep (highest k_v on the line).
 KV_CEIL = 0.62
-KV_CEIL_CLASSES = (2, 3)
+# SLOWER added (index 1): the 10-lap eval showed slower was the ONLY class not in the k_v band, so the
+# net maxed k_v to 0.90 and over-sped into the WALL (walls out at ~1.6 laps; opponent 12 m away, i.e.
+# not a collision). A slow car needs no grip over-claim -- cap it like equal/faster. (NB: ceiling only,
+# no floor -- vs a slow car we never need extra speed, only to not over-drive.)
+KV_CEIL_CLASSES = (1, 2, 3)
 
 # STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
 # NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
