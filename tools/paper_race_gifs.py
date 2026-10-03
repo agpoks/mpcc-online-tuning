@@ -16,16 +16,19 @@ OUT = ROOT / "results/race/gif"; OUT.mkdir(parents=True, exist_ok=True)
 PAPER = ROOT / "results/race/paper"
 
 
-def gif_from_cache(seed, kind, stride=6, fps=20):
-    z = np.load(PAPER / f"states_online_ltc_{seed}_{kind}.npz")   # the ONLINE method's run
+def gif_from_cache(seed, kind, stride=6, fps=20, frozen=False):
+    # online = the explore+learn method run (states_online_*); frozen = the deployed/banded 10-lap
+    # eval (states_10lapfrozen_*, the all-clean band result). Longer race -> bigger stride.
+    pre = "states_10lapfrozen" if frozen else "states_online"
+    z = np.load(PAPER / f"{pre}_ltc_{seed}_{kind}.npz")
     EX, EY, OX, OY = z["EX"], z["EY"], z["OX"], z["OY"]
     cg = np.hypot(EX - OX, EY - OY) < CONTACT_R
     d = dict(EX=EX, EY=EY, EV=z["V"], OX=OX, OY=OY,
              GAP=list(z["GAP"]), PASS=list(z["PASS"]),
              CONTACT=list(np.maximum.accumulate(cg)), rad=KEEPOUT_R,
              track=Track.icra_t2_smooth())
-    out = str(OUT / f"ltc_{kind}_race_s{seed}.gif")
-    RG.animate(d, "ltc", kind, out, stride=stride, fps=fps)
+    out = str(OUT / f"ltc_{kind}_{'frozen' if frozen else 'race'}_s{seed}.gif")
+    RG.animate(d, "ltc", kind, out, stride=(20 if frozen else stride), fps=fps)
     return out
 
 
@@ -33,6 +36,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--kinds", nargs="+", default=["slower", "equal", "faster"])
+    ap.add_argument("--frozen", action="store_true", help="animate the all-clean 10-lap frozen caches")
     a = ap.parse_args()
     for k in a.kinds:
-        gif_from_cache(a.seed, k)
+        gif_from_cache(a.seed, k, frozen=a.frozen)
