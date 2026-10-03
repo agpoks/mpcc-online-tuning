@@ -236,6 +236,17 @@ KV_CEIL = 0.62
 # no floor -- vs a slow car we never need extra speed, only to not over-drive.)
 KV_CEIL_CLASSES = (1, 2, 3)
 
+# CLASS-CONDITIONED r_a FLOOR (braking/accel damping, 2026-10-03). The faster-opponent 10-lap wall-out
+# was the tuner learning an AGGRESSIVE r_a (~4.15) for faster -> over-driving to ~3.1 m/s, past the
+# ~2.5 m/s geometric corridor ceiling -> running WIDE over the edge (NOT grip/braking/opponent; d_bound
+# floored high does NOT help; see [[faster-10lap-walllout-is-overdriven-ra]]). Flooring r_a keeps the
+# accel gentle so the car stays on the line, while k_v still buys the passing speed edge. Validated:
+# r_a floor 8 -> faster 3.65 OFF -> 11.84 laps CLEAN, equal/slower untouched (already above 8), all
+# three clean, no regression. Three 1-seed reward retrains (solo x4, gentle, speed-gate) each diverged
+# or broke a different class, so the deterministic floor -- same mechanism as the k_v band -- is the fix.
+RA_FLOOR = 8.0
+RA_FLOOR_CLASSES = (2, 3)    # PACE_KINDS indices: equal, faster (the matched/faster racing that over-drives)
+
 # STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
 # NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
 # limit, so it has grip to spare. The 45-57% off-track is LATERAL corridor-departure under aggressive
@@ -335,7 +346,8 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         # via tuner.set_class below.
         pol = WeightPolicy(cell, th0, lo, hi, seed=seed, n_classes=len(PACE_KINDS),
                            kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES,
-                           kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES)
+                           kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES,
+                           ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES)
         # THE fix for "we get stuck on the values and don't explore more": the old call set
         # explore=0.06 (CONTROL noise on steering/accel only) but theta_explore=0 and entropy=0,
         # so the WEIGHTS were emitted deterministically and, once the tanh saturated at the box

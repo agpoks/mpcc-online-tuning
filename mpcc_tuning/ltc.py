@@ -206,7 +206,8 @@ class WeightPolicy:
                  influence: str = "rflo", gauge_fix: bool = False,
                  n_classes: int = 0, delta_log: float = 0.6,
                  kv_floor: float = 0.0, kv_floor_classes=(),
-                 kv_ceil: float = 0.0, kv_ceil_classes=()):
+                 kv_ceil: float = 0.0, kv_ceil_classes=(),
+                 ra_floor: float = 0.0, ra_floor_classes=()):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
@@ -293,6 +294,14 @@ class WeightPolicy:
         # they define the safe racing band for near-matched opponents.
         self.kv_ceil = float(np.log(kv_ceil)) if kv_ceil > 0 else None
         self.kv_ceil_classes = set(int(c) for c in kv_ceil_classes)
+        # CLASS-CONDITIONED r_a FLOOR (braking/accel damping): vs equal/faster the emitted r_a may not
+        # drop below ra_floor. A low r_a over-drives the speed past the ~2.5 m/s the corridor can hold
+        # and runs WIDE over the edge (the faster 10-lap wall-out -- NOT grip/braking; d_bound does not
+        # help). The floor keeps the accel gentle so the car stays on the line while k_v still buys the
+        # speed edge. Symmetric to the k_v band; masks the gradient like a clip.
+        self.ra_idx = WEIGHT_NAMES.index("r_a")
+        self.ra_floor = float(np.log(ra_floor)) if ra_floor > 0 else None
+        self.ra_floor_classes = set(int(c) for c in ra_floor_classes)
         self.reset()
 
     def reset(self):
@@ -403,6 +412,12 @@ class WeightPolicy:
             self._sq = self._sq.copy(); self._sq[self.kv_idx] = 0.0
             if self._cls_used is not None:
                 self._dsq = self._dsq.copy(); self._dsq[self.kv_idx] = 0.0
+        # class-conditioned r_a FLOOR (a low r_a over-drives the speed -> runs wide off the corridor)
+        if self.ra_floor is not None and self.cls in self.ra_floor_classes and theta[self.ra_idx] < self.ra_floor:
+            theta = np.array(theta, float); theta[self.ra_idx] = self.ra_floor
+            self._sq = self._sq.copy(); self._sq[self.ra_idx] = 0.0
+            if self._cls_used is not None:
+                self._dsq = self._dsq.copy(); self._dsq[self.ra_idx] = 0.0
         self._h = h
         return theta
 

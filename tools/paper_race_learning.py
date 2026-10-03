@@ -128,6 +128,12 @@ def one_lap(S):
 # --------------------------------------------------------------------------- re-drive (states)
 def redrive(seed, kind, steps=2400, gap0=3.0, tag=''):
     """Frozen banked-net re-drive; log trajectory + ego AND opponent states + emitted weights."""
+    import os as _os
+    from mpcc_tuning.mpcc import WEIGHT_NAMES as _WN   # probe: RACE_WOVR="r_a:floor:8,r_d:floor:2"
+    _WOVR = []                                          # [(idx,'cap'|'floor',logval)] clamp emitted weights
+    for _p in _os.environ.get("RACE_WOVR", "").split(","):
+        if _p.strip():
+            _nm, _md, _vl = _p.split(":"); _WOVR.append((_WN.index(_nm), _md, float(np.log(float(_vl)))))
     cache = OUT / f"states_ltc_{seed}_{kind}.npz"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
@@ -135,7 +141,7 @@ def redrive(seed, kind, steps=2400, gap0=3.0, tag=''):
     from mpcc_tuning.ltc import LTCCell, WeightPolicy
     from experiments.race_mode import (race_features, FAIR_PACE, signed_gap, N_RACE_FEATURES,
                                         KEEPOUT_R, CONTACT_R, PACE_KINDS, LR_VEH, A_LAT_RACE,
-                                        CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES)
+                                        CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES, RA_FLOOR, RA_FLOOR_CLASSES)
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth")
     th0 = np.asarray(st.theta(), float)
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref,
@@ -147,7 +153,8 @@ def redrive(seed, kind, steps=2400, gap0=3.0, tag=''):
     pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls,
                        delta_log=float(d["delta_log"]),
                        kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES,
-                       kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES)
+                       kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES,
+                       ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES)
     pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.D_class[...] = dcl
     pol.reset(); pol.cls = PACE_KINDS.index(kind)
     from experiments.race_mode import measure_pace
@@ -162,7 +169,12 @@ def redrive(seed, kind, steps=2400, gap0=3.0, tag=''):
     def emit(slip, gap_rate=None, sec_suit=None):
         feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed,
                              slip=slip, gap_rate=gap_rate, sector_suit=sec_suit)
-        return np.asarray(pol.step(feat), float)
+        th = np.asarray(pol.step(feat), float)
+        if _WOVR:
+            th = th.copy()
+            for _i, _md, _lv in _WOVR:
+                th[_i] = min(th[_i], _lv) if _md == "cap" else max(th[_i], _lv)
+        return th
     _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
     _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
     theta = emit((_ar, _b, _r)); u = m.value(P.state_dyn(), theta)["u0"]
@@ -211,7 +223,7 @@ def redrive_online(seed, kind, steps=2400, gap0=3.0, tag=""):
     from experiments.race_mode import (race_features, race_reward, FAIR_PACE, signed_gap, measure_pace,
                                         N_RACE_FEATURES, KEEPOUT_R, CONTACT_R, PACE_KINDS, LR_VEH,
                                         A_LAT_RACE, CORRIDOR_KW, KV_FLOOR, KV_FLOOR_CLASSES,
-                                        KV_CEIL, KV_CEIL_CLASSES)
+                                        KV_CEIL, KV_CEIL_CLASSES, RA_FLOOR, RA_FLOOR_CLASSES)
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth"); th0 = np.asarray(st.theta(), float)
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref,
                    discrete=True, max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW,
@@ -222,7 +234,8 @@ def redrive_online(seed, kind, steps=2400, gap0=3.0, tag=""):
     pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls,
                        delta_log=float(d["delta_log"]),
                        kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES,
-                       kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES)
+                       kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES,
+                       ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES)
     pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.D_class[...] = dcl
     tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0, seed=seed,
                         trust_region=0.01, theta_prior=0.15, theta_explore=0.15, entropy=0.03,
