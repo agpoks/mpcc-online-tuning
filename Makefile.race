@@ -75,7 +75,9 @@ tenlap:
 	$(PY) tools/race_eval_laps.py --seed $(FIGSEED)
 	$(PY) tools/paper_race_10lap_states.py --seed $(FIGSEED) --tikz    # 10-lap states + weight-adaptation (PDF+TikZ)
 	$(PY) tools/paper_race_overtake_zoom.py --seed $(FIGSEED) --tikz   # track-opponents + zoomed overtakes (PDF+TikZ)
-	$(PY) tools/paper_race_track2d.py --seed $(FIGSEED) --tikz         # raceline + fading ego/opp trails (PDF+TikZ)
+	$(PY) tools/paper_race_track2d.py --seed $(FIGSEED) --tikz         # raceline + fading trails + lap-1/5/10 stages (PDF+TikZ)
+	$(PY) tools/paper_race_gifs.py --seed $(FIGSEED) --frozen --kinds static slower equal faster  # all-clean 10-lap gifs
+	$(PY) tools/paper_race_weight_gif.py --seed $(FIGSEED)            # weight-learning gifs (live weight bars, online caches)
 
 # COMPUTATIONAL-TIME analysis (acados solve vs horizon vs 20 Hz budget). Run on an IDLE machine --
 # a concurrent CPU-heavy job inflates and flattens the numbers (contention, not solve cost).
