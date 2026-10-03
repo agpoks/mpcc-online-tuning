@@ -74,6 +74,7 @@ tenlap:
 	$(PY) tools/race_eval_laps.py --seed $(FIGSEED) --frozen
 	$(PY) tools/race_eval_laps.py --seed $(FIGSEED)
 	$(PY) tools/paper_race_10lap_states.py --seed $(FIGSEED)
+	$(PY) tools/paper_race_overtake_zoom.py --seed $(FIGSEED)   # track-opponents + zoomed overtake manoeuvres
 
 figures-all: figures tikz gifs tenlap
 
