@@ -3,6 +3,6 @@
 | opponent | laps | overtakes | outcome | v_mean |
 |---|---:|---:|---|---:|
 | static | 12.53 | 13 | clean finish | 1.68 |
-| slower | 1.63 | 1 | OFF-TRACK at 1.6 laps | 2.06 |
+| slower | 15.07 | 6 | clean finish | 2.03 |
 | equal | 14.43 | 3 | clean finish | 1.94 |
-| faster | 3.65 | 1 | OFF-TRACK at 3.7 laps | 2.16 |
+| faster | 13.81 | 2 | clean finish | 1.86 |

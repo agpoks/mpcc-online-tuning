@@ -66,7 +66,16 @@ tikz:
 gifs:
 	$(PY) tools/paper_race_gifs.py --seed $(FIGSEED)
 
-figures-all: figures tikz gifs
+# 6) TEN-LAP: full-race (~10 laps) evaluation -- the r_a-floor band is applied automatically via
+#    redrive -> 10-lap tables (race_10lap_{frozen,online}.md) + state caches, then the NEW
+#    states-over-10-laps figure (fig_10lap_states). A real race is ~10 laps, not the ~4.6 of a
+#    training episode, so this is where the faster-opponent band fix shows (3.65 OFF -> 11.84 CLEAN).
+tenlap:
+	$(PY) tools/race_eval_laps.py --seed $(FIGSEED) --frozen
+	$(PY) tools/race_eval_laps.py --seed $(FIGSEED)
+	$(PY) tools/paper_race_10lap_states.py --seed $(FIGSEED)
+
+figures-all: figures tikz gifs tenlap
 
 clean-figures:                       # drop the re-drive caches so `figures` re-simulates
 	rm -f results/race/paper/states_online_ltc_*.npz results/race/paper/states_ltc_*.npz
