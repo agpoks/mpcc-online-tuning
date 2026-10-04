@@ -594,6 +594,9 @@ def main(argv=None):
     ap.add_argument("--fov-deg", type=float, default=FOV_DEG,
                     help=f"phase-2 forward FOV cone, TOTAL degrees (default {FOV_DEG:.0f}): a car outside "
                     "+-FOV/2 of the ego heading is unseen even in range -> we lose a car we just passed.")
+    ap.add_argument("--seed-list", type=int, nargs="*", default=None,
+                    help="train exactly these seeds instead of range(--seeds), e.g. --seed-list 1 2 3 to "
+                    "add seeds without recomputing earlier ones.")
     a = ap.parse_args(argv)
     if a.pilot:
         a.seeds, a.episodes, a.steps, a.arms = 1, 2, 1200, ["const", "ltc"]
@@ -610,8 +613,9 @@ def main(argv=None):
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; {'FAIR ' if a.fair_opp else ''}opponents "
           + "(straight-line target): " + ", ".join(f"{k}={_pace[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
 
+    _seeds = a.seed_list if a.seed_list is not None else list(range(a.seeds))
     jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp, a.detect_range, a.fov_deg)
-            for s in range(a.seeds) for arm in a.arms]
+            for s in _seeds for arm in a.arms]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
     print(f"  {len(jobs)} runs, {a.episodes} episodes, {n_proc} processes\n", flush=True)
 
