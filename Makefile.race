@@ -57,6 +57,7 @@ analysis:
 #    results/race/paper/states_online_*.npz to force a fresh re-drive).
 figures:
 	$(PY) tools/paper_race_learning.py --seed $(FIGSEED)
+	$(PY) tools/paper_race_weight_learning_map.py --seed $(FIGSEED) --tikz  # where the tuner adapts weights most (online caches)
 
 # 4) TIKZ: pgfplots .tex of the same figures (into results/race/paper/tikz/).
 tikz:
