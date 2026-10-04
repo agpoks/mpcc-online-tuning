@@ -1,0 +1,5 @@
+arm,case,opponent,laps,clean,passes,detected_pct,cross_track_blind,cross_track_seen
+ltc,overtake_blind,slower,4.67,1,2,31,0.0224,0.0408
+ltc,faster_reapproach,faster,4.70,1,1,37,0.0125,0.0093
+mlp,overtake_blind,slower,4.62,0,3,25,0.0431,0.0255
+mlp,faster_reapproach,faster,4.49,1,1,35,0.0310,0.0243
