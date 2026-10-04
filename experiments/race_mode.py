@@ -325,11 +325,28 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
                     edge=edge, off_pen=off_pen, contact=0.0)) if return_parts else x
 
 
+FOV_DEG = 120.0   # phase-2 forward sensor cone (TOTAL deg); a car outside +-FOV/2 of heading is unseen
+
+
+def _visible(ex, ey, eyaw, ox, oy, detect_range, half_fov):
+    """Phase-2 sensor model: opponent visible iff within euclidean RANGE *and* inside the forward FOV
+    cone (bearing within +-half_fov of the ego heading). A car directly behind is out of view -> this is
+    why we lose the car we just overtook. detect_range=None => always visible (race-mode behaviour)."""
+    if detect_range is None:
+        return True
+    if np.hypot(ex - ox, ey - oy) > detect_range:
+        return False
+    rel = (np.arctan2(oy - ey, ox - ex) - eyaw + np.pi) % (2 * np.pi) - np.pi
+    return abs(rel) <= half_fov
+
+
 def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
-        factor=2.0, box="adapt", dump_traj=False, fair_opp=False, detect_range=None):
+        factor=2.0, box="adapt", dump_traj=False, fair_opp=False, detect_range=None, fov_deg=FOV_DEG):
     # detect_range (m): phase-2 sensor gate. None = always-seen (race-mode behaviour). When set, the
-    # opponent is only observed within this range (camera/lidar ~15-20 m): beyond it the features fall
-    # back to no-opponent + detected=0 + a growing time-since-seen, and the MPCC obstacle is dropped.
+    # opponent is only observed within this range (camera/lidar ~15-20 m) AND inside the forward FOV
+    # cone (fov_deg): beyond either, features fall back to no-opponent + detected=0 + a growing
+    # time-since-seen, and the MPCC obstacle is dropped. A car behind us (just overtaken) is unseen.
+    _half_fov = np.radians(fov_deg) / 2.0
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, MLPCell, THETA_HI, THETA_LO,
                                  PolicyTuner, WeightPolicy, fixed_schedule)
@@ -407,7 +424,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         opp.reset()
         seen_age = 0.0                               # phase-2: seconds since the opponent was last detected
         _ex0, _ey0 = float(P._x[0]), float(P._x[1]); _ox0, _oy0, _ = opp.keepout()
-        _det0 = (detect_range is None) or (float(np.hypot(_ex0 - _ox0, _ey0 - _oy0)) <= detect_range)
+        _det0 = _visible(_ex0, _ey0, float(P._x[2]), _ox0, _oy0, detect_range, _half_fov)
         _vis0 = [opp] if _det0 else []
         if _det0:
             tracker.update(opp.pose()[:2])
@@ -475,7 +492,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             if dump_traj:
                 TEX.append(ex); TEY.append(ey); TEV.append(float(P._x[3]))
                 TOX.append(ox); TOY.append(oy); TG.append(g); TP.append(passes)
-            _det = (detect_range is None) or (dist <= detect_range)   # phase-2 sensor gate (dist from line above)
+            _det = _visible(ex, ey, float(P._x[2]), ox, oy, detect_range, _half_fov)  # range + forward FOV
             seen_age = 0.0 if _det else min(seen_age + 0.05, 5.0)
             _vis = [opp] if _det else []
             m.set_obstacles([opp.keepout()] if _det else [])          # drop the obstacle when out of range
@@ -542,10 +559,10 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
 
 
 def one(job):
-    arm, seed, n_ep, steps, ego_pace, dump_traj, fair_opp, detect_range = job
+    arm, seed, n_ep, steps, ego_pace, dump_traj, fair_opp, detect_range, fov_deg = job
     t0 = time.perf_counter()
     out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace,
-              dump_traj=dump_traj, fair_opp=fair_opp, detect_range=detect_range)
+              dump_traj=dump_traj, fair_opp=fair_opp, detect_range=detect_range, fov_deg=fov_deg)
     out["wall_s"] = round(time.perf_counter() - t0, 1)
     return out
 
@@ -574,6 +591,9 @@ def main(argv=None):
                     help="phase-2 SENSOR range (m, e.g. 18): opponent only observed within it "
                     "(features -> no-opponent + detected=0 + growing age beyond it; obstacle dropped). "
                     "Output goes to results/race_phase2/.")
+    ap.add_argument("--fov-deg", type=float, default=FOV_DEG,
+                    help=f"phase-2 forward FOV cone, TOTAL degrees (default {FOV_DEG:.0f}): a car outside "
+                    "+-FOV/2 of the ego heading is unseen even in range -> we lose a car we just passed.")
     a = ap.parse_args(argv)
     if a.pilot:
         a.seeds, a.episodes, a.steps, a.arms = 1, 2, 1200, ["const", "ltc"]
@@ -590,7 +610,7 @@ def main(argv=None):
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; {'FAIR ' if a.fair_opp else ''}opponents "
           + "(straight-line target): " + ", ".join(f"{k}={_pace[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
 
-    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp, a.detect_range)
+    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp, a.detect_range, a.fov_deg)
             for s in range(a.seeds) for arm in a.arms]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
     print(f"  {len(jobs)} runs, {a.episodes} episodes, {n_proc} processes\n", flush=True)

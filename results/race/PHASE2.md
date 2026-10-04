@@ -49,6 +49,14 @@ horizon (N=40 ≈ 36 ms, still under budget). Lets the car go faster than ~2.5 m
   the fastest and manage risk by how crowded the field is, rather than parking between two cars.
 - Sensor gate baseline result (single-opponent, band net vs N): overtakes all 3 but off at 5.63 laps
   (multi-car navigation, not over-speed) -- `experiments/race_multi.py`, states_multi_ltc_0.npz.
+- **Sensor model = forward FOV + range (user-confirmed 2026-10-04).** A RANGE-only gate (18 m euclidean)
+  loses the opponent ~0% of the time on this folded track (detected ~99-100%), so "don't see the car we
+  passed" never happens. Added a forward-FOV cone (`FOV_DEG`=120 total, i.e. +-60 deg of heading) to the
+  gate (`_visible()` in race_mode): a car outside the cone (e.g. directly behind, just overtaken) is
+  unseen even in range. Post-hoc on the saved trajectories this flips detected to 34% (overtake case) /
+  17% (faster-reapproach case) -> 66-83% BLIND. This is the regime where LTC memory should beat MLP.
+- **Retrain under range+FOV, both ltc AND mlp** (the memory ablation), to `results/race_phase2/`.
+  The first phase-2 net (`race_ltc_0`) was range-only (~always-seen) -> superseded.
 
 ## Reproducibility
 New `experiments/race_multi.py` + a sensor-gated training path + `tools/` additions; seeded/deterministic

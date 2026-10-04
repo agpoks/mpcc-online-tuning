@@ -31,7 +31,7 @@ from mpcc_tuning.ltc import LTCCell, WeightPolicy
 from experiments.race_mode import (race_features, FAIR_PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R,
                                     CONTACT_R, PACE_KINDS, LR_VEH, A_LAT_RACE, CORRIDOR_KW,
                                     KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES,
-                                    RA_FLOOR, RA_FLOOR_CLASSES, measure_pace)
+                                    RA_FLOOR, RA_FLOOR_CLASSES, measure_pace, _visible, FOV_DEG)
 
 OUT = ROOT / "results/race_phase2"; L = Track.icra_t2_smooth().length
 # (name, opponent class, start gap vs ego [+ahead / -behind]). The two sensor cases.
@@ -51,7 +51,8 @@ def _cte(EX, EY, ref):
     return out
 
 
-def run_case(seed, name, kind, gap0, detect_range, steps):
+def run_case(seed, name, kind, gap0, detect_range, steps, fov_deg):
+    half = np.radians(fov_deg) / 2.0
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth"); th0 = np.asarray(st.theta(), float)
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref, discrete=True,
                    max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW, name=f"sensor_{seed}")
@@ -76,7 +77,7 @@ def run_case(seed, name, kind, gap0, detect_range, steps):
 
     _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
     _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
-    _d0 = (np.hypot(float(P._x[0]) - opp.pose()[0], float(P._x[1]) - opp.pose()[1]) <= detect_range)
+    _d0 = _visible(float(P._x[0]), float(P._x[1]), float(P._x[2]), opp.pose()[0], opp.pose()[1], detect_range, half)
     m.set_obstacles([opp.keepout()] if _d0 else [])
     theta = emit((_ar, _b, _r), det=_d0, age=0.0); u = m.value(P.state_dyn(), theta)["u0"]
     LOGK = ["EX", "EY", "S", "V", "GAP", "DET", "AGE", "OX", "OY"]; log = {k: [] for k in LOGK}; logT = []
@@ -94,7 +95,7 @@ def run_case(seed, name, kind, gap0, detect_range, steps):
             passes += 1; seen_pass = True
         elif g > 0.5:
             seen_pass = False
-        det = (dist <= detect_range); seen_age = 0.0 if det else min(seen_age + 0.05, 5.0)
+        det = _visible(ex, ey, float(P._x[2]), ox, oy, detect_range, half); seen_age = 0.0 if det else min(seen_age + 0.05, 5.0)
         for k, val in zip(LOGK, [ex, ey, s_ego, _v, g, 1.0 if det else 0.0, seen_age, ox, oy]):
             log[k].append(val)
         logT.append(np.exp(theta))
@@ -153,8 +154,9 @@ def figure(results, seed):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--detect-range", type=float, default=18.0); ap.add_argument("--steps", type=int, default=3600)
+    ap.add_argument("--fov-deg", type=float, default=FOV_DEG)
     a = ap.parse_args()
-    res = [run_case(a.seed, n, k, g, a.detect_range, a.steps) for (n, k, g) in CASES]
+    res = [run_case(a.seed, n, k, g, a.detect_range, a.steps, a.fov_deg) for (n, k, g) in CASES]
     figure(res, a.seed)
 
 
