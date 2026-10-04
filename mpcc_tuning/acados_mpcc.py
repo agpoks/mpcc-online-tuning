@@ -76,6 +76,11 @@ class AcadosMPCC:
         self._grad = AcadosEnvelopeGradient(self.ocp, self.N)
         self.max_obstacles = int(max_obstacles)
         self._obs = None
+        # inactive-slot convention (must match build_ocp/pack_params): off = [0,0,-margin] so that
+        # r_eff = r_raw + d_obs = 0 -> no keep-out. Used to pad unused obstacle slots (phase-2 multi-opp).
+        _shape = kw.get("obs_shape", "circle"); _margin = float(kw.get("obs_margin", 0.15))
+        self._obs_stride = 3 if _shape == "circle" else 4
+        self._obs_off = [0.0, 0.0, -_margin] if _shape == "circle" else [0.0, 0.0, -_margin, 0.0]
         self._nx = self.ocp.model.x.shape[0]
         from mpcc_tuning.mpcc import WEIGHT_NAMES
         self._n_theta = len(WEIGHT_NAMES)   # was hardcoded 8; must track WEIGHT_NAMES (now 9 with d_bound)
@@ -153,18 +158,23 @@ class AcadosMPCC:
         n_p = self.ocp.model.p.shape[0]
         if self.theta_global:
             pad = np.zeros(n_p)
-            if n_p and self._obs is not None and self.max_obstacles:
-                ox, oy, r = self._obs[0]
-                pad[:3] = [ox, oy, r]
+            if n_p and self.max_obstacles:
+                pad[:self._obs_stride * self.max_obstacles] = self._obstacle_block()
             return pad
         if n_p == th.size:
             return th
         pad = np.zeros(n_p - th.size)
-        if self._obs is not None and self.max_obstacles:
-            ox, oy, r = self._obs[0]
-            # inactive-slot convention: r_raw = -d_obs so r_eff is exactly zero
-            pad[:3] = [ox, oy, r]
+        if self.max_obstacles:
+            pad[:self._obs_stride * self.max_obstacles] = self._obstacle_block()
         return np.concatenate([th, pad])
+
+    def _obstacle_block(self):
+        """All obstacle slots: active ones (up to max_obstacles) from set_obstacles, the rest padded
+        with the inactive 'off' default. Fixes the old slot-0-only packing so N opponents are fed."""
+        blk = np.tile(self._obs_off, self.max_obstacles).astype(float)
+        for i, o in enumerate(list(self._obs or [])[:self.max_obstacles]):
+            blk[i * self._obs_stride:(i + 1) * self._obs_stride] = np.asarray(o, float)[:self._obs_stride]
+        return blk
 
     def _set_params(self, theta, p):
         """Push theta and the per-stage parameters into the solver."""
