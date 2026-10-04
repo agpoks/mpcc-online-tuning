@@ -46,6 +46,64 @@ def _load(seed, kind, tag):
     return np.load(f) if f.exists() else None
 
 
+_L = Track.icra_t2_smooth().length
+
+
+def _laps(S):
+    S = np.asarray(S, float); dS = np.diff(S); dS[dS < -_L / 2] += _L; dS[dS > _L / 2] -= _L
+    return np.concatenate([[0.0], np.cumsum(dS)]) / _L
+
+
+def _dist_to_final(TH, lap, win=25):
+    """Per-tick distance (z-scored, L2) of the smoothed weight vector from its FINAL-LAP average ->
+    high while the tuner is still learning, 0 once it has settled. The settling signal."""
+    logw = np.log(np.clip(np.asarray(TH, float), 1e-6, None))
+    k = np.ones(int(win)) / int(win)
+    sm = np.apply_along_axis(lambda c: np.convolve(c, k, mode="same"), 0, logw)
+    sd = sm.std(0) + 1e-6
+    final = sm[lap >= max(lap.max() - 1.0, 0.0)].mean(0)      # last-lap mean = the converged weights
+    return np.linalg.norm((sm - final) / sd, axis=1)
+
+
+def settling(seed, tag):
+    """Lap-faceted maps + a per-lap curve showing the weight adaptation SETTLING toward the final laps."""
+    b = _b(); track = Track.icra_t2_smooth(); curves = {}
+    for kind in KINDS:
+        z = _load(seed, kind, tag)
+        if z is None:
+            continue
+        EX, EY = z["EX"], z["EY"]; lap = _laps(z["S"]); dd = _dist_to_final(z["THETA"], lap)
+        nlap = max(1, int(np.floor(lap.max()))); laps = list(range(1, min(nlap, 4) + 1)) or [1]
+        vmax = float(np.percentile(dd, 98)) or 1.0
+        fig, axs = plt.subplots(1, len(laps), figsize=(4.4 * len(laps), 4.6)); axs = np.atleast_1d(axs)
+        per = []
+        for ax, Lp in zip(axs, laps):
+            m = (lap >= Lp - 1) & (lap <= Lp)
+            ax.plot(b["left_x"], b["left_y"], color="0.6", lw=.8); ax.plot(b["right_x"], b["right_y"], color="0.6", lw=.8)
+            if m.sum() > 1:
+                ax.scatter(EX[m], EY[m], c=dd[m], cmap=CMAP, vmin=0, vmax=vmax, s=7, zorder=4)
+            mv = float(dd[m].mean()) if m.any() else np.nan; per.append(mv)
+            ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([]); ax.set_title(f"lap {Lp}  (dist {mv:.2f})", fontsize=10)
+        curves[kind] = per
+        fig.suptitle(f"vs {kind}: weight distance-to-FINAL over laps (bright=still learning, dark=settled)", fontsize=10.5)
+        for e in ("pdf", "png"):
+            fig.savefig(OUT / f"fig_weight_settling_{kind}.{e}", dpi=150, bbox_inches="tight")
+        plt.close(fig); print(f"wrote {OUT}/fig_weight_settling_{kind}.pdf (+.png)")
+    if curves:
+        fig, ax = plt.subplots(figsize=(6.8, 4.2))
+        col = {"static": "0.5", "slower": "#2a8f3a", "equal": "#1f4e8c", "faster": "#c23b3b"}
+        for kind, per in curves.items():
+            ax.plot(range(1, len(per) + 1), per, "-o", color=col.get(kind, "k"), label=kind)
+        ax.set_xlabel("lap"); ax.set_ylabel("mean weight distance to final"); ax.grid(alpha=.3); ax.legend(fontsize=9)
+        ax.set_title("Online weight adaptation SETTLING over the race (↓ = converging)", fontsize=10.5)
+        for e in ("pdf", "png"):
+            fig.savefig(OUT / f"fig_weight_settling_curve.{e}", dpi=150)
+        plt.close(fig); print(f"wrote {OUT}/fig_weight_settling_curve.pdf (+.png)")
+        print("mean distance-to-final per lap:")
+        for kind, per in curves.items():
+            print(f"  {kind:7s}: " + " -> ".join(f"{v:.2f}" for v in per))
+
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--frozen", action="store_true", help="use frozen caches (default: online, where it learns)")
@@ -92,6 +150,8 @@ def main():
     print("per-sector mean adaptation (0..3):")
     for k in present:
         print(f"  {k:7s}: " + "  ".join(f"s{s} {sect[k][s]:.3f}" for s in range(4)) + f"   -> peak sector {int(np.argmax(sect[k]))}")
+
+    settling(a.seed, tag)          # lap-faceted settling maps + the convergence curve
 
     if a.tikz:
         TZ.mkdir(parents=True, exist_ok=True)
