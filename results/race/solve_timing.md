@@ -1,29 +1,11 @@
-# acados MPCC solve-time analysis (shipping stack: dynamic + discrete + two-layer corridor, STD plant)
+# acados MPCC solve-time analysis (dynamic + discrete + two-layer corridor, STD plant)
 
-Pure `m.value()` wall time, single process, acados built **WITHOUT OpenMP** (single-threaded).
-Real-time budget = **50 ms (20 Hz)**. Reproduce on an **idle** machine with
-`python3 tools/paper_solve_timing.py` → this table + `results/race/paper/fig_solve_timing.{pdf,png}`
-(horizon scaling). Numbers below are for the **deployed horizon N=25**.
+Pure `m.value()` wall time, single process (acados built WITHOUT OpenMP), 5 horizons, 250 solves each along a drive. Real-time budget = **50 ms (20 Hz)**. The cost is dominated by `hessian_approx=EXACT`, required because the cost is `EXTERNAL` (keeps progress linear) and the online weight-tuning gradient needs the solver's exact Hessian.
 
-## Clean (idle machine) — 300 solves at N=25
-| metric | value | vs 20 Hz (50 ms) |
-|---|---:|:--|
-| mean | **82.4 ms** | OVER (~12 Hz) |
-| p50  | 78.3 ms | OVER |
-| p95  | 108.6 ms | OVER |
-| max  | 179.6 ms | OVER |
-
-## Under concurrent CPU load (a 6-worker job running)
-~170–185 ms/solve and **flat across N=15…40** — this is CPU contention, not the isolated solve cost
-(shown only to illustrate how shared-CPU inflates it; do not use for the real-time claim).
-
-## Why it's ~82 ms (not single-digit)
-`hessian_approx=EXACT`, which is **required**: the cost is `cost_type=EXTERNAL` (keeps the progress
-reward LINEAR instead of a squared penalty), and the online weight-tuning gradient
-(`dJ*/dθ = dL/dθ`, envelope theorem) needs the solver's **exact** Hessian. Gauss-Newton would be much
-faster but silently breaks the tuning gradient.
-
-## Paths to real-time (future)
-1. Multi-threaded acados build (compile with OpenMP) + `OMP_NUM_THREADS>1` → HPIPM parallelism.
-2. Shorter horizon (trades preview for speed).
-3. Gauss-Newton reformulation (fast, but requires re-deriving the online-tuning gradient).
+| horizon N | lookahead | mean [ms] | p50 | p95 | max | vs 20 Hz |
+|---:|---:|---:|---:|---:|---:|:--|
+| 15 | 0.75 s | 36.5 | 34.0 | 37.9 | 586.6 | OK |
+| 20 | 1.00 s | 33.4 | 33.3 | 35.6 | 40.9 | OK |
+| 25 | 1.25 s | 34.8 | 34.4 | 38.0 | 86.1 | OK |
+| 30 | 1.50 s | 34.8 | 34.5 | 37.8 | 45.9 | OK |
+| 40 | 2.00 s | 35.7 | 34.0 | 49.4 | 60.9 | OK |
