@@ -38,6 +38,18 @@ horizon (N=40 ≈ 36 ms, still under budget). Lets the car go faster than ~2.5 m
 4. Sensor-range gate + retrain + the two eval cases.
 5. (C) corridor-aware v_ref + longer horizon, if time.
 
+## Decisions (2026-10-04)
+- **Order: sensor-range gate FIRST** (single-opponent), then multi-opponent. Results go to a NEW
+  folder **`results/race_phase2/`** (do NOT mix with `results/race/`).
+- **Multi-opponent objective = OVERTAKE AND WIN, not just survive.** Nearest-ahead + nearest-behind
+  relative pace risks the policy getting **stuck in the middle and never overtaking**. Instead encode
+  the field as: (a) the **FASTEST of all others** = the rival to beat / the target; (b) a **RISK that
+  depends on the AVERAGE over all others** (crowding/aggression budget). So the obs is a *comparison of
+  the whole field* (fastest + average), not just the two neighbours — this pushes the policy to pick off
+  the fastest and manage risk by how crowded the field is, rather than parking between two cars.
+- Sensor gate baseline result (single-opponent, band net vs N): overtakes all 3 but off at 5.63 laps
+  (multi-car navigation, not over-speed) -- `experiments/race_multi.py`, states_multi_ltc_0.npz.
+
 ## Reproducibility
-New `experiments/race_multi.py` + `tools/` additions, wired into `Makefile.race`; seeded/deterministic
-like race-mode. Single-opponent canonical on `race-mode` stays untouched.
+New `experiments/race_multi.py` + a sensor-gated training path + `tools/` additions; seeded/deterministic
+like race-mode; outputs in `results/race_phase2/`. Single-opponent canonical on `race-mode` untouched.

@@ -85,9 +85,17 @@ def side_open(track, opponents, car_w=0.24):
 
 
 def race_features(track, s5, opponents=(), opp_speed_est=None,
-                  slip=None, gap_rate=None, sector_suit=None):
-    """Base 18 + 2 side-open + 9 TEMPORAL/DYNAMIC = 29. Indices 0..19 are left
+                  slip=None, gap_rate=None, sector_suit=None, detected=1.0, seen_age=0.0):
+    """Base 18 + 2 side-open + 9 TEMPORAL/DYNAMIC + 2 SENSOR = 31. Indices 0..19 are left
     untouched so fixed_schedule (which reads feat[7], feat[8], feat[14:18]) works.
+
+    SENSOR features (phase-2 partial observability -- the opponent is only tracked within the
+    camera/lidar range ~15-20 m):
+      29  detected flag      1.0 if the opponent is currently in sensor range, else 0.0
+      30  time since seen    tanh(seconds since last detection) -- 0 while tracked, grows when lost
+    When detected=0 the CALLER passes opponents=() so the opponent-derived features (gap, side_open,
+    opp_speed, closing) fall back to their no-opponent defaults; these two tell the policy it is blind
+    (so the recurrent LTC can hold/extrapolate the last-seen state).
 
     The 9 appended features are the history-dependent signals the policy previously
     could NOT see (it only observed an instantaneous s5=[x,y,psi,v,s]); without them
@@ -112,10 +120,11 @@ def race_features(track, s5, opponents=(), opp_speed_est=None,
              np.tanh(float(opp_speed_est) / 4.0) if opp_speed_est is not None else 0.0]
     ss = sector_suit if sector_suit is not None else (0.0, 0.0, 0.0, 0.0)
     extra += [np.tanh(float(x)) for x in ss]
+    extra += [float(detected), np.tanh(float(seen_age))]   # 29,30: sensor detection (phase-2)
     return np.concatenate([base, np.array(side_open(track, opponents), float), np.array(extra, float)])
 
 
-N_RACE_FEATURES = 29
+N_RACE_FEATURES = 31   # 29 + 2 sensor features (detected flag, time-since-seen) -- phase-2 partial observability
 
 
 def measure_pace(m, track, th0, steps):
@@ -317,7 +326,10 @@ def race_reward(kind, r, just_passed, contact, v_ego, v_opp, gap,
 
 
 def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
-        factor=2.0, box="adapt", dump_traj=False, fair_opp=False):
+        factor=2.0, box="adapt", dump_traj=False, fair_opp=False, detect_range=None):
+    # detect_range (m): phase-2 sensor gate. None = always-seen (race-mode behaviour). When set, the
+    # opponent is only observed within this range (camera/lidar ~15-20 m): beyond it the features fall
+    # back to no-opponent + detected=0 + a growing time-since-seen, and the MPCC obstacle is dropped.
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, MLPCell, THETA_HI, THETA_LO,
                                  PolicyTuner, WeightPolicy, fixed_schedule)
@@ -393,13 +405,18 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             tuner.reset()
             tuner.set_class(PACE_KINDS.index(kind))   # index the class-residual head for this opponent
         opp.reset()
-        tracker.update(opp.pose()[:2])
-        m.set_obstacles([opp.keepout()])
+        seen_age = 0.0                               # phase-2: seconds since the opponent was last detected
+        _ex0, _ey0 = float(P._x[0]), float(P._x[1]); _ox0, _oy0, _ = opp.keepout()
+        _det0 = (detect_range is None) or (float(np.hypot(_ex0 - _ox0, _ey0 - _oy0)) <= detect_range)
+        _vis0 = [opp] if _det0 else []
+        if _det0:
+            tracker.update(opp.pose()[:2])
+        m.set_obstacles([opp.keepout()] if _det0 else [])
         # initial slip (near zero at reset) for the enriched observation; no gap/sector history yet
         _b0 = float(P._x[6]) if P._x.size > 6 else 0.0; _r0 = float(P._x[5]); _v0 = float(P._x[3])
         _ar0 = -np.arctan2(_v0 * np.sin(_b0) - LR_VEH * _r0, _v0 * np.cos(_b0)) if _v0 * np.cos(_b0) > 0.05 else 0.0
-        feat = race_features(track, P.state5(), [opp], opp_speed_est=tracker.speed,
-                             slip=(_ar0, _b0, _r0))
+        feat = race_features(track, P.state5(), _vis0, opp_speed_est=(tracker.speed if _det0 else None),
+                             slip=(_ar0, _b0, _r0), detected=1.0 if _det0 else 0.0, seen_age=0.0)
         if arm in ("ltc", "mlp"):
             theta, u = tuner.act(feat, P.state_dyn())
         elif arm == "fixed":
@@ -458,13 +475,18 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             if dump_traj:
                 TEX.append(ex); TEY.append(ey); TEV.append(float(P._x[3]))
                 TOX.append(ox); TOY.append(oy); TG.append(g); TP.append(passes)
-            m.set_obstacles([opp.keepout()])
-            tracker.update(opp.pose()[:2])
+            _det = (detect_range is None) or (dist <= detect_range)   # phase-2 sensor gate (dist from line above)
+            seen_age = 0.0 if _det else min(seen_age + 0.05, 5.0)
+            _vis = [opp] if _det else []
+            m.set_obstacles([opp.keepout()] if _det else [])          # drop the obstacle when out of range
+            if _det:
+                tracker.update(opp.pose()[:2])                        # tracker holds last-seen speed when blind
             gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0   # gap closing rate
             prev_g = g
-            fn = race_features(track, s5n, [opp], opp_speed_est=tracker.speed,
+            fn = race_features(track, s5n, _vis, opp_speed_est=(tracker.speed if _det else None),
                                slip=(_alpha_r, _beta, _r), gap_rate=gr,
-                               sector_suit=(sec_pass - sec_contact))
+                               sector_suit=(sec_pass - sec_contact),
+                               detected=1.0 if _det else 0.0, seen_age=seen_age)
             # pace-DEPENDENT shaped reward (race_reward): the pass bonus fires on the
             # tick the pass COMPLETES (just_passed), which the old code missed because
             # `seen` was already set -- so the tuner never saw a pass reward before.
@@ -494,9 +516,11 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
                          sec_theta=(sec_theta / np.maximum(sec_theta_n[:, None], 1)).tolist()))
         if dump_traj and TEX:
             traj[kind] = dict(EX=TEX, EY=TEY, EV=TEV, OX=TOX, OY=TOY, GAP=TG, PASS=TP)
-    # save the trained policy so the GIF/eval can REPLAY the learned behaviour
+    # save the trained policy so the GIF/eval can REPLAY the learned behaviour. Phase-2 (sensor gate)
+    # goes to results/race_phase2/ so it never mixes with the single-opponent canonical results/race/.
+    out_base = (ROOT / "results" / "race_phase2") if detect_range is not None else OUT
     if tuner is not None:
-        ndir = OUT / "nets"; ndir.mkdir(parents=True, exist_ok=True)
+        ndir = out_base / "nets"; ndir.mkdir(parents=True, exist_ok=True)
         np.savez(str(ndir / f"race_{arm}_{seed}.npz"), G=pol.G, cell_p=pol.cell.p,
                  th0=th0, n_hidden=pol.cell.n, arm=arm, seed=seed,
                  lo=np.asarray(lo, float), hi=np.asarray(hi, float),
@@ -505,7 +529,7 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     if dump_traj and traj:
         # per-opponent-kind trajectory (last episode of each kind) for the 2D paper plots,
         # so tools/race_2d.py can render WITHOUT re-driving (no acados).
-        tdir = OUT / "traj"; tdir.mkdir(parents=True, exist_ok=True)
+        tdir = out_base / "traj"; tdir.mkdir(parents=True, exist_ok=True)
         np.savez(str(tdir / f"traj_{arm}_{seed}.npz"),
                  **{f"{k}_{fld}": np.array(v[fld]) for k, v in traj.items() for fld in v})
     last = rows[-8:] if len(rows) >= 8 else rows
@@ -518,10 +542,10 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
 
 
 def one(job):
-    arm, seed, n_ep, steps, ego_pace, dump_traj, fair_opp = job
+    arm, seed, n_ep, steps, ego_pace, dump_traj, fair_opp, detect_range = job
     t0 = time.perf_counter()
     out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace,
-              dump_traj=dump_traj, fair_opp=fair_opp)
+              dump_traj=dump_traj, fair_opp=fair_opp, detect_range=detect_range)
     out["wall_s"] = round(time.perf_counter() - t0, 1)
     return out
 
@@ -546,6 +570,10 @@ def main(argv=None):
                     help="use the FAIR opponent (RacelineOpponent): grip-limited speed "
                     "(slows for corners like our car) + reactive side-step overtake, "
                     "instead of the dumb constant-speed centreline ghost")
+    ap.add_argument("--detect-range", type=float, default=None,
+                    help="phase-2 SENSOR range (m, e.g. 18): opponent only observed within it "
+                    "(features -> no-opponent + detected=0 + growing age beyond it; obstacle dropped). "
+                    "Output goes to results/race_phase2/.")
     a = ap.parse_args(argv)
     if a.pilot:
         a.seeds, a.episodes, a.steps, a.arms = 1, 2, 1200, ["const", "ltc"]
@@ -562,7 +590,7 @@ def main(argv=None):
     print(f"  ego solo pace = {ego_pace:.2f} m/s ; {'FAIR ' if a.fair_opp else ''}opponents "
           + "(straight-line target): " + ", ".join(f"{k}={_pace[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
 
-    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp)
+    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp, a.detect_range)
             for s in range(a.seeds) for arm in a.arms]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
     print(f"  {len(jobs)} runs, {a.episodes} episodes, {n_proc} processes\n", flush=True)
