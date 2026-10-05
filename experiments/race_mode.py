@@ -406,8 +406,12 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
     for ep in range(n_ep):
         kind = PACE_KINDS[(seed + ep) % 4]
         v_opp = (FAIR_PACE if fair_opp else PACE)[kind] * ego_pace
-        s0 = (seed % 4) * track.length / 4.0
-        v0 = 1.3 + 0.1 * (seed % 3)          # start near the ego's own pace, not crawling
+        # Vary the PHYSICAL scenario every episode so ONE net trains on many starts (lower-variance
+        # policy, not overfit to a single start). s0 cycles the 4 corners decorrelated from `kind`
+        # (stride 3), v0 cycles 3 values. `seed` offsets the whole sequence (distinct per-net ordering).
+        _scn = seed + ep
+        s0 = ((_scn * 3) % 4) * track.length / 4.0
+        v0 = 1.3 + 0.1 * (_scn % 3)          # start near the ego's own pace, not crawling
         gap0 = 3.0 + 1.5 * (ep % 3)          # opponent starts a few m ahead
         if fair_opp:
             opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp,

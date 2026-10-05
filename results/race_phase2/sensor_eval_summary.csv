@@ -1,5 +1,5 @@
 arm,case,opponent,n_seeds,clean_rate,laps_mean,passes_mean,detected_pct_mean,cross_track_blind_mean,cross_track_seen_mean
-ltc,faster_reapproach,faster,4,3/4,4.65,1.00,33,0.0220,0.0256
-mlp,faster_reapproach,faster,4,3/4,4.38,1.00,35,0.0243,0.0269
-ltc,overtake_blind,slower,4,2/4,3.23,1.50,37,0.0412,0.0407
-mlp,overtake_blind,slower,4,1/4,4.12,2.00,31,0.0286,0.0241
+ltc,faster_reapproach,faster,4,2/4,3.58,0.75,32,0.0277,0.0260
+mlp,faster_reapproach,faster,4,3/4,3.81,1.00,34,0.0325,0.0355
+ltc,overtake_blind,slower,4,0/4,4.30,2.25,32,0.0233,0.0477
+mlp,overtake_blind,slower,4,2/4,4.80,2.00,37,0.0201,0.0188
