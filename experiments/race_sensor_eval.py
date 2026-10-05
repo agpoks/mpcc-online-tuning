@@ -273,6 +273,7 @@ def fig_timeline(results, seed, tag=""):
     for R in results:
         ri = [c[0] for c in CASES].index(R["name"]); ci = ARMS.index(R["arm"]); ax = axs[ri][ci]
         a = R["arr"]; det = a["DET"].astype(bool); t = np.arange(len(a["GAP"])) * 0.05
+        ax.fill_between(t, -100, 100, where=det, color="#d6ead6", zorder=0, label="opponent VISIBLE")
         ax.fill_between(t, -100, 100, where=~det, color="0.9", zorder=0, label="blind")
         ax.plot(t, a["GAP"], color="k", lw=1.3, label="signed gap (m)")
         ax.axhline(0, color="0.5", lw=.7); ax.set_ylim(np.nanmin(a["GAP"]) - 2, np.nanmax(a["GAP"]) + 2)
