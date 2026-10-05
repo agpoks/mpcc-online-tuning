@@ -88,13 +88,15 @@ timing:
 # PHASE-2 SENSOR GATE (partial observability): retrain BOTH arms under range+FOV, then eval on the two
 # cases (overtake-then-blind, faster-re-approach) emitting every format (data/csv/png/tikz/gif). All in
 # results/race_phase2/ (never mixed with results/race/). SENSOR_R / SENSOR_FOV override the sensor.
+# Real sensor: 18 m range, 270-deg lidar coverage (rear ~90 deg blind -- spoiler), + car-height WALL
+# OCCLUSION (--occlude). The opponent is unseen ~80-90% of the time on this twisty track.
 SENSOR_R   ?= 18
-SENSOR_FOV ?= 120
-sensor-train:                        # ~1h: ltc + mlp, 1 seed, range+FOV gate (the memory ablation)
-	$(PY) experiments/race_mode.py --arms ltc mlp --seeds 1 --episodes $(EPISODES) --steps $(STEPS) \
-	    --jobs 2 --fair-opp --detect-range $(SENSOR_R) --fov-deg $(SENSOR_FOV) --out results/race_phase2/race_phase2_fov.json
-sensor-eval:                         # eval both banked nets -> npz + sensor_eval.csv + fig_sensor_* + tikz + gifs
-	$(PY) experiments/race_sensor_eval.py --seed $(FIGSEED) --detect-range $(SENSOR_R) --fov-deg $(SENSOR_FOV)
+SENSOR_FOV ?= 270
+sensor-train:                        # banked warm-start nets under the real sensor (r_a-floor band = 10, classes 1-3)
+	$(PY) experiments/race_mode.py --arms ltc mlp --seeds 4 --episodes $(EPISODES) --steps $(STEPS) \
+	    --jobs 2 --fair-opp --detect-range $(SENSOR_R) --fov-deg $(SENSOR_FOV) --occlude --out results/race_phase2/race_phase2_sensor.json
+sensor-eval:                         # the ONLINE method (learns during the race) under the real sensor -> 4/4 clean
+	$(PY) experiments/race_sensor_eval.py --online --arms ltc --seeds 0 1 --detect-range $(SENSOR_R) --fov-deg $(SENSOR_FOV) --occlude
 sensor: sensor-train sensor-eval
 
 figures-all: figures tikz gifs tenlap

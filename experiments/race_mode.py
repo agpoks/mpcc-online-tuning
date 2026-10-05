@@ -382,65 +382,9 @@ def _visible(ex, ey, eyaw, ox, oy, detect_range, half_fov, near_r=0.0, occlude=F
     return not (occlude and _occluded(ex, ey, ox, oy))
 
 
-_VREF_CACHE = {}
-
-
-def _vref_table(track, a_lat, n=600):
-    """Grip-limited speed profile v(s) on the racing line: v = sqrt(a_lat / curvature), clipped. This is
-    the 'drives like us' baseline -- same car, same grip, so it slows for the same corners we do. Cached."""
-    key = (id(track), round(float(a_lat), 2), n)
-    if key not in _VREF_CACHE:
-        L = float(track.length); ss = np.linspace(0.0, L, n, endpoint=False); eps = L / n
-        kap = np.empty(n)
-        for i, s in enumerate(ss):
-            a0 = float(track.tangent_angle(s - eps)); a1 = float(track.tangent_angle(s + eps))
-            da = (a1 - a0 + np.pi) % (2 * np.pi) - np.pi
-            kap[i] = abs(da) / (2 * eps)
-        v = np.clip(np.sqrt(float(a_lat) / np.maximum(kap, 1e-3)), 0.8, 4.0)
-        _VREF_CACHE[key] = (ss, v, L)
-    return _VREF_CACHE[key]
-
-
-class OppPredictor:
-    """Model-based opponent predictor for the BLIND window. Baseline: the opponent is the SAME car (size/
-    weight/grip) and does not crash, so it follows the racing line at a grip-limited speed profile (slows
-    for corners like us). Adapted SMOOTHLY by observation: each seen tick EMA-updates its PACE (speed
-    relative to the grip limit -- faster/equal/slower) and its LINE bias (lateral offset). Through a blind
-    stretch it propagates that model (v = grip-profile x pace) ALONG the track to predict where the
-    opponent is now, and feeds it to the MPCC as a keep-out whose radius grows with time-since-seen
-    (uncertainty). Reduces to constant-speed dead-reckon only on a straight; corrects for upcoming corners."""
-
-    def __init__(self, track, base_r, a_lat=None, grow=0.06, grow_cap=0.30, tau=0.6, dt=0.05):
-        self.track = track; self.base_r = float(base_r); self.grow = float(grow); self.grow_cap = float(grow_cap)
-        self.ss, self.vref, self.L = _vref_table(track, A_LAT_RACE if a_lat is None else a_lat)
-        self.ema = float(np.exp(-float(dt) / max(float(tau), 1e-6))); self.dt = float(dt)
-        self.s = None; self.lat = 0.0; self.pace = 1.0   # pace 1.0 = drives at the grip limit, like us
-
-    def _vlim(self, s):
-        return float(np.interp(s % self.L, self.ss, self.vref))
-
-    def see(self, ox, oy, v):                        # every detected tick: smoothly adapt pace + line bias
-        self.s = float(self.track.project(float(ox), float(oy)))
-        lat = float(self.track.lateral(float(ox), float(oy)))
-        p_obs = float(np.clip(float(v) / max(self._vlim(self.s), 0.3), 0.3, 1.25))
-        self.pace = self.ema * self.pace + (1.0 - self.ema) * p_obs
-        self.lat = self.ema * self.lat + (1.0 - self.ema) * lat
-
-    def predict(self, age):                          # keep-out (x, y, r) at `age` s since last seen, or None
-        if self.s is None:
-            return None
-        s = self.s; t = 0.0; age = float(age)        # propagate at grip-profile x estimated pace
-        while t < age:
-            s += self._vlim(s) * self.pace * self.dt; t += self.dt
-        p = np.array(self.track.pos(s)).ravel(); psi = float(self.track.tangent_angle(s))
-        nx, ny = -np.sin(psi), np.cos(psi)
-        r = self.base_r + min(self.grow * age, self.grow_cap)
-        return (float(p[0] + self.lat * nx), float(p[1] + self.lat * ny), r)
-
-
 def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
         factor=2.0, box="adapt", dump_traj=False, fair_opp=False, detect_range=None, fov_deg=FOV_DEG,
-        dead_reckon=False, occlude=False):
+        occlude=False):
     # detect_range (m): phase-2 sensor gate. None = always-seen (race-mode behaviour). When set, the
     # opponent is only observed within this range (camera/lidar ~15-20 m) AND inside the forward FOV
     # cone (fov_deg): beyond either, features fall back to no-opponent + detected=0 + a growing
@@ -525,17 +469,13 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             tuner.reset()
             tuner.set_class(PACE_KINDS.index(kind))   # index the class-residual head for this opponent
         opp.reset()
-        pred = OppPredictor(track, KEEPOUT_R)        # phase-2: dead-reckon the opponent through blind windows
         seen_age = 0.0                               # phase-2: seconds since the opponent was last detected
         _ex0, _ey0 = float(P._x[0]), float(P._x[1]); _ox0, _oy0, _ = opp.keepout()
         _det0 = _visible(_ex0, _ey0, float(P._x[2]), _ox0, _oy0, detect_range, _half_fov, occlude=occlude)
         _vis0 = [opp] if _det0 else []
         if _det0:
-            tracker.update(opp.pose()[:2]); pred.see(_ox0, _oy0, tracker.speed)
-            m.set_obstacles([opp.keepout()])
-        else:
-            _k0 = pred.predict(0.0) if dead_reckon else None
-            m.set_obstacles([_k0] if _k0 else [])
+            tracker.update(opp.pose()[:2])
+        m.set_obstacles([opp.keepout()] if _det0 else [])   # drop the obstacle when blind (no prediction)
         # initial slip (near zero at reset) for the enriched observation; no gap/sector history yet
         _b0 = float(P._x[6]) if P._x.size > 6 else 0.0; _r0 = float(P._x[5]); _v0 = float(P._x[3])
         _ar0 = -np.arctan2(_v0 * np.sin(_b0) - LR_VEH * _r0, _v0 * np.cos(_b0)) if _v0 * np.cos(_b0) > 0.05 else 0.0
@@ -603,11 +543,10 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
             seen_age = 0.0 if _det else min(seen_age + 0.05, 5.0)
             _vis = [opp] if _det else []
             if _det:
-                tracker.update(opp.pose()[:2]); pred.see(ox, oy, tracker.speed)  # tracker holds last-seen speed
+                tracker.update(opp.pose()[:2])                        # tracker holds last-seen speed when blind
                 m.set_obstacles([opp.keepout()])
-            else:                                                     # blind: dead-reckon a predicted keep-out
-                _ko = pred.predict(seen_age) if dead_reckon else None # (or drop it, the pre-DR behaviour)
-                m.set_obstacles([_ko] if _ko else [])
+            else:
+                m.set_obstacles([])                                   # drop the obstacle when blind (no prediction)
             gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0   # gap closing rate
             prev_g = g
             fn = race_features(track, s5n, _vis, opp_speed_est=(tracker.speed if _det else None),
@@ -669,11 +608,11 @@ def run(arm, seed=0, n_ep=10, steps=5500, n_hidden=12, ego_pace=1.4,
 
 
 def one(job):
-    arm, seed, n_ep, steps, ego_pace, dump_traj, fair_opp, detect_range, fov_deg, dead_reckon, occlude = job
+    arm, seed, n_ep, steps, ego_pace, dump_traj, fair_opp, detect_range, fov_deg, occlude = job
     t0 = time.perf_counter()
     out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace,
               dump_traj=dump_traj, fair_opp=fair_opp, detect_range=detect_range, fov_deg=fov_deg,
-              dead_reckon=dead_reckon, occlude=occlude)
+              occlude=occlude)
     out["wall_s"] = round(time.perf_counter() - t0, 1)
     return out
 
@@ -705,9 +644,6 @@ def main(argv=None):
     ap.add_argument("--fov-deg", type=float, default=FOV_DEG,
                     help=f"phase-2 forward FOV cone, TOTAL degrees (default {FOV_DEG:.0f}): a car outside "
                     "+-FOV/2 of the ego heading is unseen even in range -> we lose a car we just passed.")
-    ap.add_argument("--dead-reckon", action="store_true",
-                    help="phase-2: dead-reckon the opponent through blind windows (predicted keep-out in "
-                    "the MPCC) instead of dropping the obstacle -- the plan-side fix for blind collisions.")
     ap.add_argument("--occlude", action="store_true",
                     help="phase-2: car-height tube walls block line-of-sight -- the opponent is unseen when "
                     "hidden around a bend/behind a wall (the dominant blind effect on a twisty track).")
@@ -731,7 +667,7 @@ def main(argv=None):
           + "(straight-line target): " + ", ".join(f"{k}={_pace[k]*ego_pace:.2f}" for k in PACE_KINDS), flush=True)
 
     _seeds = a.seed_list if a.seed_list is not None else list(range(a.seeds))
-    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp, a.detect_range, a.fov_deg, a.dead_reckon, a.occlude)
+    jobs = [(arm, s, a.episodes, a.steps, ego_pace, a.dump_traj, a.fair_opp, a.detect_range, a.fov_deg, a.occlude)
             for s in _seeds for arm in a.arms]
     n_proc = a.jobs or min(len(jobs), os.cpu_count() or 1)
     print(f"  {len(jobs)} runs, {a.episodes} episodes, {n_proc} processes\n", flush=True)

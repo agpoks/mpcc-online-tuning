@@ -34,7 +34,7 @@ from mpcc_tuning.ltc import LTCCell, MLPCell, WeightPolicy
 from experiments.race_mode import (race_features, FAIR_PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R,
                                     CONTACT_R, PACE_KINDS, LR_VEH, A_LAT_RACE, CORRIDOR_KW,
                                     KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES,
-                                    RA_FLOOR, RA_FLOOR_CLASSES, measure_pace, _visible, FOV_DEG, OppPredictor)
+                                    RA_FLOOR, RA_FLOOR_CLASSES, measure_pace, _visible, FOV_DEG)
 
 OUT = ROOT / "results/race_phase2"; TZ = OUT / "tikz"; L = Track.icra_t2_smooth().length
 ARMS = ["ltc", "mlp"]
@@ -66,12 +66,8 @@ def _load_pol(arm, seed):
     return pol
 
 
-QC_BLIND, KV_BLIND, GAP_SLOW = 2.5, 0.55, 6.0   # corridor-aware caution: hold line (q_c x) + slow (k_v x) if est. close ahead
-
-
-def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_deg, arm, dead_reckon=False, tag="", occlude=False, blind_caution=False):
+def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_deg, arm, tag="", occlude=False):
     track = Track.icra_t2_smooth(); half = np.radians(fov_deg) / 2.0
-    pred = OppPredictor(track, KEEPOUT_R)       # dead-reckon the opponent through the blind window
     pol.reset(); pol.cls = PACE_KINDS.index(kind)
     v_opp = FAIR_PACE[kind] * ego_pace
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.3 + 0.1 * (seed % 3)
@@ -79,25 +75,15 @@ def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_
     tracker = ObstacleTracker(dt=0.05); P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
     P.reset(s0=s0, v0=v0); m.reset(); opp.reset(); tracker.update(opp.pose()[:2]); seen_age = 0.0
 
-    def emit(slip, gap_rate=None, det=True, age=0.0, pred_gap=99.0):
+    def emit(slip, gap_rate=None, det=True, age=0.0):
         feat = race_features(track, P.state5(), ([opp] if det else []), opp_speed_est=(tracker.speed if det else None),
                              slip=slip, gap_rate=gap_rate, detected=1.0 if det else 0.0, seen_age=age)
-        th = np.asarray(pol.step(feat), float)
-        if blind_caution and not det:                 # corridor-aware caution when blind (no swerve, slow to follow)
-            th = th.copy(); th[0] += np.log(QC_BLIND)  # q_c up -> hold the racing line
-            if 0.0 < pred_gap < GAP_SLOW:
-                th[7] += np.log(KV_BLIND)              # k_v down -> slow if the estimate says a car is close ahead
-        return th
+        return np.asarray(pol.step(feat), float)
 
     _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
     _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
     _d0 = _visible(float(P._x[0]), float(P._x[1]), float(P._x[2]), opp.pose()[0], opp.pose()[1], detect_range, half, occlude=occlude)
-    if _d0:
-        _ox0, _oy0, _ = opp.keepout(); pred.see(_ox0, _oy0, tracker.speed); m.set_obstacles([opp.keepout()])
-    elif blind_caution:
-        m.set_obstacles([])                          # no lateral avoidance when blind
-    else:
-        _k0 = pred.predict(0.0) if dead_reckon else None; m.set_obstacles([_k0] if _k0 else [])
+    m.set_obstacles([opp.keepout()] if _d0 else [])   # drop the obstacle when blind (no prediction)
     theta = emit((_ar, _b, _r), det=_d0, age=0.0); u = m.value(P.state_dyn(), theta)["u0"]
     LOGK = ["EX", "EY", "S", "V", "GAP", "DET", "AGE", "OX", "OY"]; log = {k: [] for k in LOGK}; logT = []
     passes = 0; seen_pass = False; prev_g = None; contact = False; off = tr = False
@@ -117,16 +103,12 @@ def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_
         for k, val in zip(LOGK, [ex, ey, s_ego, _v, g, 1.0 if det else 0.0, seen_age, ox, oy]):
             log[k].append(val)
         logT.append(np.exp(theta))
-        _pg = 99.0
         if det:
-            tracker.update(opp.pose()[:2]); pred.see(ox, oy, tracker.speed); m.set_obstacles([opp.keepout()])
-        elif blind_caution:                          # blind: NO lateral avoidance; predict only to decide to slow
-            ko = pred.predict(seen_age); m.set_obstacles([])
-            if ko is not None: _pg = signed_gap(track, s_ego, track.project(ko[0], ko[1]))
+            tracker.update(opp.pose()[:2]); m.set_obstacles([opp.keepout()])
         else:
-            ko = pred.predict(seen_age) if dead_reckon else None; m.set_obstacles([ko] if ko else [])
+            m.set_obstacles([])                       # drop the obstacle when blind (no prediction)
         gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0; prev_g = g
-        theta = emit((_ar, _b, _r), gap_rate=gr, det=det, age=seen_age, pred_gap=_pg); u = m.value(P.state_dyn(), theta)["u0"]
+        theta = emit((_ar, _b, _r), gap_rate=gr, det=det, age=seen_age); u = m.value(P.state_dyn(), theta)["u0"]
         if off or tr:
             break
     arr = {k: np.asarray(v, float) for k, v in log.items()}; arr["THETA"] = np.asarray(logT, float)
@@ -139,7 +121,7 @@ def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_
     cte_seen = float(np.std(cte[det])) if det.any() else float("nan")
     OUT.mkdir(parents=True, exist_ok=True)   # store summary scalars too -> figures regenerable from data alone
     np.savez(OUT / f"sensor_{name}_{arm}_{seed}{tag}.npz", kind=kind, detect_range=detect_range, fov_deg=fov_deg,
-             arm=arm, dead_reckon=dead_reckon, laps=laps, clean=clean, passes=passes, det_frac=float(det.mean()),
+             arm=arm, laps=laps, clean=clean, passes=passes, det_frac=float(det.mean()),
              cte_blind=cte_blind, cte_seen=cte_seen, **arr)
     print(f"  [{arm}] {name:18s} vs {kind:7s}: laps {laps:.2f}  "
           f"{'CLEAN' if clean else ('OFF' if off else 'CONTACT')}  passes {passes}  det {100*det.mean():3.0f}%  "
@@ -451,9 +433,7 @@ def main():
     ap.add_argument("--fov-deg", type=float, default=FOV_DEG)
     ap.add_argument("--arms", nargs="*", default=ARMS); ap.add_argument("--skip-gif", action="store_true")
     ap.add_argument("--cases", nargs="*", default=None, help="subset of case names (default both)")
-    ap.add_argument("--dead-reckon", action="store_true", help="dead-reckon the opponent through blind windows (predicted keep-out) instead of dropping it")
     ap.add_argument("--occlude", action="store_true", help="car-height tube walls block line-of-sight (opponent hidden around bends)")
-    ap.add_argument("--blind-caution", action="store_true", help="corridor-aware: when blind, NO lateral avoidance -- hold the line (q_c up) + slow (k_v down) if the estimate says a car is close ahead")
     ap.add_argument("--online", action="store_true", help="run the ONLINE method (PolicyTuner: explore+RTRL each tick) instead of the fixed banked net -- the net adapts to the blindness during the race")
     ap.add_argument("--tag", default="", help="suffix for all outputs, to keep variants separate (e.g. _dr)")
     ap.add_argument("--from-saved", action="store_true", help="regenerate csv/figs/tikz/gif from the saved .npz (no re-drive, no acados)")
@@ -471,7 +451,7 @@ def main():
                        max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW, name="sensor_eval")
         ego_pace = measure_pace(m, track, th0, 2000)   # seed-independent solo pace, measured ONCE
         print(f"ego solo pace {ego_pace:.2f} m/s ; seeds {a.seeds} ; R={a.detect_range:.0f} m, FOV={a.fov_deg:.0f} deg"
-              f"{' ; DEAD-RECKON' if a.dead_reckon else ''}", flush=True)
+              f"{' ; OCCLUSION' if a.occlude else ''}", flush=True)
         results = []
         for seed in a.seeds:
             for arm in a.arms:
@@ -484,7 +464,7 @@ def main():
                     print(f"  [seed {seed}][{arm}] no net at nets/race_{arm}_{seed}.npz -- skipped", flush=True); continue
                 for (n, k, g) in cases:
                     results.append(run_case(m, ego_pace, pol, seed, n, k, g, a.detect_range, a.steps, a.fov_deg, arm,
-                                            dead_reckon=a.dead_reckon, tag=a.tag, occlude=a.occlude, blind_caution=a.blind_caution))
+                                            tag=a.tag, occlude=a.occlude))
         if not results:
             print("no nets found -- nothing to eval"); return
     # aggregate claim across seeds + the paper comparison figure
