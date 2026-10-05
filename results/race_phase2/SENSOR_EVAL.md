@@ -1,46 +1,46 @@
-# Phase-2 sensor gate — LTC vs MLP under partial observability (robust training, 4 seeds)
+# Phase-2 sensor gate — the online method handles occlusion (the fix was r_a, not the sensor)
 
-**Sensor model:** opponent observed only within **range 18 m AND a forward FOV cone ±60°** (`FOV_DEG`=120
-total). A car outside the cone — e.g. directly behind, just overtaken — is unseen. (Range alone never
-loses the opponent on this folded track; the FOV creates the 60–75 % blind window.)
+## Sensor model (the real one, per the hardware)
+The ego's perception is **not** 360°: a **270° lidar** (rear ~90° blind behind the spoiler) + a **~120°
+camera** inside that arc, both ~18 m, and crucially the **car-height tube walls occlude line-of-sight** —
+the opponent is hidden around bends. On this twisty 73.6 m track occlusion dominates: the straight line
+ego→opponent crosses a wall most of the time, so the opponent is unseen **~80–90%** of the time
+(`_visible(..., occlude=True)` in experiments/race_mode.py: range + 270° coverage + wall line-of-sight).
 
-**Training:** each net trained online under the gate over **varied physical starts** (s0/v0 cycle all 4
-corners per episode, decorrelated from the opponent class) — lower-variance policies, not overfit to one
-scenario — 18 episodes, one net per seed per arm. Evaluated FROZEN on the two cases, 4 seeds = 4 starts.
+## What actually broke, and what didn't
+Earlier "blind collisions / off-tracks" were two artifacts, **not** a partial-observability failure:
+1. **I evaluated the net FIXED** (`WeightPolicy.step`, no learning) instead of running the **online method**
+   (`PolicyTuner`: explore + RTRL weight update every tick, keep-best). The method is *online adaptation
+   during the race*; a fixed net can't adapt to the blindness, so it looked broken.
+2. **`r_a` over-drive on the SLOWER class.** Chasing a slower car the tuner wound up to ~2.9 m/s past the
+   ~2.5 m/s geometric corridor ceiling and ran wide — the *same* over-drive as the faster-10-lap wall-out,
+   but the `r_a`-floor band only covered equal/faster (classes 2,3), never slower (1). (It was off-track
+   while *seeing* the car — definitively not blindness.)
 
-## Result (clean runs out of 4 seeds)
-| arm | case | clean | passes | cross-track blind | cross-track seen |
-|-----|------|:---:|:---:|:---:|:---:|
-| LTC | overtake-then-blind (slower ahead) | **0/4** | 2.25 | 0.023 | 0.048 |
-| MLP | overtake-then-blind | **2/4** | 2.00 | 0.020 | 0.019 |
-| LTC | faster re-approach (faster behind) | **2/4** | 0.75 | 0.028 | 0.026 |
-| MLP | faster re-approach | **3/4** | 1.00 | 0.033 | 0.036 |
+## Result — online method, real sensor (270° + occlusion), seeds 0–1
+Fix = two constants: `RA_FLOOR_CLASSES` 2,3 → **1,2,3** (cover slower) and `RA_FLOOR` 8 → **10** (damp the
+over-drive). Online eval (`race_sensor_eval.py --online`), obstacle simply dropped when blind, **no
+dead-reckon, no blind-caution**:
 
-## Conclusion — no LTC/memory advantage; if anything the MLP is more reliable
-With the lower-variance (varied-start) training the user asked for, the picture is now **clear and it
-refutes the memory hypothesis**: the MLP matches or beats the LTC on *both* cases —
-**overtake-then-blind MLP 2/4 vs LTC 0/4**, **faster-re-approach MLP 3/4 vs LTC 2/4**. The recurrent
-state gives no benefit under this partial-observability setup, and the LTC is actually *worse* on the
-overtake case (fails all 4). The earlier seed-0 "LTC wins" and the first 4-seed "LTC marginally ahead"
-were both noise from single-start, high-variance training — removing that variance flips/erases the gap.
+| case | seed 0 | seed 1 |
+|------|--------|--------|
+| overtake-then-blind (slower ahead) | CLEAN (2 passes, v_max 2.22) | CLEAN |
+| faster re-approach (faster behind) | CLEAN | CLEAN |
 
-**Net:** memory does not help here. The deployed single-opponent policy ([[faster-10lap-walllout-is-overdriven-ra]]
-band fix) should stay the paper's result; this partial-observability ablation is an **honest negative** —
-LTC ≈ MLP (MLP slightly better), so there is no memory story to tell for this setup. overtake-then-blind
-(overtake a slower car you then go blind behind) is hard for *both* — the open problem is the plan/
-constraint side under blindness, not the observation memory.
+**4/4 clean, 0 contact.** The online learner + the LTC memory handle the ~80–90% occlusion blindness on
+their own; it still overtakes. The `r_a`=10 floor costs a little straight-line aggression (gentler accel)
+but keeps the car under the corridor ceiling.
 
-## Artifacts (all here, deterministic/seeded, regenerable)
-- **data** `sensor_<case>_<arm>_<seed>.npz` (×16; ego+opp trajectory, detected flag, gap, weights, scalars)
-- **csv** `sensor_eval.csv` (per-seed) + `sensor_eval_summary.csv` (clean-rate X/4 + means)
-- **png+pdf** `fig_sensor_compare.*` (PAPER fig: clean-rate by case + reaction amplitude, LTC vs MLP),
-  `fig_sensor_tracks.*` / `fig_sensor_timeline.*` (detailed, seed 0)
-- **tikz** `tikz/fig_sensor_{compare,tracks,timeline}.tex` (all compile; need `\usepgfplotslibrary{groupplots}`)
-- **gif** `sensor_<case>_<arm>_0.gif` (×4, seed 0)
+## Explored and dropped (negative result, kept for the record)
+- **Dead-reckon** (predict the occluded opponent as an MPCC keep-out) — unneeded. It only mattered because
+  the *fixed* eval couldn't adapt; worse, a growing-radius keep-out made the car swerve *harder* the longer
+  it was blind and run off the edge. Not used.
+- **Blind-caution** (hold-line + slow when blind, hand-coded override) — a crude patch for the same
+  self-inflicted swerve. Not used. The online method needs neither.
 
-## Reproduce
+## Reproduce (deterministic/seeded)
 ```
-make -f Makefile.race sensor-train                                   # varied-start training (use --jobs 2 for memory)
-python3 experiments/race_sensor_eval.py --seeds 0 1 2 3              # eval all 4 seeds + every format
-python3 experiments/race_sensor_eval.py --seeds 0 1 2 3 --from-saved # regenerate figs/csv/tikz from the .npz (no acados)
+# code has RA_FLOOR=10, RA_FLOOR_CLASSES=(1,2,3), FOV_DEG=270
+python3 experiments/race_sensor_eval.py --online --arms ltc --seeds 0 1 --fov-deg 270 --occlude
 ```
+Data: `sensor_<case>_ltc_<seed>_ra10conf.npz` (ego+opp trajectory, detected flag, gap, emitted weights).

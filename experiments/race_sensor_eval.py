@@ -34,7 +34,7 @@ from mpcc_tuning.ltc import LTCCell, MLPCell, WeightPolicy
 from experiments.race_mode import (race_features, FAIR_PACE, signed_gap, N_RACE_FEATURES, KEEPOUT_R,
                                     CONTACT_R, PACE_KINDS, LR_VEH, A_LAT_RACE, CORRIDOR_KW,
                                     KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES,
-                                    RA_FLOOR, RA_FLOOR_CLASSES, measure_pace, _visible, FOV_DEG)
+                                    RA_FLOOR, RA_FLOOR_CLASSES, measure_pace, _visible, FOV_DEG, OppPredictor)
 
 OUT = ROOT / "results/race_phase2"; TZ = OUT / "tikz"; L = Track.icra_t2_smooth().length
 ARMS = ["ltc", "mlp"]
@@ -66,8 +66,12 @@ def _load_pol(arm, seed):
     return pol
 
 
-def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_deg, arm):
+QC_BLIND, KV_BLIND, GAP_SLOW = 2.5, 0.55, 6.0   # corridor-aware caution: hold line (q_c x) + slow (k_v x) if est. close ahead
+
+
+def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_deg, arm, dead_reckon=False, tag="", occlude=False, blind_caution=False):
     track = Track.icra_t2_smooth(); half = np.radians(fov_deg) / 2.0
+    pred = OppPredictor(track, KEEPOUT_R)       # dead-reckon the opponent through the blind window
     pol.reset(); pol.cls = PACE_KINDS.index(kind)
     v_opp = FAIR_PACE[kind] * ego_pace
     s0 = (seed % 4) * track.length / 4.0; v0 = 1.3 + 0.1 * (seed % 3)
@@ -75,15 +79,25 @@ def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_
     tracker = ObstacleTracker(dt=0.05); P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
     P.reset(s0=s0, v0=v0); m.reset(); opp.reset(); tracker.update(opp.pose()[:2]); seen_age = 0.0
 
-    def emit(slip, gap_rate=None, det=True, age=0.0):
+    def emit(slip, gap_rate=None, det=True, age=0.0, pred_gap=99.0):
         feat = race_features(track, P.state5(), ([opp] if det else []), opp_speed_est=(tracker.speed if det else None),
                              slip=slip, gap_rate=gap_rate, detected=1.0 if det else 0.0, seen_age=age)
-        return np.asarray(pol.step(feat), float)
+        th = np.asarray(pol.step(feat), float)
+        if blind_caution and not det:                 # corridor-aware caution when blind (no swerve, slow to follow)
+            th = th.copy(); th[0] += np.log(QC_BLIND)  # q_c up -> hold the racing line
+            if 0.0 < pred_gap < GAP_SLOW:
+                th[7] += np.log(KV_BLIND)              # k_v down -> slow if the estimate says a car is close ahead
+        return th
 
     _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
     _ar = -np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0
-    _d0 = _visible(float(P._x[0]), float(P._x[1]), float(P._x[2]), opp.pose()[0], opp.pose()[1], detect_range, half)
-    m.set_obstacles([opp.keepout()] if _d0 else [])
+    _d0 = _visible(float(P._x[0]), float(P._x[1]), float(P._x[2]), opp.pose()[0], opp.pose()[1], detect_range, half, occlude=occlude)
+    if _d0:
+        _ox0, _oy0, _ = opp.keepout(); pred.see(_ox0, _oy0, tracker.speed); m.set_obstacles([opp.keepout()])
+    elif blind_caution:
+        m.set_obstacles([])                          # no lateral avoidance when blind
+    else:
+        _k0 = pred.predict(0.0) if dead_reckon else None; m.set_obstacles([_k0] if _k0 else [])
     theta = emit((_ar, _b, _r), det=_d0, age=0.0); u = m.value(P.state_dyn(), theta)["u0"]
     LOGK = ["EX", "EY", "S", "V", "GAP", "DET", "AGE", "OX", "OY"]; log = {k: [] for k in LOGK}; logT = []
     passes = 0; seen_pass = False; prev_g = None; contact = False; off = tr = False
@@ -99,14 +113,20 @@ def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_
             passes += 1; seen_pass = True
         elif g > 0.5:
             seen_pass = False
-        det = _visible(ex, ey, float(P._x[2]), ox, oy, detect_range, half); seen_age = 0.0 if det else min(seen_age + 0.05, 5.0)
+        det = _visible(ex, ey, float(P._x[2]), ox, oy, detect_range, half, occlude=occlude); seen_age = 0.0 if det else min(seen_age + 0.05, 5.0)
         for k, val in zip(LOGK, [ex, ey, s_ego, _v, g, 1.0 if det else 0.0, seen_age, ox, oy]):
             log[k].append(val)
         logT.append(np.exp(theta))
-        m.set_obstacles([opp.keepout()] if det else [])
-        if det: tracker.update(opp.pose()[:2])
+        _pg = 99.0
+        if det:
+            tracker.update(opp.pose()[:2]); pred.see(ox, oy, tracker.speed); m.set_obstacles([opp.keepout()])
+        elif blind_caution:                          # blind: NO lateral avoidance; predict only to decide to slow
+            ko = pred.predict(seen_age); m.set_obstacles([])
+            if ko is not None: _pg = signed_gap(track, s_ego, track.project(ko[0], ko[1]))
+        else:
+            ko = pred.predict(seen_age) if dead_reckon else None; m.set_obstacles([ko] if ko else [])
         gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0; prev_g = g
-        theta = emit((_ar, _b, _r), gap_rate=gr, det=det, age=seen_age); u = m.value(P.state_dyn(), theta)["u0"]
+        theta = emit((_ar, _b, _r), gap_rate=gr, det=det, age=seen_age, pred_gap=_pg); u = m.value(P.state_dyn(), theta)["u0"]
         if off or tr:
             break
     arr = {k: np.asarray(v, float) for k, v in log.items()}; arr["THETA"] = np.asarray(logT, float)
@@ -118,14 +138,95 @@ def run_case(m, ego_pace, pol, seed, name, kind, gap0, detect_range, steps, fov_
     cte_blind = float(np.std(cte[~det])) if (~det).any() else float("nan")
     cte_seen = float(np.std(cte[det])) if det.any() else float("nan")
     OUT.mkdir(parents=True, exist_ok=True)   # store summary scalars too -> figures regenerable from data alone
-    np.savez(OUT / f"sensor_{name}_{arm}_{seed}.npz", kind=kind, detect_range=detect_range, fov_deg=fov_deg,
-             arm=arm, laps=laps, clean=clean, passes=passes, det_frac=float(det.mean()),
+    np.savez(OUT / f"sensor_{name}_{arm}_{seed}{tag}.npz", kind=kind, detect_range=detect_range, fov_deg=fov_deg,
+             arm=arm, dead_reckon=dead_reckon, laps=laps, clean=clean, passes=passes, det_frac=float(det.mean()),
              cte_blind=cte_blind, cte_seen=cte_seen, **arr)
     print(f"  [{arm}] {name:18s} vs {kind:7s}: laps {laps:.2f}  "
           f"{'CLEAN' if clean else ('OFF' if off else 'CONTACT')}  passes {passes}  det {100*det.mean():3.0f}%  "
           f"cross-track blind {cte_blind:.3f} / seen {cte_seen:.3f}", flush=True)
     return dict(seed=seed, arm=arm, name=name, kind=kind, laps=laps, clean=clean, passes=passes, off=bool(off),
                 contact=bool(contact), det_frac=float(det.mean()), cte_blind=cte_blind, cte_seen=cte_seen, arr=arr)
+
+
+def run_case_online(m, ego_pace, seed, name, kind, gap0, detect_range, steps, fov_deg, arm, occlude, tag="_online"):
+    """The ONLINE method on a sensor case: PolicyTuner (explore + RTRL learn each tick) starting from the
+    banked net, so the net ADAPTS to the blindness during the race -- what the method is actually for.
+    Sensor gate DROPS the obstacle when blind (no dead-reckon, no hand-coded caution): the learner + LTC
+    memory must figure out to slow/hold on their own. Mirrors tools/paper_race_learning.redrive_online."""
+    from mpcc_tuning.ltc import PolicyTuner
+    from experiments.race_mode import race_reward
+    track = Track.icra_t2_smooth(); half = np.radians(fov_deg) / 2.0
+    d = np.load(OUT / "nets" / f"race_{arm}_{seed}.npz"); Cell = LTCCell if arm == "ltc" else MLPCell
+    cell = Cell(N_RACE_FEATURES, int(d["n_hidden"]), seed=seed); ncls = int(d["D_class"].shape[0])
+    pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls, delta_log=float(d["delta_log"]),
+                       kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES, kv_ceil=KV_CEIL, kv_ceil_classes=KV_CEIL_CLASSES,
+                       ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES)
+    pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.D_class[...] = d["D_class"]
+    tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0, seed=seed,
+                        trust_region=0.01, theta_prior=0.15, theta_explore=0.15, entropy=0.03,
+                        critic="return", alpha_delta=0.01, trust_region_delta=0.03)
+    tuner.reset(); tuner.set_class(PACE_KINDS.index(kind))
+    v_opp = FAIR_PACE[kind] * ego_pace
+    s0 = (seed % 4) * track.length / 4.0; v0 = 1.3 + 0.1 * (seed % 3)
+    opp = RacelineOpponent(track, s0=(s0 + gap0) % track.length, pace=v_opp, offset=0.0, radius=KEEPOUT_R, a_lat=2.5)
+    tracker = ObstacleTracker(dt=0.05); P = ScuderiaPlant(track, model="std", dt=0.05); P.max_steps = steps
+    P.reset(s0=s0, v0=v0); m.reset(); opp.reset(); tracker.update(opp.pose()[:2]); seen_age = 0.0
+
+    def _slip():
+        _b = float(P._x[6]); _r = float(P._x[5]); _v = float(P._x[3])
+        return (-np.arctan2(_v * np.sin(_b) - LR_VEH * _r, _v * np.cos(_b)) if _v * np.cos(_b) > 0.05 else 0.0), _b, _r
+
+    _ar, _b, _r = _slip()
+    _d0 = _visible(float(P._x[0]), float(P._x[1]), float(P._x[2]), opp.pose()[0], opp.pose()[1], detect_range, half, occlude=occlude)
+    m.set_obstacles([opp.keepout()] if _d0 else [])
+    feat = race_features(track, P.state5(), ([opp] if _d0 else []), opp_speed_est=(tracker.speed if _d0 else None),
+                         slip=(_ar, _b, _r), detected=1.0 if _d0 else 0.0, seen_age=0.0)
+    theta, u = tuner.act(feat, P.state_dyn())
+    LOGK = ["EX", "EY", "S", "V", "GAP", "DET", "AGE", "OX", "OY"]; log = {k: [] for k in LOGK}; logT = []
+    passes = 0; seen_pass = False; prev_g = None; contact = False; off = tr = False
+    for _ in range(steps):
+        s5n, r, off, tr = P.step(u)
+        ex, ey = float(P._x[0]), float(P._x[1]); opp.step(0.05, ego=(ex, ey, float(P._x[3])))
+        ox, oy, rad = opp.keepout(); s_ego = track.project(ex, ey); g = signed_gap(track, s_ego, opp.s)
+        _lat = float(track.lateral(ex, ey)); _wl, _wr = track.width(track.wrap(s_ego))
+        edge_dist = min(float(_wr) - 0.12 - _lat, _lat + float(_wl) - 0.12)
+        _ar, _b, _r = _slip(); _v = float(P._x[3]); vo = float(getattr(opp, "speed", v_opp))
+        if np.hypot(ex - ox, ey - oy) < CONTACT_R: contact = True
+        just_passed = False
+        if g < 0 and abs(g) < L / 4 and not seen_pass and _v > vo:
+            passes += 1; seen_pass = True; just_passed = True
+        elif g > 0.5:
+            seen_pass = False
+        det = _visible(ex, ey, float(P._x[2]), ox, oy, detect_range, half, occlude=occlude); seen_age = 0.0 if det else min(seen_age + 0.05, 5.0)
+        for k, val in zip(LOGK, [ex, ey, s_ego, _v, g, 1.0 if det else 0.0, seen_age, ox, oy]):
+            log[k].append(val)
+        logT.append(np.exp(theta))
+        m.set_obstacles([opp.keepout()] if det else [])        # DROP the obstacle when blind -- no dead-reckon
+        if det: tracker.update(opp.pose()[:2])
+        gr = (g - prev_g) / 0.05 if prev_g is not None else 0.0; prev_g = g
+        fn = race_features(track, s5n, ([opp] if det else []), opp_speed_est=(tracker.speed if det else None),
+                           slip=(_ar, _b, _r), gap_rate=gr, detected=1.0 if det else 0.0, seen_age=seen_age)
+        r_shaped = race_reward(kind, r, just_passed, contact, _v, vo, g, alpha_r=_ar, beta=_b,
+                               off=off, edge_dist=edge_dist, opp_pace=FAIR_PACE[kind])
+        out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
+        if out[0] is None or off or tr:
+            break
+        theta, u = out
+    arr = {k: np.asarray(v, float) for k, v in log.items()}; arr["THETA"] = np.asarray(logT, float)
+    arr["off"] = np.asarray([off]); arr["contact"] = np.asarray([contact])
+    laps = _laps(arr["S"]); clean = (not off) and (not contact); dd = arr["DET"].astype(bool)
+    bnd = np.load(ROOT / "mpcc_tuning/tracks/icra_t2_smooth_boundaries.npz")
+    cte = _cte(arr["EX"], arr["EY"], (bnd["ref_x"], bnd["ref_y"]))
+    cte_blind = float(np.std(cte[~dd])) if (~dd).any() else float("nan")
+    cte_seen = float(np.std(cte[dd])) if dd.any() else float("nan")
+    OUT.mkdir(parents=True, exist_ok=True)
+    np.savez(OUT / f"sensor_{name}_{arm}_{seed}{tag}.npz", kind=kind, detect_range=detect_range, fov_deg=fov_deg,
+             arm=arm, online=True, laps=laps, clean=clean, passes=passes, det_frac=float(dd.mean()),
+             cte_blind=cte_blind, cte_seen=cte_seen, **arr)
+    print(f"  [{arm} ONLINE] {name:18s} vs {kind:7s}: laps {laps:.2f}  "
+          f"{'CLEAN' if clean else ('OFF' if off else 'CONTACT')}  passes {passes}  det {100*dd.mean():3.0f}%", flush=True)
+    return dict(seed=seed, arm=arm, name=name, kind=kind, laps=laps, clean=clean, passes=passes,
+                off=bool(off), contact=bool(contact), det_frac=float(dd.mean()), cte_blind=cte_blind, cte_seen=cte_seen, arr=arr)
 
 
 # ---- outputs ---------------------------------------------------------------------------------------
@@ -146,15 +247,15 @@ def aggregate(results):
     return out
 
 
-def write_csv(results):
-    p = OUT / "sensor_eval.csv"           # per-seed detail
+def write_csv(results, tag=""):
+    p = OUT / f"sensor_eval{tag}.csv"           # per-seed detail
     with open(p, "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["seed", "arm", "case", "opponent", "laps", "clean", "passes", "detected_pct", "cross_track_blind", "cross_track_seen"])
         for R in sorted(results, key=lambda r: (r["arm"], r["name"], r["seed"])):
             w.writerow([R["seed"], R["arm"], R["name"], R["kind"], f"{R['laps']:.2f}", int(R["clean"]), R["passes"],
                         f"{100*R['det_frac']:.0f}", f"{R['cte_blind']:.4f}", f"{R['cte_seen']:.4f}"])
-    ps = OUT / "sensor_eval_summary.csv"  # aggregate across seeds (the hardened result)
+    ps = OUT / f"sensor_eval_summary{tag}.csv"  # aggregate across seeds (the hardened result)
     with open(ps, "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["arm", "case", "opponent", "n_seeds", "clean_rate", "laps_mean", "passes_mean",
@@ -165,7 +266,7 @@ def write_csv(results):
     print(f"wrote {p} + {ps}")
 
 
-def fig_tracks(results, seed):
+def fig_tracks(results, seed, tag=""):
     b = np.load(ROOT / "mpcc_tuning/tracks/icra_t2_smooth_boundaries.npz")
     fig, axs = plt.subplots(len(CASES), len(ARMS), figsize=(5.2 * len(ARMS), 4.6 * len(CASES)), squeeze=False)
     for R in results:
@@ -181,11 +282,11 @@ def fig_tracks(results, seed):
                      f"blind {100*(1-R['det_frac']):.0f}%", fontsize=9.5)
     fig.suptitle(f"Phase-2 sensor gate: ego path blue=SEES / grey=BLIND, opp red (seed {seed})", fontsize=11)
     for e in ("pdf", "png"):
-        fig.savefig(OUT / f"fig_sensor_tracks.{e}", dpi=150, bbox_inches="tight")
+        fig.savefig(OUT / f"fig_sensor_tracks{tag}.{e}", dpi=150, bbox_inches="tight")
     plt.close(fig); print(f"wrote {OUT}/fig_sensor_tracks.pdf (+.png)")
 
 
-def fig_timeline(results, seed):
+def fig_timeline(results, seed, tag=""):
     fig, axs = plt.subplots(len(CASES), len(ARMS), figsize=(5.6 * len(ARMS), 3.6 * len(CASES)), squeeze=False)
     for R in results:
         ri = [c[0] for c in CASES].index(R["name"]); ci = ARMS.index(R["arm"]); ax = axs[ri][ci]
@@ -198,11 +299,11 @@ def fig_timeline(results, seed):
         ax.set_title(f"{R['arm'].upper()} — {R['name']}  (det {100*R['det_frac']:.0f}%)", fontsize=9.5)
     fig.suptitle(f"Gap to opponent + blind windows (grey) (seed {seed})", fontsize=11)
     for e in ("pdf", "png"):
-        fig.savefig(OUT / f"fig_sensor_timeline.{e}", dpi=150, bbox_inches="tight")
+        fig.savefig(OUT / f"fig_sensor_timeline{tag}.{e}", dpi=150, bbox_inches="tight")
     plt.close(fig); print(f"wrote {OUT}/fig_sensor_timeline.pdf (+.png)")
 
 
-def make_gif(R, seed):
+def make_gif(R, seed, tag=""):
     b = np.load(ROOT / "mpcc_tuning/tracks/icra_t2_smooth_boundaries.npz")
     a = R["arr"]; det = a["DET"].astype(bool); EX, EY, OX, OY = a["EX"], a["EY"], a["OX"], a["OY"]
     step = max(1, len(EX) // 150); idx = list(range(0, len(EX), step))
@@ -219,11 +320,11 @@ def make_gif(R, seed):
         ttl.set_text(f"{R['arm'].upper()} {R['name']}  t={i*0.05:4.1f}s  {'SEES opp' if det[i] else 'BLIND'}")
         return trail, ego, opp, ttl
     anim = manim.FuncAnimation(fig, upd, frames=len(idx), interval=60, blit=False)
-    p = OUT / f"sensor_{R['name']}_{R['arm']}_{seed}.gif"
+    p = OUT / f"sensor_{R['name']}_{R['arm']}_{seed}{tag}.gif"
     anim.save(str(p), writer=manim.PillowWriter(fps=16)); plt.close(fig); print(f"wrote {p}")
 
 
-def emit_tikz(results, seed):
+def emit_tikz(results, seed, tag=""):
     TZ.mkdir(parents=True, exist_ok=True)
     b = np.load(ROOT / "mpcc_tuning/tracks/icra_t2_smooth_boundaries.npz")
     for s, xk, yk in [("left", "left_x", "left_y"), ("right", "right_x", "right_y")]:
@@ -256,16 +357,16 @@ def emit_tikz(results, seed):
               r"\begin{tikzpicture}\begin{groupplot}[group style={group size=" + f"{cols} by {rows}"
               + r", horizontal sep=0.4cm, vertical sep=1cm}, width=7cm, axis equal image, hide axis]" "\n"
               + "\n".join(tcells) + "\n" r"\end{groupplot}\end{tikzpicture}" "\n")
-    (TZ / "fig_sensor_tracks.tex").write_text(tracks)
+    (TZ / f"fig_sensor_tracks{tag}.tex").write_text(tracks)
     time = (r"% Auto-generated by experiments/race_sensor_eval.py.  requires \usepgfplotslibrary{groupplots}" "\n"
             r"\begin{tikzpicture}\begin{groupplot}[group style={group size=" + f"{cols} by {rows}"
             + r", horizontal sep=1.4cm, vertical sep=1.4cm}, width=7cm, height=4.4cm, xlabel={time (s)}, ylabel={gap (m)}, grid=both]" "\n"
             + "\n".join(gcells) + "\n" r"\end{groupplot}\end{tikzpicture}" "\n")
-    (TZ / "fig_sensor_timeline.tex").write_text(time)
+    (TZ / f"fig_sensor_timeline{tag}.tex").write_text(time)
     print(f"wrote {TZ}/fig_sensor_tracks.tex + fig_sensor_timeline.tex")
 
 
-def fig_compare(results, seeds):
+def fig_compare(results, seeds, tag=""):
     """PAPER figure: LTC vs MLP across seeds. Left = clean rate by case; right = reaction amplitude
     (cross-track std) blind vs seen per arm -- the memory mechanism (MLP erratic when blind)."""
     agg = aggregate(results); cases = [c[0] for c in CASES]; col = {"ltc": "#1f4e8c", "mlp": "#c23b3b"}
@@ -285,11 +386,11 @@ def fig_compare(results, seeds):
     axR.set_ylabel("cross-track std (m)"); axR.set_title("Reaction amplitude: blind vs seen"); axR.legend(fontsize=9)
     fig.suptitle(f"LTC vs MLP under partial observability — {len(seeds)} seeds (range 18 m + FOV 120°)", fontsize=11)
     for e in ("pdf", "png"):
-        fig.savefig(OUT / f"fig_sensor_compare.{e}", dpi=150, bbox_inches="tight")
+        fig.savefig(OUT / f"fig_sensor_compare{tag}.{e}", dpi=150, bbox_inches="tight")
     plt.close(fig); print(f"wrote {OUT}/fig_sensor_compare.pdf (+.png)")
 
 
-def emit_compare_tikz(results, seeds):
+def emit_compare_tikz(results, seeds, tag=""):
     TZ.mkdir(parents=True, exist_ok=True); agg = aggregate(results); cases = [c[0] for c in CASES]
     with open(TZ / "sensor_compare_clean.dat", "w") as fh:
         fh.write("case ltc mlp\n")
@@ -313,18 +414,18 @@ def emit_compare_tikz(results, seeds):
             r"  \addplot table[x=arm,y=blind]{tikz/sensor_compare_cte.dat}; \addlegendentry{blind}" "\n"
             r"  \addplot table[x=arm,y=seen]{tikz/sensor_compare_cte.dat}; \addlegendentry{seen}" "\n"
             r"\end{groupplot}\end{tikzpicture}" "\n")
-    (TZ / "fig_sensor_compare.tex").write_text(body); print(f"wrote {TZ}/fig_sensor_compare.tex")
+    (TZ / f"fig_sensor_compare{tag}.tex").write_text(body); print(f"wrote {TZ}/fig_sensor_compare.tex")
 
 
-def load_saved(seeds, arms):
+def load_saved(seeds, arms, tag="", cases=None):
     """Rebuild the result dicts from the saved .npz -- regenerate every figure/csv/gif WITHOUT re-driving
     (no acados). Faithful: all scalars were stored at run time."""
     bnd = np.load(ROOT / "mpcc_tuning/tracks/icra_t2_smooth_boundaries.npz"); ref = (bnd["ref_x"], bnd["ref_y"])
     out = []
     for seed in seeds:
         for arm in arms:
-            for (n, k, g) in CASES:
-                f = OUT / f"sensor_{n}_{arm}_{seed}.npz"
+            for (n, k, g) in (cases or CASES):
+                f = OUT / f"sensor_{n}_{arm}_{seed}{tag}.npz"
                 if not f.exists():
                     continue
                 z = np.load(f); arr = {kk: z[kk] for kk in z.files}; det = arr["DET"].astype(bool)
@@ -349,11 +450,18 @@ def main():
     ap.add_argument("--detect-range", type=float, default=18.0); ap.add_argument("--steps", type=int, default=3600)
     ap.add_argument("--fov-deg", type=float, default=FOV_DEG)
     ap.add_argument("--arms", nargs="*", default=ARMS); ap.add_argument("--skip-gif", action="store_true")
+    ap.add_argument("--cases", nargs="*", default=None, help="subset of case names (default both)")
+    ap.add_argument("--dead-reckon", action="store_true", help="dead-reckon the opponent through blind windows (predicted keep-out) instead of dropping it")
+    ap.add_argument("--occlude", action="store_true", help="car-height tube walls block line-of-sight (opponent hidden around bends)")
+    ap.add_argument("--blind-caution", action="store_true", help="corridor-aware: when blind, NO lateral avoidance -- hold the line (q_c up) + slow (k_v down) if the estimate says a car is close ahead")
+    ap.add_argument("--online", action="store_true", help="run the ONLINE method (PolicyTuner: explore+RTRL each tick) instead of the fixed banked net -- the net adapts to the blindness during the race")
+    ap.add_argument("--tag", default="", help="suffix for all outputs, to keep variants separate (e.g. _dr)")
     ap.add_argument("--from-saved", action="store_true", help="regenerate csv/figs/tikz/gif from the saved .npz (no re-drive, no acados)")
     a = ap.parse_args()
     fig_seed = a.fig_seed if a.fig_seed is not None else a.seeds[0]
+    cases = [c for c in CASES if (a.cases is None or c[0] in a.cases)]
     if a.from_saved:
-        results = load_saved(a.seeds, a.arms)
+        results = load_saved(a.seeds, a.arms, a.tag, cases)
         if not results:
             print("no saved sensor_*.npz found -- run without --from-saved first"); return
         print(f"regenerating outputs from {len(results)} saved runs ({len(a.seeds)} seeds, no re-drive)", flush=True)
@@ -362,26 +470,32 @@ def main():
         m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref, discrete=True,
                        max_obstacles=1, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW, name="sensor_eval")
         ego_pace = measure_pace(m, track, th0, 2000)   # seed-independent solo pace, measured ONCE
-        print(f"ego solo pace {ego_pace:.2f} m/s ; seeds {a.seeds} ; R={a.detect_range:.0f} m, FOV={a.fov_deg:.0f} deg", flush=True)
+        print(f"ego solo pace {ego_pace:.2f} m/s ; seeds {a.seeds} ; R={a.detect_range:.0f} m, FOV={a.fov_deg:.0f} deg"
+              f"{' ; DEAD-RECKON' if a.dead_reckon else ''}", flush=True)
         results = []
         for seed in a.seeds:
             for arm in a.arms:
+                if a.online:                         # the ONLINE method: learns during the race (builds its own tuner)
+                    for (n, k, g) in cases:
+                        results.append(run_case_online(m, ego_pace, seed, n, k, g, a.detect_range, a.steps, a.fov_deg, arm, a.occlude, tag=(a.tag or "_online")))
+                    continue
                 pol = _load_pol(arm, seed)
                 if pol is None:
                     print(f"  [seed {seed}][{arm}] no net at nets/race_{arm}_{seed}.npz -- skipped", flush=True); continue
-                for (n, k, g) in CASES:
-                    results.append(run_case(m, ego_pace, pol, seed, n, k, g, a.detect_range, a.steps, a.fov_deg, arm))
+                for (n, k, g) in cases:
+                    results.append(run_case(m, ego_pace, pol, seed, n, k, g, a.detect_range, a.steps, a.fov_deg, arm,
+                                            dead_reckon=a.dead_reckon, tag=a.tag, occlude=a.occlude, blind_caution=a.blind_caution))
         if not results:
             print("no nets found -- nothing to eval"); return
     # aggregate claim across seeds + the paper comparison figure
-    write_csv(results); fig_compare(results, a.seeds); emit_compare_tikz(results, a.seeds)
+    write_csv(results, a.tag); fig_compare(results, a.seeds, a.tag); emit_compare_tikz(results, a.seeds, a.tag)
     # detailed per-run views use ONE representative seed
     det = [R for R in results if R["seed"] == fig_seed]
     if det:
-        fig_tracks(det, fig_seed); fig_timeline(det, fig_seed); emit_tikz(det, fig_seed)
+        fig_tracks(det, fig_seed, a.tag); fig_timeline(det, fig_seed, a.tag); emit_tikz(det, fig_seed, a.tag)
         if not a.skip_gif:
             for R in det:
-                make_gif(R, fig_seed)
+                make_gif(R, fig_seed, a.tag)
     print(f"\n=== sensor eval done ({len(a.seeds)} seeds): data + csv(+summary) + fig_sensor_compare "
           f"+ per-seed tracks/timeline/tikz" + ("" if a.skip_gif else " + gifs") + " in results/race_phase2/ ===")
 
