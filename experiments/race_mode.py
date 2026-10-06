@@ -85,7 +85,7 @@ def side_open(track, opponents, car_w=0.24):
 
 
 def race_features(track, s5, opponents=(), opp_speed_est=None,
-                  slip=None, gap_rate=None, sector_suit=None, detected=1.0, seen_age=0.0):
+                  slip=None, gap_rate=None, sector_suit=None, detected=1.0, seen_age=0.0, field=None):
     """Base 18 + 2 side-open + 9 TEMPORAL/DYNAMIC + 2 SENSOR = 31. Indices 0..19 are left
     untouched so fixed_schedule (which reads feat[7], feat[8], feat[14:18]) works.
 
@@ -121,10 +121,34 @@ def race_features(track, s5, opponents=(), opp_speed_est=None,
     ss = sector_suit if sector_suit is not None else (0.0, 0.0, 0.0, 0.0)
     extra += [np.tanh(float(x)) for x in ss]
     extra += [float(detected), np.tanh(float(seen_age))]   # 29,30: sensor detection (phase-2)
-    return np.concatenate([base, np.array(side_open(track, opponents), float), np.array(extra, float)])
+    out = np.concatenate([base, np.array(side_open(track, opponents), float), np.array(extra, float)])
+    if field is not None:                                  # 31,32,33: MULTI-opponent FIELD aggregates
+        # (crowding, avg closing-rate, opponent count) -- computed over ALL detected opponents by the
+        # caller + already normalised. Opponent-COUNT INVARIANT: the per-opponent slots [0..30] carry the
+        # FASTEST rival (the overtake target); these three summarise the rest of the field (the risk).
+        out = np.concatenate([out, np.asarray(field, float)])
+    return out
 
 
 N_RACE_FEATURES = 31   # 29 + 2 sensor features (detected flag, time-since-seen) -- phase-2 partial observability
+N_RACE_FEATURES_MULTI = N_RACE_FEATURES + 3   # phase-A multi-car: + field aggregates (crowding, avg-closing, count)
+MAX_OPP = 3            # phase-A: deployment max opponents (MPCC max_obstacles); features are count-invariant <= this
+R_CROWD = 8.0          # m: crowding kernel radius (opponents within this contribute to the field-risk term)
+
+
+def field_summary(track, s_ego, opps, gaps=None, closings=None):
+    """Phase-A multi-car: from the DETECTED opponents, pick the FASTEST rival (the overtake target that
+    goes into the per-opponent feature slots) and summarise the rest of the field as a count-invariant
+    (crowding, avg closing-rate, count) tuple for the policy's field-aggregate features. Returns
+    (fastest_opp_or_None, (crowd, avg_closing, count_norm))."""
+    if not opps:
+        return None, (0.0, 0.0, 0.0)
+    g = list(gaps) if gaps is not None else [signed_gap(track, s_ego, o.s) for o in opps]
+    spd = [float(getattr(o, "speed", 0.0)) for o in opps]
+    fastest = opps[int(np.argmax(spd))]                                   # rival to beat = fastest seen
+    crowd = float(np.mean([max(0.0, 1.0 - abs(gi) / R_CROWD) for gi in g]))   # [0,1], closer field = higher
+    avgcl = float(np.tanh(np.mean(closings))) if closings else 0.0            # [-1,1], <0 = field closing on us
+    return fastest, (crowd, avgcl, len(opps) / float(MAX_OPP))
 
 
 def measure_pace(m, track, th0, steps):
