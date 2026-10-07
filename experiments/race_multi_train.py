@@ -142,10 +142,19 @@ def run(arm, seed=0, n_ep=18, steps=4000, n_hidden=12, ego_pace=1.6, detect_rang
                 passes=float(np.mean([r["passes"] for r in last])), rows=rows)
 
 
+def one(job):
+    arm, seed, ego_pace, n_ep, steps = job
+    t0 = time.perf_counter()
+    out = run(arm, seed=seed, n_ep=n_ep, steps=steps, ego_pace=ego_pace)
+    out["wall_s"] = round(time.perf_counter() - t0, 0)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arms", nargs="*", default=["ltc", "mlp"]); ap.add_argument("--seeds", type=int, default=2)
     ap.add_argument("--episodes", type=int, default=18); ap.add_argument("--steps", type=int, default=4000)
+    ap.add_argument("--jobs", type=int, default=0, help="parallel workers (0 = sequential)")
     a = ap.parse_args()
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth"); th0 = np.asarray(st.theta(), float)
     from mpcc_tuning.acados_mpcc import AcadosMPCC
@@ -153,12 +162,18 @@ def main():
                     max_obstacles=MAX_OPP, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW, name="multi_pace")
     ego_pace = measure_pace(mp, track, th0, 1500)
     print(f"ego solo pace {ego_pace:.2f} m/s ; MAX_OPP={MAX_OPP} ; varied N per episode", flush=True)
-    for seed in range(a.seeds):
-        for arm in a.arms:
-            t0 = time.perf_counter()
-            out = run(arm, seed=seed, n_ep=a.episodes, steps=a.steps, ego_pace=ego_pace)
-            print(f"done {arm} seed {seed}: last-8 clean {out['clean']:.0%} passes {out['passes']:.2f} "
-                  f"({time.perf_counter()-t0:.0f}s)", flush=True)
+    jobs = [(arm, s, ego_pace, a.episodes, a.steps) for s in range(a.seeds) for arm in a.arms]
+    done = lambda o: print(f"done {o['arm']} seed {o['seed']}: last-8 clean {o['clean']:.0%} "
+                           f"passes {o['passes']:.2f} ({o.get('wall_s', 0):.0f}s)", flush=True)
+    n_proc = a.jobs or 1
+    if n_proc <= 1:
+        for j in jobs:
+            done(one(j))
+    else:
+        from multiprocessing import Pool
+        with Pool(min(n_proc, len(jobs))) as pool:
+            for o in pool.imap_unordered(one, jobs):
+                done(o)
 
 
 if __name__ == "__main__":
