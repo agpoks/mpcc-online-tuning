@@ -29,9 +29,11 @@ Inherits from the sensor branch: the online method (PolicyTuner: explore + RTRL 
    avg-closing + count), N_RACE_FEATURES_MULTI=34, MAX_OPP=3, R_CROWD=8. Backward-compatible.
 3. [NEXT] **Baseline** — single-opponent net vs a mixed 2-3 car field under the real sensor (what the
    current policy already does before the aggregate-obs retrain). Extend experiments/race_multi.py.
-4. [NEXT] **Multi-car training** — varied-N opponents/episode, aggregate obs, the multi-opponent reward;
-   both arms (LTC vs MLP -- memory may finally win juggling several occluded opponents). New nets in
-   results/race_multicar/nets/.
+4. [CODE DONE, run deferred] **Multi-car training** — `experiments/race_multi_train.py`: varied-N
+   opponents/episode (N in 1..MAX_OPP, mixed pace), the 34-feat aggregate obs, MPCC avoids all detected
+   (<=MAX_OPP), reward = race_reward on the fastest rival + extra pass credit, PolicyTuner + keep-best,
+   both arms. Statically validated (parses/imports; both arms build the 34-feat net + forward). Needs a
+   1-2 episode smoke-run on an IDLE box, then the full run (seeds) -> results/race_multicar/nets/.
 5. [NEXT] **Eval + artifacts** — vs 1/2/3 cars (flexibility), clean rate + overtakes + the field behaviour;
    data/csv/png/pdf/tikz/gif, reproducible via a `make` target + `--from-saved`.
 
