@@ -1,0 +1,129 @@
+/home/poxx/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:370: UserWarning: Could not read acados version from git_commit_hash file.
+  warnings.warn("Could not read acados version from git_commit_hash file.")
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:384: UserWarning: A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory /home/poxx/github/mpcc-online-tuning/c_generated/multi_pace_69697 instead.
+  warnings.warn(f"A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory {self.code_export_directory} instead.")
+External functions generated in 661.023 ms.
+Templated solver code generated in 1035.123 ms.
+Build completed in 43377.772 ms.
+acados was compiled without OpenMP.
+WARNING:2026-10-08 11:04:02,880:jax._src.xla_bridge:794: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+ego solo pace 1.26 m/s ; MAX_OPP=3 ; varied N per episode
+/home/poxx/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+/home/poxx/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:370: UserWarning: Could not read acados version from git_commit_hash file.
+  warnings.warn("Could not read acados version from git_commit_hash file.")
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:384: UserWarning: A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory /home/poxx/github/mpcc-online-tuning/c_generated/multi_ltc_0_70568 instead.
+  warnings.warn(f"A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory {self.code_export_directory} instead.")
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:370: UserWarning: Could not read acados version from git_commit_hash file.
+  warnings.warn("Could not read acados version from git_commit_hash file.")
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:384: UserWarning: A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory /home/poxx/github/mpcc-online-tuning/c_generated/multi_mlp_0_70569 instead.
+  warnings.warn(f"A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory {self.code_export_directory} instead.")
+WARNING:2026-10-08 11:06:01,049:jax._src.xla_bridge:794: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+WARNING:2026-10-08 11:06:01,077:jax._src.xla_bridge:794: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+External functions generated in 773.407 ms.
+Templated solver code generated in 1117.328 ms.
+Build completed in 51957.154 ms.
+acados was compiled without OpenMP.
+  [mlp] ep  0  N=3 [np.str_('equal'), np.str_('equal'), np.str_('slower')]  laps  4.51  passes 6  CLEAN
+External functions generated in 757.900 ms.
+Templated solver code generated in 1115.722 ms.
+Build completed in 52028.304 ms.
+acados was compiled without OpenMP.
+  [ltc] ep  0  N=3 [np.str_('equal'), np.str_('equal'), np.str_('slower')]  laps  3.76  passes 4  CLEAN
+  [mlp] ep  1  N=1 [np.str_('slower')]  laps  5.03  passes 3  CLEAN
+  [ltc] ep  1  N=1 [np.str_('slower')]  laps  4.84  passes 3  CLEAN
+  [mlp] ep  2  N=1 [np.str_('slower')]  laps  4.51  passes 2  CONTACT
+  [ltc] ep  2  N=1 [np.str_('slower')]  laps  4.79  passes 2  CLEAN
+  [mlp] ep  3  N=1 [np.str_('faster')]  laps  4.55  passes 1  CLEAN
+  [ltc] ep  3  N=1 [np.str_('faster')]  laps  3.93  passes 1  CLEAN
+  [mlp] ep  4  N=2 [np.str_('faster'), np.str_('equal')]  laps  5.03  passes 4  CLEAN
+  [ltc] ep  4  N=2 [np.str_('faster'), np.str_('equal')]  laps  5.25  passes 4  CLEAN
+  [ltc] ep  5  N=2 [np.str_('faster'), np.str_('faster')]  laps  0.43  passes 0  CONTACT
+  [mlp] ep  5  N=2 [np.str_('faster'), np.str_('faster')]  laps  4.31  passes 2  CLEAN
+  [ltc] ep  6  N=2 [np.str_('equal'), np.str_('equal')]  laps  4.38  passes 2  CLEAN
+  [mlp] ep  6  N=2 [np.str_('equal'), np.str_('equal')]  laps  4.86  passes 4  CLEAN
+  [ltc] ep  7  N=3 [np.str_('slower'), np.str_('faster'), np.str_('faster')]  laps  2.58  passes 3  CONTACT
+  [mlp] ep  7  N=3 [np.str_('slower'), np.str_('faster'), np.str_('faster')]  laps  4.47  passes 4  CLEAN
+  [ltc] ep  8  N=1 [np.str_('equal')]  laps  4.57  passes 2  CLEAN
+  [mlp] ep  8  N=1 [np.str_('equal')]  laps  4.98  passes 2  CLEAN
+  [ltc] ep  9  N=3 [np.str_('equal'), np.str_('slower'), np.str_('faster')]  laps  4.69  passes 5  CLEAN
+  [mlp] ep  9  N=3 [np.str_('equal'), np.str_('slower'), np.str_('faster')]  laps  4.23  passes 6  CONTACT
+  [ltc] ep 10  N=3 [np.str_('faster'), np.str_('slower'), np.str_('slower')]  laps  4.43  passes 5  CLEAN
+  [mlp] ep 10  N=3 [np.str_('faster'), np.str_('slower'), np.str_('slower')]  laps  4.75  passes 6  CLEAN
+  [ltc] ep 11  N=3 [np.str_('slower'), np.str_('equal'), np.str_('slower')]  laps  4.55  passes 6  CLEAN
+  [mlp] ep 11  N=3 [np.str_('slower'), np.str_('equal'), np.str_('slower')]  laps  4.41  passes 5  CLEAN
+  [ltc] ep 12  N=1 [np.str_('equal')]  laps  4.98  passes 2  CLEAN
+  [mlp] ep 12  N=1 [np.str_('equal')]  laps  4.27  passes 2  CLEAN
+  [ltc] ep 13  N=2 [np.str_('equal'), np.str_('slower')]  laps  4.52  passes 4  CLEAN
+  [mlp] ep 13  N=2 [np.str_('equal'), np.str_('slower')]  laps  3.21  passes 3  CONTACT
+  [ltc] ep 14  N=1 [np.str_('slower')]  laps  4.23  passes 2  CONTACT
+  [ltc] ep 15  N=1 [np.str_('faster')]  laps  1.73  passes 0  CONTACT
+  [mlp] ep 14  N=1 [np.str_('slower')]  laps  3.78  passes 1  CLEAN
+  [mlp] ep 15  N=1 [np.str_('faster')]  laps  0.47  passes 1  OFF
+  [ltc] ep 16  N=2 [np.str_('equal'), np.str_('slower')]  laps  4.99  passes 5  CLEAN
+  [mlp] ep 16  N=2 [np.str_('equal'), np.str_('slower')]  laps  5.20  passes 5  CLEAN
+  [ltc] ep 17  N=2 [np.str_('faster'), np.str_('equal')]  laps  4.87  passes 4  CLEAN
+done ltc seed 0: last-8 clean 75% passes 3.50 (3822s)
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:370: UserWarning: Could not read acados version from git_commit_hash file.
+  warnings.warn("Could not read acados version from git_commit_hash file.")
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:384: UserWarning: A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory /home/poxx/github/mpcc-online-tuning/c_generated/multi_ltc_1_70568 instead.
+  warnings.warn(f"A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory {self.code_export_directory} instead.")
+  [mlp] ep 17  N=2 [np.str_('faster'), np.str_('equal')]  laps  5.13  passes 4  CLEAN
+done mlp seed 0: last-8 clean 75% passes 3.38 (3853s)
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:370: UserWarning: Could not read acados version from git_commit_hash file.
+  warnings.warn("Could not read acados version from git_commit_hash file.")
+/home/poxx/acados-v060/interfaces/acados_template/acados_template/acados_code_gen_options.py:384: UserWarning: A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory /home/poxx/github/mpcc-online-tuning/c_generated/multi_mlp_1_70569 instead.
+  warnings.warn(f"A path is provided for json_file. This is not supported. The json file will be written to the code_export_directory {self.code_export_directory} instead.")
+External functions generated in 793.683 ms.
+Templated solver code generated in 1223.657 ms.
+Build completed in 52812.431 ms.
+acados was compiled without OpenMP.
+  [mlp] ep  0  N=2 [np.str_('equal'), np.str_('faster')]  laps  0.26  passes 0  CONTACT
+  [mlp] ep  1  N=3 [np.str_('slower'), np.str_('slower'), np.str_('faster')]  laps  2.49  passes 3  CONTACT
+  [mlp] ep  2  N=3 [np.str_('slower'), np.str_('slower'), np.str_('faster')]  laps  0.47  passes 0  OFF
+External functions generated in 807.346 ms.
+Templated solver code generated in 1212.727 ms.
+Build completed in 53027.805 ms.
+acados was compiled without OpenMP.
+  [ltc] ep  0  N=2 [np.str_('equal'), np.str_('faster')]  laps  4.83  passes 4  CLEAN
+  [ltc] ep  1  N=3 [np.str_('slower'), np.str_('slower'), np.str_('faster')]  laps  0.29  passes 0  CONTACT
+  [mlp] ep  3  N=2 [np.str_('slower'), np.str_('faster')]  laps  0.82  passes 2  CONTACT
+  [ltc] ep  2  N=3 [np.str_('slower'), np.str_('slower'), np.str_('faster')]  laps  0.13  passes 0  OFF
+  [mlp] ep  4  N=1 [np.str_('equal')]  laps  4.73  passes 2  CLEAN
+  [ltc] ep  3  N=2 [np.str_('slower'), np.str_('faster')]  laps  5.26  passes 5  CLEAN
+  [ltc] ep  4  N=1 [np.str_('equal')]  laps  0.98  passes 1  OFF
+  [ltc] ep  5  N=2 [np.str_('equal'), np.str_('slower')]  laps  0.22  passes 0  OFF
+  [ltc] ep  6  N=1 [np.str_('faster')]  laps  1.10  passes 1  OFF
+  [mlp] ep  5  N=2 [np.str_('equal'), np.str_('slower')]  laps  3.01  passes 2  OFF
+  [mlp] ep  6  N=1 [np.str_('faster')]  laps  0.12  passes 0  OFF
+  [mlp] ep  7  N=3 [np.str_('faster'), np.str_('equal'), np.str_('faster')]  laps  0.72  passes 1  CONTACT
+  [ltc] ep  7  N=3 [np.str_('faster'), np.str_('equal'), np.str_('faster')]  laps  5.15  passes 6  CLEAN
+  [mlp] ep  8  N=1 [np.str_('equal')]  laps  5.00  passes 2  CLEAN
+  [mlp] ep  9  N=3 [np.str_('slower'), np.str_('slower'), np.str_('slower')]  laps  0.71  passes 2  OFF
+  [ltc] ep  8  N=1 [np.str_('equal')]  laps  4.49  passes 2  CLEAN
+  [mlp] ep 10  N=2 [np.str_('faster'), np.str_('slower')]  laps  4.07  passes 3  CLEAN
+  [ltc] ep  9  N=3 [np.str_('slower'), np.str_('slower'), np.str_('slower')]  laps  3.25  passes 3  CLEAN
+  [ltc] ep 10  N=2 [np.str_('faster'), np.str_('slower')]  laps  2.75  passes 2  CONTACT
+  [mlp] ep 11  N=2 [np.str_('equal'), np.str_('faster')]  laps  5.23  passes 4  CLEAN
+  [ltc] ep 11  N=2 [np.str_('equal'), np.str_('faster')]  laps  4.81  passes 4  CLEAN
+  [mlp] ep 12  N=1 [np.str_('equal')]  laps  4.82  passes 2  CLEAN
+  [ltc] ep 12  N=1 [np.str_('equal')]  laps  4.98  passes 2  OFF
+  [mlp] ep 13  N=1 [np.str_('slower')]  laps  5.38  passes 3  CLEAN
+  [ltc] ep 13  N=1 [np.str_('slower')]  laps  0.17  passes 1  OFF
+  [ltc] ep 14  N=3 [np.str_('slower'), np.str_('slower'), np.str_('equal')]  laps  0.56  passes 1  OFF
+  [mlp] ep 14  N=3 [np.str_('slower'), np.str_('slower'), np.str_('equal')]  laps  3.84  passes 5  CLEAN
+  [ltc] ep 15  N=2 [np.str_('slower'), np.str_('faster')]  laps  4.50  passes 3  CLEAN
+  [mlp] ep 15  N=2 [np.str_('slower'), np.str_('faster')]  laps  4.82  passes 5  CLEAN
+  [mlp] ep 16  N=3 [np.str_('faster'), np.str_('slower'), np.str_('faster')]  laps  0.93  passes 2  OFF
+  [ltc] ep 16  N=3 [np.str_('faster'), np.str_('slower'), np.str_('faster')]  laps  3.38  passes 2  CLEAN
+  [mlp] ep 17  N=1 [np.str_('equal')]  laps  3.94  passes 1  CLEAN
+done mlp seed 1: last-8 clean 88% passes 3.12 (2776s)
+  [ltc] ep 17  N=1 [np.str_('equal')]  laps  4.96  passes 2  CLEAN
+done ltc seed 1: last-8 clean 50% passes 2.12 (2812s)
+EXIT=0
+
+[exited with code 0]
