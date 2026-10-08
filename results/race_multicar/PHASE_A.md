@@ -34,7 +34,11 @@ Inherits from the sensor branch: the online method (PolicyTuner: explore + RTRL 
    (<=MAX_OPP), reward = race_reward on the fastest rival + extra pass credit, PolicyTuner + keep-best,
    both arms. Statically validated (parses/imports; both arms build the 34-feat net + forward). Needs a
    1-2 episode smoke-run on an IDLE box, then the full run (seeds) -> results/race_multicar/nets/.
-5. [NEXT] **Eval + artifacts** — vs 1/2/3 cars (flexibility), clean rate + overtakes + the field behaviour;
-   data/csv/png/pdf/tikz/gif, reproducible via a `make` target + `--from-saved`.
+5. [DONE] **Eval + artifacts** — `experiments/race_multi_eval.py`: the keep-best nets FIXED vs N=1/2/3
+   (6 runs/cell). Result (see EVAL.md): flexibility holds (one net, passes scale 1.2→2.7); **LTC safer +
+   more consistent** (clean 100/67/67, contact 0–33%) vs **MLP erratic/reckless** (clean 50/83/33, contact
+   up to 50%) — the memory-helps-juggle-occluded-opponents signal. Fixed eval FLIPPED the training-noise
+   "MLP wins" read. Artifacts: data/csv/png/pdf/tikz/gif + `--from-saved`. Remaining gap: occluded-opponent
+   contact at N≥2 (next lever = a bounded last-seen keep-out during blind windows + small retrain).
 
 ## Then: phase B (real car) on its OWN new branch -- see [[phase-plan-and-branching]] / paper/deployment_plan.md.
