@@ -35,6 +35,27 @@ for a short horizon and keep its MPCC keep-out during the blind window, decaying
 contact directly, without the over-swerve of the earlier growing-radius dead-reckon (which we stripped).
 Needs a small retrain. See [[offtrack-corridor-buyoff-and-equal-overtake-trilemma]].
 
+## Update — bounded occluded keep-out (the contact fix)
+Added `opponent_keepouts()` (a detected opponent → real keep-out; a just-occluded tracked one → a BOUNDED
+raceline prediction at its last speed, fixed radius, dropped after 1.5 s), retrained both arms, re-evaled.
+Before (pale) → after (solid) in `multi_contactfix.png`:
+
+| arm | N | contact % (pre→fix) | off % (pre→fix) | clean % (pre→fix) |
+|---|---|---|---|---|
+| ltc | 1 | 0→0 | 0→**50** | 100→50 |
+| ltc | 2 | 17→**0** | 17→0 | 67→100 |
+| ltc | 3 | 33→**0** | 0→**50** | 67→50 |
+| mlp | 1 | 33→**0** | 17→0 | 50→**100** |
+| mlp | 2 | 0→17 | 17→17 | 83→67 |
+| mlp | 3 | 50→**17** | 17→0 | 33→**83** |
+
+**The fix works on CONTACT** (LTC 0 % everywhere; MLP 33→0, 50→17) — the MPCC no longer plans through an
+unseen car. **But it trades contact for OFF-TRACK on LTC** (0→50 % at N=1,3; systemic — both seeds 3/9 off,
+not the bimodal seed): LTC *over-avoids* the predicted car and runs wide. MLP absorbs the keep-out without
+going off → **MLP is now the cleaner arm (100/67/83)**, flipping the pre-fix ranking. Off-track = DNF/spin,
+contact = hitting another car — different severities, a deployment judgement call. Likely tunable: a GENTLER
+predicted keep-out (smaller radius / shorter cap) should cut the over-avoidance without losing the contact win.
+
 ## Reproduce (deterministic/seeded)
     # full eval (needs the trained nets in nets/):
     ACADOS_SOURCE_DIR=... PYTHONPATH=...:. python3 experiments/race_multi_eval.py --jobs 4 --steps 2600
