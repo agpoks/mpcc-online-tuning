@@ -170,8 +170,11 @@ def main():
         for j in jobs:
             done(one(j))
     else:
-        from multiprocessing import Pool
-        with Pool(min(n_proc, len(jobs))) as pool:
+        # SPAWN (not fork): fork-ing a Pool from a parent that has already touched acados/JAX (measure_pace)
+        # deadlocks the workers (threads + fork). spawn starts fresh interpreters -> each worker builds its
+        # own solver + net cleanly. (A fork pool hangs here at 0% CPU after the first build.)
+        import multiprocessing as _mp
+        with _mp.get_context("spawn").Pool(min(n_proc, len(jobs))) as pool:
             for o in pool.imap_unordered(one, jobs):
                 done(o)
 
