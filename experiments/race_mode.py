@@ -151,18 +151,23 @@ def field_summary(track, s_ego, opps, gaps=None, closings=None):
     return fastest, (crowd, avgcl, len(opps) / float(MAX_OPP))
 
 
-BLIND_CAP = 1.5        # s: how long an occluded-but-tracked opponent stays in the MPCC keep-out set
+BLIND_CAP = 1.0        # s: how long an occluded-but-tracked opponent stays in the MPCC keep-out set
+PRED_R = 0.28          # keep-out radius for a PREDICTED (occluded) opponent -- GENTLER than the detected
+                       # KEEPOUT_R=0.36 (between the 0.24 collision radius and the full safety margin). The
+                       # position is UNCERTAIN, so nudge around it rather than hard-swerve: the 0.36 radius +
+                       # 1.5 s cap ran LTC off-track (over-avoidance); 0.28 + 1.0 s keeps the contact win softer.
 
 
 def opponent_keepouts(track, opps, det, last_s, blind_age, speed_est, r=None, blind_cap=BLIND_CAP):
     """The MPCC obstacle set UNDER OCCLUSION. A DETECTED opponent contributes its real keep-out. An
     opponent that has just gone blind but was tracked (last-seen arc-length known, blind_age < blind_cap)
     contributes a BOUNDED last-seen PREDICTION -- 'drives like us': propagate its last-seen s at its tracked
-    speed along the RACING LINE, with a FIXED radius (no growing-radius over-swerve -- that was the stripped
-    dead-reckon's bug). After blind_cap seconds unseen it is DROPPED (too uncertain -- it may have overtaken,
-    pitted or diverged). Each opponent yields at most ONE keep-out, so the set stays <= len(opps) <= MAX_OPP.
-    This stops the MPCC planning THROUGH an opponent it can no longer see (the occluded-contact failure)."""
-    r = KEEPOUT_R if r is None else r
+    speed along the RACING LINE, with a FIXED, GENTLER radius (PRED_R < KEEPOUT_R -- no growing radius, and
+    softer than a detected car since the position is uncertain; hard-avoiding it ran LTC wide). After
+    blind_cap seconds unseen it is DROPPED (too uncertain -- it may have overtaken, pitted or diverged). Each
+    opponent yields at most ONE keep-out, so the set stays <= len(opps) <= MAX_OPP. This stops the MPCC
+    planning THROUGH an opponent it can no longer see (the occluded-contact failure) without over-swerving."""
+    r = PRED_R if r is None else r
     kos = []
     for i, o in enumerate(opps):
         if det[i]:
