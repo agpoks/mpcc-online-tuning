@@ -21,7 +21,7 @@ from mpcc_tuning.track import Track
 from mpcc_tuning import baselines as B
 from experiments.race_mode import (race_features, field_summary, FAIR_PACE, signed_gap, measure_pace,
                                     N_RACE_FEATURES_MULTI, MAX_OPP, KEEPOUT_R, CONTACT_R, PACE_KINDS,
-                                    LR_VEH, A_LAT_RACE, CORRIDOR_KW, FOV_DEG, _visible,
+                                    LR_VEH, A_LAT_RACE, CORRIDOR_KW, FOV_DEG, _visible, opponent_keepouts,
                                     KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES,
                                     RA_FLOOR, RA_FLOOR_CLASSES)
 OUT = ROOT / "results" / "race_multicar"
@@ -69,6 +69,7 @@ def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=F
     pol.reset()
     fast0 = int(np.argmax([o.pace for o in opps])); pol.cls = PACE_KINDS.index(kinds[fast0])
     base = float(P.state5()[4]); seen_age = 0.0; prev_g = [None] * N
+    last_s = [None] * N; blind_age = [0.0] * N        # per-opponent last-seen arc-length + time-since-seen
     passed = [False] * N; passes = 0; contact = False; off = tr = False
     LOGK = ["EX", "EY", "S", "V", "DET"]
     rec = {k: [] for k in LOGK}; recO = []   # recO: per-step list of (ox,oy,det) per opponent
@@ -80,12 +81,15 @@ def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=F
         gaps = [signed_gap(track, s_ego, o.s) for o in opps]
         for i, o in enumerate(opps):
             if det[i]:
-                trk[i].update(o.pose()[:2])
+                trk[i].update(o.pose()[:2]); last_s[i] = o.s; blind_age[i] = 0.0
+            else:
+                blind_age[i] += 0.05
         vis = [o for i, o in enumerate(opps) if det[i]]
         vis_gaps = [gaps[i] for i in range(N) if det[i]]
         vis_clos = [((gaps[i] - prev_g[i]) if prev_g[i] is not None else 0.0) for i in range(N) if det[i]]
         fastest, fld = field_summary(track, s_ego, vis, vis_gaps, vis_clos)
-        m.set_obstacles([o.keepout() for o in vis])                  # avoid ALL detected; drop blind ones
+        # avoid DETECTED opponents + a BOUNDED last-seen prediction for the just-occluded ones (<= MAX_OPP)
+        m.set_obstacles(opponent_keepouts(track, opps, det, last_s, blind_age, [trk[i].speed for i in range(N)]))
         fi = opps.index(fastest) if fastest is not None else None
         gr = ((gaps[fi] - prev_g[fi]) / 0.05) if (fi is not None and prev_g[fi] is not None) else (0.0 if first else None)
         feat = race_features(track, state5, ([fastest] if fastest else []),
