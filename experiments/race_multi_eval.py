@@ -296,14 +296,54 @@ def emit_tikz(all_rows):
     return TZ
 
 
-def load_saved():
-    d = np.load(OUT / "multi_eval_rows.npz", allow_pickle=True)
+def load_rows_path(p):
+    d = np.load(p, allow_pickle=True)
     n = len(d["arm"]); rows = []
     for i in range(n):
         rows.append(dict(arm=str(d["arm"][i]), seed=int(d["seed"][i]), N=int(d["N"][i]), phys=int(d["phys"][i]),
                          clean=bool(d["clean"][i]), passes=int(d["passes"][i]), contact=bool(d["contact"][i]),
                          off=bool(d["off"][i]), laps=float(d["laps"][i]), kinds=str(d["kinds"][i])))
     return rows
+
+
+def load_saved():
+    return load_rows_path(OUT / "multi_eval_rows.npz")
+
+
+def print_compare(pre, post):
+    ap, bp = _agg(pre), _agg(post)
+    print(f"\nbefore(pre-fix) -> after(contact-fix)   clean% | contact% | off%   per arm per N")
+    for arm in ARMS:
+        for N in NSET:
+            a, b = ap[arm].get(N), bp[arm].get(N)
+            if a and b:
+                print(f"{arm:>4} N={N}:  clean {a['clean']:3.0f}->{b['clean']:3.0f}   "
+                      f"contact {a['contact']:3.0f}->{b['contact']:3.0f}   off {a['off']:3.0f}->{b['off']:3.0f}   "
+                      f"passes {a['passes']:.2f}->{b['passes']:.2f}")
+
+
+def fig_compare(pre, post):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    ap, bp = _agg(pre), _agg(post)
+    fig, (a0, a1) = plt.subplots(1, 2, figsize=(11, 4.2))
+    x = np.arange(len(NSET)); w = 0.2
+    col = {"ltc": "#1f77b4", "mlp": "#d62728"}
+    for metric, ax, lbl in ((("contact"), a0, "contact races (%)"), (("clean"), a1, "clean races (%)")):
+        for j, arm in enumerate(ARMS):
+            pre_v = [ap[arm].get(N, {}).get(metric, np.nan) for N in NSET]
+            post_v = [bp[arm].get(N, {}).get(metric, np.nan) for N in NSET]
+            ax.bar(x + (2 * j - 1.5) * w, pre_v, w, color=col[arm], alpha=0.45, label=f"{arm.upper()} pre")
+            ax.bar(x + (2 * j - 0.5) * w, post_v, w, color=col[arm], label=f"{arm.upper()} fix")
+        ax.set_xticks(x); ax.set_xticklabels([f"{N} car{'s' if N > 1 else ''}" for N in NSET])
+        ax.set_ylabel(lbl); ax.set_ylim(0, 105); ax.legend(fontsize=7, ncol=2)
+    a0.set_title("Contact vs field size (lower better)"); a1.set_title("Clean vs field size (higher better)")
+    fig.suptitle("Occluded-opponent keep-out: before (pale) vs after (solid)")
+    fig.tight_layout()
+    fig.savefig(OUT / "multi_contactfix.png", dpi=130); fig.savefig(OUT / "multi_contactfix.pdf")
+    plt.close(fig)
+    return OUT / "multi_contactfix.png"
 
 
 def _print_table(all_rows):
@@ -322,7 +362,13 @@ def main():
     ap.add_argument("--jobs", type=int, default=0, help="parallel workers over (arm,seed) (0 = sequential)")
     ap.add_argument("--steps", type=int, default=2600)
     ap.add_argument("--from-saved", action="store_true", help="regen csv/plot/tikz/gif from saved data only")
+    ap.add_argument("--compare", nargs="?", const=str(OUT / "multi_eval_rows_prefix.npz"), default=None,
+                    help="before/after table + plot vs a baseline rows npz (default: the pre-fix snapshot)")
     a = ap.parse_args()
+    if a.compare:
+        pre = load_rows_path(a.compare); post = load_saved()
+        print_compare(pre, post); fig_compare(pre, post)
+        print(f"wrote {OUT}/multi_contactfix.{{png,pdf}}"); return
     if a.from_saved:
         rows = load_saved(); _print_table(rows); write_csv(rows); fig_flex(rows); emit_tikz(rows)
         for arm in ARMS:
@@ -353,7 +399,11 @@ def main():
     save_rows(all_rows); write_csv(all_rows); _print_table(all_rows); fig_flex(all_rows); emit_tikz(all_rows)
     for arm in ARMS:
         make_gif(arm)
-    print(f"\nwrote {OUT}/multi_eval*.{{npz,csv}} + multi_flexibility.{{png,pdf}} + tikz/ + multi_race_*.gif")
+    base = OUT / "multi_eval_rows_prefix.npz"                     # auto before/after vs the pre-fix snapshot
+    if base.exists():
+        print_compare(load_rows_path(base), all_rows); fig_compare(load_rows_path(base), all_rows)
+    print(f"\nwrote {OUT}/multi_eval*.{{npz,csv}} + multi_flexibility.{{png,pdf}} + tikz/ + multi_race_*.gif"
+          + (" + multi_contactfix.{png,pdf}" if base.exists() else ""))
 
 
 if __name__ == "__main__":
