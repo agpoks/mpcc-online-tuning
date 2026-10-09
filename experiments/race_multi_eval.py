@@ -33,7 +33,7 @@ ARMS = ("ltc", "mlp")
 SEEDS = (0, 1)
 
 
-def _load_pol(arm, seed, net_dir=None, qc_floor_on=True):
+def _load_pol(arm, seed, net_dir=None, qc_floor_on=True, crowd_on=True):
     from mpcc_tuning.ltc import LTCCell, MLPCell, WeightPolicy
     f = (Path(net_dir) if net_dir else OUT / "nets") / f"race_{arm}_{seed}.npz"
     if not f.exists():
@@ -41,7 +41,7 @@ def _load_pol(arm, seed, net_dir=None, qc_floor_on=True):
     d = np.load(f); Cell = LTCCell if arm == "ltc" else MLPCell
     cell = Cell(N_RACE_FEATURES_MULTI, int(d["n_hidden"]), seed=seed); ncls = int(d["D_class"].shape[0])
     qcf, qcc = (QC_FLOOR, QC_FLOOR_CLASSES) if qc_floor_on else (0.0, ())  # off for nets trained WITHOUT the floor
-    qlo, qhi = (QC_CROWD_LO, QC_CROWD_HI) if qc_floor_on else (0.0, 0.0)   # crowd band is LTC-only, like the floor
+    qlo, qhi = (QC_CROWD_LO, QC_CROWD_HI) if (qc_floor_on and crowd_on) else (0.0, 0.0)  # crowd band: LTC + opt-in
     pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls, delta_log=float(d["delta_log"]),
                        kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES, kv_ceil=KV_CEIL,
                        kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES,
