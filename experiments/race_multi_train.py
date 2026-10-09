@@ -21,7 +21,8 @@ from experiments.race_mode import (race_features, field_summary, race_reward, FA
                                     measure_pace, N_RACE_FEATURES_MULTI, MAX_OPP, KEEPOUT_R, CONTACT_R,
                                     PACE_KINDS, LR_VEH, A_LAT_RACE, CORRIDOR_KW, FOV_DEG, _visible,
                                     opponent_keepouts, KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES,
-                                    RA_FLOOR, RA_FLOOR_CLASSES, QC_FLOOR, QC_FLOOR_CLASSES)
+                                    RA_FLOOR, RA_FLOOR_CLASSES, QC_FLOOR, QC_FLOOR_CLASSES,
+                                    QC_CROWD_LO, QC_CROWD_HI, QC_CROWD_N)
 OUT = ROOT / "results" / "race_multicar"
 RACE_KINDS = ("slower", "equal", "faster")   # the field is drawn from these (static = no opponent)
 PASS_BONUS_EXTRA = 0.5                         # credit per ADDITIONAL opponent passed beyond the fastest
@@ -42,7 +43,9 @@ def run(arm, seed=0, n_ep=18, steps=4000, n_hidden=12, ego_pace=1.6, detect_rang
     pol = WeightPolicy(cell, th0, lo, hi, seed=seed, n_classes=len(PACE_KINDS), delta_log=0.6,
                        kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES, kv_ceil=KV_CEIL,
                        kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES,
-                       qc_floor=QC_FLOOR, qc_floor_classes=QC_FLOOR_CLASSES)
+                       qc_floor=(QC_FLOOR if arm == "ltc" else 0.0), qc_floor_classes=QC_FLOOR_CLASSES,
+                       qc_crowd_lo=(QC_CROWD_LO if arm == "ltc" else 0.0),
+                       qc_crowd_hi=(QC_CROWD_HI if arm == "ltc" else 0.0), qc_crowd_n=QC_CROWD_N)
     tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0, seed=seed, trust_region=0.01,
                         theta_prior=0.15, theta_explore=0.15, entropy=0.03, critic="return",
                         alpha_delta=0.01, trust_region_delta=0.03)
@@ -85,6 +88,7 @@ def run(arm, seed=0, n_ep=18, steps=4000, n_hidden=12, ego_pace=1.6, detect_rang
         feat = race_features(track, P.state5(), ([fastest] if fastest else []),
                              opp_speed_est=(trk[fi].speed if fi is not None else None),
                              slip=(ar, b, r_), detected=1.0 if vis else 0.0, seen_age=0.0, field=fld)
+        pol.set_crowd(sum(ls is not None for ls in last_s))      # memory-based crowd estimate (distinct seen)
         theta, u = tuner.act(feat, P.state_dyn())
         for _step in range(steps):
             s5n, r, off, tr = P.step(u)
@@ -129,6 +133,7 @@ def run(arm, seed=0, n_ep=18, steps=4000, n_hidden=12, ego_pace=1.6, detect_rang
                                    gaps[fi] if fi is not None else 99.0, alpha_r=ar, beta=b, off=off,
                                    edge_dist=edge, opp_pace=FAIR_PACE[fk])
             r_shaped += PASS_BONUS_EXTRA * max(0, n_passed_now - 1)  # credit the rest of the field
+            pol.set_crowd(sum(ls is not None for ls in last_s))      # memory-based crowd estimate (distinct seen)
             out = tuner.learn(r_shaped, P.state_dyn(), fn, off or contact)
             if out[0] is None:
                 break

@@ -208,7 +208,8 @@ class WeightPolicy:
                  kv_floor: float = 0.0, kv_floor_classes=(),
                  kv_ceil: float = 0.0, kv_ceil_classes=(),
                  ra_floor: float = 0.0, ra_floor_classes=(),
-                 qc_floor: float = 0.0, qc_floor_classes=()):
+                 qc_floor: float = 0.0, qc_floor_classes=(),
+                 qc_crowd_lo: float = 0.0, qc_crowd_hi: float = 0.0, qc_crowd_n: int = 3):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
@@ -312,11 +313,25 @@ class WeightPolicy:
         self.qc_idx = WEIGHT_NAMES.index("q_c")
         self.qc_floor = float(np.log(qc_floor)) if qc_floor > 0 else None
         self.qc_floor_classes = set(int(c) for c in qc_floor_classes)
+        # CROWD-CONDITIONED q_c BAND. The q_c floor holds a TIGHT line, which is right for 1-2 cars but too
+        # tight to weave a 3-car crowd (the net clips an occluded car -- N=3 < MLP). When a FULL field is
+        # REMEMBERED (self.crowd >= qc_crowd_n, counting opponents seen at least once -> persists through
+        # occlusion, which is exactly what memory buys), force a LOOSER weaving band q_c in [lo, hi] (overrides
+        # the floor) so the car opens its line to thread the crowd. Few cars -> the floor still holds the line.
+        self.qc_crowd_lo = float(np.log(qc_crowd_lo)) if qc_crowd_lo > 0 else None
+        self.qc_crowd_hi = float(np.log(qc_crowd_hi)) if qc_crowd_hi > 0 else None
+        self.qc_crowd_n = int(qc_crowd_n)
+        self.crowd = 0
         self.reset()
+
+    def set_crowd(self, c) -> None:
+        """Number of distinct opponents the ego has seen this race (a memory-based crowd estimate)."""
+        self.crowd = int(c)
 
     def reset(self):
         self.cell.reset()
         self.P[:] = 0.0
+        self.crowd = 0
 
     def step(self, feat):
         """One tick: advance the cell, emit theta, update the influence trace.
@@ -428,12 +443,21 @@ class WeightPolicy:
             self._sq = self._sq.copy(); self._sq[self.ra_idx] = 0.0
             if self._cls_used is not None:
                 self._dsq = self._dsq.copy(); self._dsq[self.ra_idx] = 0.0
-        # class-conditioned q_c FLOOR (below ~0.25 the line collapses -> wander -> contact), same masking
-        if self.qc_floor is not None and self.cls in self.qc_floor_classes and theta[self.qc_idx] < self.qc_floor:
-            theta = np.array(theta, float); theta[self.qc_idx] = self.qc_floor
-            self._sq = self._sq.copy(); self._sq[self.qc_idx] = 0.0
-            if self._cls_used is not None:
-                self._dsq = self._dsq.copy(); self._dsq[self.qc_idx] = 0.0
+        # class-conditioned q_c band. Few cars -> FLOOR (hold the line, no single-car wander-collapse). A FULL
+        # field REMEMBERED (self.crowd >= qc_crowd_n -> persists through occlusion) -> a looser WEAVING band
+        # [qc_crowd_lo, qc_crowd_hi] (overrides the floor) so the car opens its line to thread the crowd (fixes
+        # N=3 < MLP: the net was holding a N=1-tight line, clipping an occluded car). Masks the gradient.
+        if self.qc_floor is not None and self.cls in self.qc_floor_classes:
+            qi = self.qc_idx; cur = float(theta[qi])
+            if self.qc_crowd_hi is not None and self.crowd >= self.qc_crowd_n:
+                new = min(max(cur, self.qc_crowd_lo), self.qc_crowd_hi)      # loose weaving band
+            else:
+                new = max(cur, self.qc_floor)                               # hold-the-line floor
+            if new != cur:
+                theta = np.array(theta, float); theta[qi] = new
+                self._sq = self._sq.copy(); self._sq[qi] = 0.0
+                if self._cls_used is not None:
+                    self._dsq = self._dsq.copy(); self._dsq[qi] = 0.0
         self._h = h
         return theta
 

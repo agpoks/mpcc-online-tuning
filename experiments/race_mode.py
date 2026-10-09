@@ -319,6 +319,17 @@ RA_FLOOR_CLASSES = (1, 2, 3)  # PACE_KINDS indices: slower, equal, faster -- ALL
 QC_FLOOR = 0.5
 QC_FLOOR_CLASSES = (1, 2, 3)  # PACE_KINDS indices: slower, equal, faster -- any class that overtakes near a car
 
+# CROWD-CONDITIONED q_c BAND (multi-car). The q_c floor holds a tight line -- right for 1-2 cars (100% clean),
+# but the net kept it tight at N=3 too (q_c ~0.85, floor NOT binding), clipping an occluded car while weaving
+# through 3 (N=3 58% < MLP 83%; the looser gentler net was 67% there). When a FULL field is REMEMBERED (>= 3
+# distinct opponents seen this race -- a memory estimate that survives occlusion, where LTC memory pays off),
+# force a LOOSER weaving band q_c in [LO, HI] (overrides the floor) so the car opens its line to thread the
+# crowd. Below the 0.22 collapse is excluded; 0.30-0.45 is "wider but controlled". Applied to LTC only (as
+# the floor is). qc_crowd_n=3 so N=1,2 keep the tight line that already solves them.
+QC_CROWD_LO = 0.30
+QC_CROWD_HI = 0.45
+QC_CROWD_N = 3                # activate once this many DISTINCT opponents have been seen (true 3-car crowd)
+
 # STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
 # NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
 # limit, so it has grip to spare. The 45-57% off-track is LATERAL corridor-departure under aggressive
