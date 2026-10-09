@@ -32,9 +32,9 @@ ARMS = ("ltc", "mlp")
 SEEDS = (0, 1)
 
 
-def _load_pol(arm, seed):
+def _load_pol(arm, seed, net_dir=None):
     from mpcc_tuning.ltc import LTCCell, MLPCell, WeightPolicy
-    f = OUT / "nets" / f"race_{arm}_{seed}.npz"
+    f = (Path(net_dir) if net_dir else OUT / "nets") / f"race_{arm}_{seed}.npz"
     if not f.exists():
         return None
     d = np.load(f); Cell = LTCCell if arm == "ltc" else MLPCell
@@ -52,8 +52,11 @@ def _slip(P):
     return ar, b, r
 
 
-def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=FOV_DEG, occlude=True, log=False):
-    """One deterministic race vs a fixed field of N opponents (explore off). Returns (metrics, log|None)."""
+def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=FOV_DEG, occlude=True, log=False,
+             keepout="gentle"):
+    """One deterministic race vs a fixed field of N opponents (explore off). Returns (metrics, log|None).
+    keepout: 'gentle' = the bounded predicted keep-out (opponent_keepouts); 'none' = drop blind opponents
+    (the pre-fix behaviour) -- for the net-vs-constraint ablation."""
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
     from mpcc_tuning.opponents import ObstacleTracker, RacelineOpponent
     track = Track.icra_t2_smooth(); half = np.radians(fov_deg) / 2.0; L = track.length
@@ -71,8 +74,8 @@ def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=F
     base = float(P.state5()[4]); seen_age = 0.0; prev_g = [None] * N
     last_s = [None] * N; blind_age = [0.0] * N        # per-opponent last-seen arc-length + time-since-seen
     passed = [False] * N; passes = 0; contact = False; off = tr = False
-    LOGK = ["EX", "EY", "S", "V", "DET"]
-    rec = {k: [] for k in LOGK}; recO = []   # recO: per-step list of (ox,oy,det) per opponent
+    LOGK = ["EX", "EY", "S", "V", "DET", "YAW", "SLIP", "YAWRATE"]
+    rec = {k: [] for k in LOGK}; recO = []; recTH = []   # recO: (ox,oy,det)/opp; recTH: exp(theta) MPCC weights
 
     def emit(state5, s_ego, first=False):
         ar, b, r_ = _slip(P)
@@ -89,7 +92,10 @@ def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=F
         vis_clos = [((gaps[i] - prev_g[i]) if prev_g[i] is not None else 0.0) for i in range(N) if det[i]]
         fastest, fld = field_summary(track, s_ego, vis, vis_gaps, vis_clos)
         # avoid DETECTED opponents + a BOUNDED last-seen prediction for the just-occluded ones (<= MAX_OPP)
-        m.set_obstacles(opponent_keepouts(track, opps, det, last_s, blind_age, [trk[i].speed for i in range(N)]))
+        if keepout == "none":
+            m.set_obstacles([o.keepout() for o in vis])          # pre-fix: drop blind opponents
+        else:
+            m.set_obstacles(opponent_keepouts(track, opps, det, last_s, blind_age, [trk[i].speed for i in range(N)]))
         fi = opps.index(fastest) if fastest is not None else None
         gr = ((gaps[fi] - prev_g[fi]) / 0.05) if (fi is not None and prev_g[fi] is not None) else (0.0 if first else None)
         feat = race_features(track, state5, ([fastest] if fastest else []),
@@ -115,9 +121,11 @@ def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=F
                 passed[i] = False
         seen_age = 0.0 if any(det) else min(seen_age + 0.05, 5.0)
         if log:
-            for k, val in zip(LOGK, [ex, ey, s_ego, v, 1.0 if any(det) else 0.0]):
+            _ar, _b, _rr = _slip(P)
+            for k, val in zip(LOGK, [ex, ey, s_ego, v, 1.0 if any(det) else 0.0, float(P._x[2]), _ar, float(P._x[5])]):
                 rec[k].append(val)
             recO.append([(float(o.keepout()[0]), float(o.keepout()[1]), bool(det[i])) for i, o in enumerate(opps)])
+            recTH.append(np.exp(np.asarray(theta, float)))
         theta, det, gaps = emit(s5n, s_ego); prev_g = list(gaps)
         u = m.value(P.state_dyn(), theta)["u0"]
         if off or tr or contact:
@@ -129,6 +137,7 @@ def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=F
     if log:
         arr = {k: np.asarray(rec[k], float) for k in LOGK}
         arr["OPP"] = np.asarray(recO, dtype=float) if recO else np.zeros((0, N, 3))  # (T,N,3): ox,oy,det
+        arr["THETA"] = np.asarray(recTH, float) if recTH else np.zeros((0, 9))        # (T,9): exp(theta) weights
         lg = arr
     return met, lg
 
