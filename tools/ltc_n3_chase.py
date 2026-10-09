@@ -64,12 +64,20 @@ def fig_contact(phys, met, lg):
     ax.set_title(f"LTC q_c-floor N=3 phys={phys}: CONTACT @{met['laps']:.2f} laps (car gap {dmin:.2f} m)")
     axs.plot(lg["S"] - lg["S"][0], V, color="#1f77b4", lw=1.4)
     axs.set_xlabel("distance s (m)"); axs.set_ylabel("ego speed (m/s)"); axs.set_title("Speed into the contact"); axs.grid(alpha=0.3)
-    fig.tight_layout(); fig.savefig(OUTN / "ltc_n3_contact.png", dpi=125); plt.close(fig)
-    print(f"wrote {OUTN}/ltc_n3_contact.png (hit car #{hit}, final gap {dmin:.2f} m)")
+    fig.tight_layout(); fig.savefig(OUTN / "ltc_n3_contact.png", dpi=125); fig.savefig(OUTN / "ltc_n3_contact.pdf"); plt.close(fig)
+    print(f"wrote {OUTN}/ltc_n3_contact.{{png,pdf}} (hit car #{hit}, final gap {dmin:.2f} m)")
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--jobs", type=int, default=4); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--from-saved", action="store_true", help="regen the contact fig from the saved trace npz")
+    a = ap.parse_args()
+    if a.from_saved:
+        d = np.load(OUTN / "ltc_n3_contact_trace.npz", allow_pickle=True)
+        lg = {k: d[k] for k in d.files if k != "phys"}
+        L = Track.icra_t2_smooth().length
+        laps = (float(lg["S"][-1]) - float(lg["S"][0])) / L            # from the logged arc-length
+        fig_contact(int(d["phys"]), dict(laps=laps), lg); return
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth"); th0 = np.asarray(st.theta(), float)
     mp = _mpcc("n3_pace"); ego_pace = measure_pace(mp, track, th0, 1500)
     print(f"ego solo pace {ego_pace:.2f} m/s ; N=3 x phys 0..5 x seeds 0,1", flush=True)

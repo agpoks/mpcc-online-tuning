@@ -10,7 +10,7 @@ ROOT = Path("/home/poxx/github/mpcc-online-tuning"); sys.path.insert(0, str(ROOT
 from experiments.race_multi_eval import load_rows_path, _agg, ARMS, NSET, OUT
 
 VAR = [("pre-fix", "multi_eval_rows_prefix.npz"), ("gentler", "multi_eval_rows_gentler.npz"),
-       ("q_c-floor", "multi_eval_rows.npz")]
+       ("q_c-floor", "multi_eval_rows_qcfloor.npz")]   # stable snapshot (multi_eval_rows.npz = latest/deploy eval)
 ag = {name: _agg(load_rows_path(OUT / f)) for name, f in VAR}
 
 print(f"\n{'':9}", end="")
@@ -48,3 +48,18 @@ fig.suptitle("Multi-car three-way: pre-fix → gentler keep-out → + q_c floor 
 fig.tight_layout()
 fig.savefig(OUT / "multi_contact_threeway.png", dpi=130); fig.savefig(OUT / "multi_contact_threeway.pdf")
 print(f"\nwrote {OUT}/multi_contact_threeway.{{png,pdf}}")
+
+# TikZ (pgfplots): clean% per arm per N across the three variants
+TZ = OUT / "tikz"; TZ.mkdir(parents=True, exist_ok=True)
+tex = ["% Multi-car three-way clean%: pre-fix -> gentler -> q_c-floor. Regen: tools/multi_contact_threeway.py",
+       "\\begin{tikzpicture}",
+       "\\begin{axis}[ybar,bar width=4pt,width=10cm,height=6cm,xtick={1,2,3},xlabel={opponents},",
+       "  ylabel={clean races (\\%)},ymin=0,ymax=105,enlarge x limits=0.25,legend pos=south west,legend columns=2]"]
+for arm in ARMS:
+    for name, _ in VAR:
+        coords = " ".join(f"({N},{ag[name][arm].get(N, {}).get('clean', 0):.0f})" for N in NSET)
+        lbl = (arm.upper() + " " + name).replace("_", "-")   # no underscores (tikz math-mode gotcha)
+        tex.append(f"\\addplot coordinates {{{coords}}}; \\addlegendentry{{{lbl}}}")
+tex += ["\\end{axis}", "\\end{tikzpicture}"]
+(TZ / "multi_contact_threeway_clean.tex").write_text("\n".join(tex) + "\n")
+print(f"wrote {TZ}/multi_contact_threeway_clean.tex")

@@ -150,7 +150,7 @@ def one(job):
     track = Track.icra_t2_smooth(); st = B.start("icra_t2_smooth")
     m = AcadosMPCC(track, horizon=st.horizon, dt=0.05, vehicle="dynamic", q_vref=st.q_vref, discrete=True,
                    max_obstacles=MAX_OPP, a_lat_sectors=[A_LAT_RACE] * 4, **CORRIDOR_KW, name=f"ev_{arm}_{seed}")
-    pol = _load_pol(arm, seed)
+    pol = _load_pol(arm, seed, qc_floor_on=(arm == "ltc"))   # q_c floor is LTC-specific (it breaks MLP)
     if pol is None:
         return dict(arm=arm, seed=seed, rows=[], gif=None)
     rows = []; gif = None

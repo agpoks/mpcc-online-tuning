@@ -1,0 +1,12 @@
+% Multi-car three-way clean%: pre-fix -> gentler -> q_c-floor. Regen: tools/multi_contact_threeway.py
+\begin{tikzpicture}
+\begin{axis}[ybar,bar width=4pt,width=10cm,height=6cm,xtick={1,2,3},xlabel={opponents},
+  ylabel={clean races (\%)},ymin=0,ymax=105,enlarge x limits=0.25,legend pos=south west,legend columns=2]
+\addplot coordinates {(1,100) (2,67) (3,67)}; \addlegendentry{LTC pre-fix}
+\addplot coordinates {(1,83) (2,83) (3,67)}; \addlegendentry{LTC gentler}
+\addplot coordinates {(1,100) (2,100) (3,50)}; \addlegendentry{LTC q-c-floor}
+\addplot coordinates {(1,50) (2,83) (3,33)}; \addlegendentry{MLP pre-fix}
+\addplot coordinates {(1,100) (2,100) (3,83)}; \addlegendentry{MLP gentler}
+\addplot coordinates {(1,33) (2,33) (3,17)}; \addlegendentry{MLP q-c-floor}
+\end{axis}
+\end{tikzpicture}
