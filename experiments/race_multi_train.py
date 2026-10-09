@@ -21,7 +21,7 @@ from experiments.race_mode import (race_features, field_summary, race_reward, FA
                                     measure_pace, N_RACE_FEATURES_MULTI, MAX_OPP, KEEPOUT_R, CONTACT_R,
                                     PACE_KINDS, LR_VEH, A_LAT_RACE, CORRIDOR_KW, FOV_DEG, _visible,
                                     opponent_keepouts, KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES,
-                                    RA_FLOOR, RA_FLOOR_CLASSES)
+                                    RA_FLOOR, RA_FLOOR_CLASSES, QC_FLOOR, QC_FLOOR_CLASSES)
 OUT = ROOT / "results" / "race_multicar"
 RACE_KINDS = ("slower", "equal", "faster")   # the field is drawn from these (static = no opponent)
 PASS_BONUS_EXTRA = 0.5                         # credit per ADDITIONAL opponent passed beyond the fastest
@@ -41,7 +41,8 @@ def run(arm, seed=0, n_ep=18, steps=4000, n_hidden=12, ego_pace=1.6, detect_rang
     cell = (LTCCell if arm == "ltc" else MLPCell)(N_RACE_FEATURES_MULTI, n_hidden, seed=seed)
     pol = WeightPolicy(cell, th0, lo, hi, seed=seed, n_classes=len(PACE_KINDS), delta_log=0.6,
                        kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES, kv_ceil=KV_CEIL,
-                       kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES)
+                       kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES,
+                       qc_floor=QC_FLOOR, qc_floor_classes=QC_FLOOR_CLASSES)
     tuner = PolicyTuner(m, pol, alpha=3e-3, explore=0.06, delta_clip=1.0, seed=seed, trust_region=0.01,
                         theta_prior=0.15, theta_explore=0.15, entropy=0.03, critic="return",
                         alpha_delta=0.01, trust_region_delta=0.03)

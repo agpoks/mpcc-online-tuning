@@ -23,7 +23,7 @@ from experiments.race_mode import (race_features, field_summary, FAIR_PACE, sign
                                     N_RACE_FEATURES_MULTI, MAX_OPP, KEEPOUT_R, CONTACT_R, PACE_KINDS,
                                     LR_VEH, A_LAT_RACE, CORRIDOR_KW, FOV_DEG, _visible, opponent_keepouts,
                                     KV_FLOOR, KV_FLOOR_CLASSES, KV_CEIL, KV_CEIL_CLASSES,
-                                    RA_FLOOR, RA_FLOOR_CLASSES)
+                                    RA_FLOOR, RA_FLOOR_CLASSES, QC_FLOOR, QC_FLOOR_CLASSES)
 OUT = ROOT / "results" / "race_multicar"
 RACE_KINDS = ("slower", "equal", "faster")
 NSET = (1, 2, 3)            # opponent counts to test the ONE net against
@@ -41,7 +41,8 @@ def _load_pol(arm, seed, net_dir=None):
     cell = Cell(N_RACE_FEATURES_MULTI, int(d["n_hidden"]), seed=seed); ncls = int(d["D_class"].shape[0])
     pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls, delta_log=float(d["delta_log"]),
                        kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES, kv_ceil=KV_CEIL,
-                       kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES)
+                       kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES,
+                       qc_floor=QC_FLOOR, qc_floor_classes=QC_FLOOR_CLASSES)
     pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.D_class[...] = d["D_class"]
     return pol
 

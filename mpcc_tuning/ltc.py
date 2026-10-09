@@ -207,7 +207,8 @@ class WeightPolicy:
                  n_classes: int = 0, delta_log: float = 0.6,
                  kv_floor: float = 0.0, kv_floor_classes=(),
                  kv_ceil: float = 0.0, kv_ceil_classes=(),
-                 ra_floor: float = 0.0, ra_floor_classes=()):
+                 ra_floor: float = 0.0, ra_floor_classes=(),
+                 qc_floor: float = 0.0, qc_floor_classes=()):
         self.cell = cell
         self.theta0 = np.asarray(theta0, float)
         self.lo, self.hi = np.asarray(lo, float), np.asarray(hi, float)
@@ -302,6 +303,15 @@ class WeightPolicy:
         self.ra_idx = WEIGHT_NAMES.index("r_a")
         self.ra_floor = float(np.log(ra_floor)) if ra_floor > 0 else None
         self.ra_floor_classes = set(int(c) for c in ra_floor_classes)
+        # CLASS-CONDITIONED q_c FLOOR (line-keeping). q_c is the line-SHAPE knob: a LOW q_c widens the line
+        # (wanted -- move off-line to overtake or cut a corner), but BELOW ~0.25 the line COLLAPSES and the
+        # car wanders off and rams a nearby car (multi-car contact: the gentler retrain drove faster-class
+        # q_c to 0.22 vs a clean 3.74; trace = CONTACT @0.13 laps vs CLEAN 3.15). The floor keeps q_c in the
+        # "wider but safe" band -- the line can STILL widen for overtaking/cutting (floor is LOW, not glued),
+        # it just cannot collapse into the crash regime. Symmetric to the k_v/r_a bands; masks the gradient.
+        self.qc_idx = WEIGHT_NAMES.index("q_c")
+        self.qc_floor = float(np.log(qc_floor)) if qc_floor > 0 else None
+        self.qc_floor_classes = set(int(c) for c in qc_floor_classes)
         self.reset()
 
     def reset(self):
@@ -418,6 +428,12 @@ class WeightPolicy:
             self._sq = self._sq.copy(); self._sq[self.ra_idx] = 0.0
             if self._cls_used is not None:
                 self._dsq = self._dsq.copy(); self._dsq[self.ra_idx] = 0.0
+        # class-conditioned q_c FLOOR (below ~0.25 the line collapses -> wander -> contact), same masking
+        if self.qc_floor is not None and self.cls in self.qc_floor_classes and theta[self.qc_idx] < self.qc_floor:
+            theta = np.array(theta, float); theta[self.qc_idx] = self.qc_floor
+            self._sq = self._sq.copy(); self._sq[self.qc_idx] = 0.0
+            if self._cls_used is not None:
+                self._dsq = self._dsq.copy(); self._dsq[self.qc_idx] = 0.0
         self._h = h
         return theta
 

@@ -310,6 +310,15 @@ RA_FLOOR_CLASSES = (1, 2, 3)  # PACE_KINDS indices: slower, equal, faster -- ALL
 #                             (slower added: chasing a slower car it wound up to ~2.9 m/s past the ~2.5 ceiling
 #                             and ran wide -- same over-drive as equal/faster, just uncovered until now)
 
+# CLASS-CONDITIONED q_c FLOOR (multi-car). q_c is the line-SHAPE knob: a LOW q_c widens the line (wanted --
+# move off-line to overtake / cut a corner), but the multi-car gentler retrain over-loosened it to 0.22 for
+# the faster class (vs a clean 3.74) -- the line collapses, the car wanders 0.42 m off the line (vs 0.17 m)
+# and rams a nearby car (trace: CONTACT @0.13 laps vs CLEAN 3.15). 0.5 sits ABOVE the ~0.22 multi-car crash
+# but well below the ~1.0 "glued" value -- the line can STILL widen for overtaking/cutting, it just cannot
+# collapse into the crash regime. Same deterministic-floor mechanism as the k_v/r_a bands.
+QC_FLOOR = 0.5
+QC_FLOOR_CLASSES = (1, 2, 3)  # PACE_KINDS indices: slower, equal, faster -- any class that overtakes near a car
+
 # STAY-IN-THE-CORRIDOR shaping. Measured (tools trajectory read, 2026-09-25): the racing policy is
 # NOT over-speeding -- 0% of ticks exceed the grip-limit speed; it peaks at ~20-40% of the cornering
 # limit, so it has grip to spare. The 45-57% off-track is LATERAL corridor-departure under aggressive
