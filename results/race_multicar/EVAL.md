@@ -56,6 +56,32 @@ going off → **MLP is now the cleaner arm (100/67/83)**, flipping the pre-fix r
 contact = hitting another car — different severities, a deployment judgement call. Likely tunable: a GENTLER
 predicted keep-out (smaller radius / shorter cap) should cut the over-avoidance without losing the contact win.
 
+## Update 2 — gentler predicted keep-out (the fix that works)
+The hard keep-out ran LTC off-track (over-avoidance). Softened it: a PREDICTED opponent gets radius
+`PRED_R=0.28` (vs detected 0.36) and a shorter `BLIND_CAP=1.0 s`; detected opponents unchanged. Retrained
++ re-evaled. Three-way (clean/contact/off %), `multi_contact_threeway.png`:
+
+| arm | N | pre-fix | hard-fix | **gentler** |
+|---|---|---|---|---|
+| ltc | 1 | 100/0/0 | 50/0/**50** | 83/17/0 |
+| ltc | 2 | 67/17/17 | 100/0/0 | 83/17/0 |
+| ltc | 3 | 67/33/0 | 50/0/**50** | 67/33/0 |
+| mlp | 1 | 50/33/17 | 100/0/0 | **100/0/0** |
+| mlp | 2 | 83/0/17 | 67/17/17 | **100/0/0** |
+| mlp | 3 | 33/50/17 | 83/17/0 | **83/17/0** |
+
+**Gentler is the right setting: off-track is 0 % everywhere (both arms), and the hard-fix's LTC off-track
+spikes are gone.** **MLP-gentler is the deploy net** — clean 100/100/83, contact 0/0/17, off 0/0/0: one
+net, 1/2/3 cars, near-zero failures. LTC-gentler is good (clean 83/83/67, off 0) but keeps residual contact
+(17/17/33) — the softer keep-out avoids less, so some occluded contact returns for LTC.
+
+**Paper point:** pre-fix, LTC won (its memory implicitly handled occlusion); adding the explicit predicted
+keep-out (a principled CONSTRAINT-side occlusion fix) let the SIMPLER MLP match/beat it — the constraint
+commoditises what the memory was doing. [[offtrack-corridor-buyoff-and-equal-overtake-trilemma]]
+
+Reproduce the three-way: `python3 tools/multi_contact_threeway.py` (reads the three snapshots:
+multi_eval_rows_prefix / _fix / (current)).
+
 ## Reproduce (deterministic/seeded)
     # full eval (needs the trained nets in nets/):
     ACADOS_SOURCE_DIR=... PYTHONPATH=...:. python3 experiments/race_multi_eval.py --jobs 4 --steps 2600
