@@ -47,6 +47,11 @@ Figure: `multi_contact_threeway.{png,pdf}` + `tikz/multi_contact_threeway_clean.
    from 58 % → **67 % (n=6) / 75 % (n=12)**, contact halved, N=1,2 held at 100 %, and the band fires 92 % of an
    N=3 run under occlusion. (Retraining *with* the band only added bimodal instability — the eval-time rule is
    the keeper; `qc_crowd_lo/hi/n` in race_mode.py, LTC-only like the floor.)
+6. **PRED_R swing — negative** (`ltc_n3/ltc_n3_predr_sweep`): tried a bigger predicted keep-out (0.28 → 0.32,
+   0.36) for the remaining occluded-car clips. It does NOT help — off-track rises (8 → 17 %) without cutting
+   contact (the over-avoidance trilemma, same as the hard keep-out). **PRED_R 0.28 is optimal**, and LTC N=3
+   settles at **75 % (n=12)**. The residual ~17 % contact + 8 % off is the genuine hard floor of the 3-occluded-
+   car case; closing it further would need better occluded-opponent *estimation*, not a bigger keep-out.
 
 ## Paper findings
 - **One online net generalises across opponent count** (1/2/3, no retrain) under a realistic occluding sensor.
