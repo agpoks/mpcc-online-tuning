@@ -57,10 +57,11 @@ def _slip(P):
 
 
 def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=FOV_DEG, occlude=True, log=False,
-             keepout="gentle"):
+             keepout="gentle", pred_r=None):
     """One deterministic race vs a fixed field of N opponents (explore off). Returns (metrics, log|None).
     keepout: 'gentle' = the bounded predicted keep-out (opponent_keepouts); 'none' = drop blind opponents
-    (the pre-fix behaviour) -- for the net-vs-constraint ablation."""
+    (the pre-fix behaviour) -- for the net-vs-constraint ablation. pred_r overrides the predicted keep-out
+    radius (None = race_mode.PRED_R 0.28); a bigger one adds clearance from occluded cars (the N=3 clip)."""
     from mpcc_tuning.plant_scuderia import ScuderiaPlant
     from mpcc_tuning.opponents import ObstacleTracker, RacelineOpponent
     track = Track.icra_t2_smooth(); half = np.radians(fov_deg) / 2.0; L = track.length
@@ -99,7 +100,7 @@ def run_eval(m, ego_pace, pol, N, phys, detect_range=18.0, steps=2600, fov_deg=F
         if keepout == "none":
             m.set_obstacles([o.keepout() for o in vis])          # pre-fix: drop blind opponents
         else:
-            m.set_obstacles(opponent_keepouts(track, opps, det, last_s, blind_age, [trk[i].speed for i in range(N)]))
+            m.set_obstacles(opponent_keepouts(track, opps, det, last_s, blind_age, [trk[i].speed for i in range(N)], r=pred_r))
         fi = opps.index(fastest) if fastest is not None else None
         gr = ((gaps[fi] - prev_g[fi]) / 0.05) if (fi is not None and prev_g[fi] is not None) else (0.0 if first else None)
         feat = race_features(track, state5, ([fastest] if fastest else []),
