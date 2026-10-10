@@ -10,15 +10,16 @@ acados C-codegen + dynamic drift model + STD plant, `Track.icra_t2_smooth`. Solv
 Fixed eval (explore off), 6 runs/cell (3 physical fields × 2 seeds). Deploy config = **LTC with the q_c floor**
 (LTC-specific) + **MLP without it** (gentler keep-out). Figure: `multi_flexibility.{png,pdf}` + `tikz/`.
 
-| net | N=1 | N=2 | N=3 | mean clean | contact (1/2/3) | off-track |
-|---|---|---|---|---|---|---|
-| **LTC** q_c-floor | 100 % | 100 % | 50 %* | 83 % | 0 / 0 / 50 % | 0 everywhere |
-| **MLP** gentler | 100 % | 100 % | 83 % | 94 % | 0 / 0 / 17 % | 0 everywhere |
+| net | N=1 | N=2 | N=3 | contact (1/2/3) | off-track |
+|---|---|---|---|---|---|
+| **LTC** q_c-floor **+ crowd band** | 100 % | 100 % | 67 %* | 0 / 0 / 33 % | 0 everywhere |
+| **MLP** gentler | 100 % | 100 % | 83 % | 0 / 0 / 17 % | 0 everywhere |
 
-*LTC N=3 is 58 % at n=12 (the n=6 cell is coarse; see the N=3 chase). Passes scale with the field
-(LTC 1.0/2.5/2.8, MLP 1.2/2.5/3.7). **Both arms solve 1–2 car races (100 % clean, 0 contact, 0 off).** MLP
-handles the 3-car crowd better; LTC is right behind and the safer line-holder. **MLP-gentler is the deploy net;
-LTC-q_c-floor is the memory arm.**
+*LTC N=3 is **75 % at the firmer n=12** (the n=6 cell is coarse). Passes scale with the field (LTC 1.0/2.5/3.3,
+MLP 1.2/2.5/3.7). **Both arms solve 1–2 car races (100 % clean, 0 contact, 0 off).** The crowd band lifted
+LTC N=3 from 58 % → 67–75 % (see step 5) by opening the line when the field is REMEMBERED; MLP still edges
+N=3 (83 %). Both are deploy-viable; MLP is the slightly stronger single net, LTC is the memory arm that now
+races the crowd nearly as cleanly.
 
 ## The development arc (pre-fix → gentler → q_c-floor)
 
@@ -35,19 +36,28 @@ Figure: `multi_contact_threeway.{png,pdf}` + `tikz/multi_contact_threeway_clean.
    Fix = a class-conditioned **q_c floor (0.5)**, same mechanism as the k_v/r_a bands. q_c settles at a healthy
    **~0.75** (wider-but-safe: not glued/3.74, not collapsed/0.22). **Recovers LTC N=1,2 → 100 %. LTC-specific —
    it breaks MLP (MLP never collapsed q_c), so it is applied to LTC only.**
-4. **N=3 crowding** (`ltc_n3/ltc_n3_contact`): the remaining LTC N=3 contact (33 % at n=12) is NOT a q_c
-   collapse (q_c healthy 0.80, line controlled) — it is a close-quarters crowding clip of an *occluded* car
-   (PRED_R 0.28 + prediction error slips inside the 0.24 contact radius). Inherent hard case; MLP clears it
-   better. Candidate tune (not done): PRED_R 0.28→0.32 for more crowd clearance (risks a little off-track).
+4. **N=3 crowding diagnosed** (`ltc_n3/`): LTC N=3 (58 %) < MLP (83 %). The q_c floor does NOT bind at N=3
+   (the net holds q_c ~0.85, 0 % at the floor) — it keeps a *N=1-tight* line through a 3-car crowd and clips an
+   occluded car, because q_c was conditioned on the rival's PACE, not the CROWD. The *looser* gentler net was
+   better at N=3 (67 %). So: a conditioning gap, not the floor, not a memory failure.
+5. **Crowd-aware q_c** (`ltc_n3/ltc_n3_crowd_test`): make q_c **crowd-aware via memory** — track the number of
+   DISTINCT opponents seen this race (persists through occlusion, where LTC memory pays off) and, once a full
+   3-car field is REMEMBERED, open the line to a WEAVING band (q_c → 0.30–0.45, overriding the floor); 1–2 cars
+   keep the tight line. A **deploy-time rule on the stable floor-net (no retrain needed)**: it lifts LTC N=3
+   from 58 % → **67 % (n=6) / 75 % (n=12)**, contact halved, N=1,2 held at 100 %, and the band fires 92 % of an
+   N=3 run under occlusion. (Retraining *with* the band only added bimodal instability — the eval-time rule is
+   the keeper; `qc_crowd_lo/hi/n` in race_mode.py, LTC-only like the floor.)
 
 ## Paper findings
 - **One online net generalises across opponent count** (1/2/3, no retrain) under a realistic occluding sensor.
-- **Memory vs constraint:** pre-fix, LTC won (its memory implicitly handled occlusion); adding an explicit
-  predicted keep-out (constraint-side occlusion handling) let the **simpler MLP match/beat it** — the constraint
-  commoditises what the memory did. A clean result either way.
-- **Deterministic eval flips training-noise reads** — always evaluate the keep-best net explore-off.
-- **The line-collapse failure and its deterministic-floor fix** (q_c floor), consistent with the proven
-  k_v/r_a bands; and that such a floor is weight- and policy-specific (helps LTC, harms MLP).
+- **Memory vs constraint:** pre-fix, LTC won (its memory implicitly handled occlusion); an explicit predicted
+  keep-out (constraint-side) then let the simpler MLP match it — the constraint commoditises what the memory
+  did. **But the crowd case re-separates them:** the fix that recovers LTC's 3-car racing is explicitly
+  **memory-driven** (remember the crowd through occlusion → open the line), which a memoryless policy cannot do.
+- **Deterministic eval flips training-noise reads** — always evaluate the keep-best net explore-off; and some
+  fixes (the crowd band) are best as **deploy-time rules**, not retrains (retraining destabilised N=2).
+- **The line-collapse failure and its deterministic-floor fix** (q_c floor), weight/policy-specific (helps LTC,
+  harms MLP); and the **conditioning axis matters** — q_c keyed on pace vs crowd is the N=3 story.
 
 ## Artifacts (all reproducible)
 - **Data:** `multi_eval_rows_{prefix,gentler,qcfloor,fix,deploy}.npz` (per-stage scalars) · `multi_eval.csv` /
