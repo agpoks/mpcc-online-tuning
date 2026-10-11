@@ -33,19 +33,30 @@ ARMS = ("ltc", "mlp")
 SEEDS = (0, 1)
 
 
-def _load_pol(arm, seed, net_dir=None, qc_floor_on=True, crowd_on=True):
+def _load_pol(arm, seed, net_dir=None, qc_floor_on=True, crowd_on=True, loose=False, ra_floor_on=False):
     from mpcc_tuning.ltc import LTCCell, MLPCell, WeightPolicy
     f = (Path(net_dir) if net_dir else OUT / "nets") / f"race_{arm}_{seed}.npz"
     if not f.exists():
         return None
     d = np.load(f); Cell = LTCCell if arm == "ltc" else MLPCell
     cell = Cell(N_RACE_FEATURES_MULTI, int(d["n_hidden"]), seed=seed); ncls = int(d["D_class"].shape[0])
-    qcf, qcc = (QC_FLOOR, QC_FLOOR_CLASSES) if qc_floor_on else (0.0, ())  # off for nets trained WITHOUT the floor
-    qlo, qhi = (QC_CROWD_LO, QC_CROWD_HI) if (qc_floor_on and crowd_on) else (0.0, 0.0)  # crowd band: LTC + opt-in
-    pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls, delta_log=float(d["delta_log"]),
-                       kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES, kv_ceil=KV_CEIL,
-                       kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES,
-                       qc_floor=qcf, qc_floor_classes=qcc, qc_crowd_lo=qlo, qc_crowd_hi=qhi, qc_crowd_n=QC_CROWD_N)
+    if loose:
+        # ADAPTIVE net: the q_c/k_v physical rails are baked into the SAVED box (d["lo"]/d["hi"]). NO
+        # behavioural band clamps -- reconstruct the exact training-time policy so the eval sees the learned
+        # weights. ra_floor_on=True for the PHYSICAL-rails net: r_a's corridor floor is a band (it cannot be
+        # a box edge, since r_a's baseline sits below it), so it must be re-applied here.
+        rfl, rflc = (RA_FLOOR, tuple(range(ncls))) if ra_floor_on else (0.0, ())
+        pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls,
+                           delta_log=float(d["delta_log"]), kv_floor=0.0, kv_floor_classes=(), kv_ceil=0.0,
+                           kv_ceil_classes=(), ra_floor=rfl, ra_floor_classes=rflc, qc_floor=0.0,
+                           qc_floor_classes=(), qc_crowd_lo=0.0, qc_crowd_hi=0.0, qc_crowd_n=QC_CROWD_N)
+    else:
+        qcf, qcc = (QC_FLOOR, QC_FLOOR_CLASSES) if qc_floor_on else (0.0, ())  # off for nets trained WITHOUT the floor
+        qlo, qhi = (QC_CROWD_LO, QC_CROWD_HI) if (qc_floor_on and crowd_on) else (0.0, 0.0)  # crowd band: LTC + opt-in
+        pol = WeightPolicy(cell, d["th0"], d["lo"], d["hi"], seed=seed, n_classes=ncls, delta_log=float(d["delta_log"]),
+                           kv_floor=KV_FLOOR, kv_floor_classes=KV_FLOOR_CLASSES, kv_ceil=KV_CEIL,
+                           kv_ceil_classes=KV_CEIL_CLASSES, ra_floor=RA_FLOOR, ra_floor_classes=RA_FLOOR_CLASSES,
+                           qc_floor=qcf, qc_floor_classes=qcc, qc_crowd_lo=qlo, qc_crowd_hi=qhi, qc_crowd_n=QC_CROWD_N)
     pol.G[...] = d["G"]; pol.cell.p[...] = d["cell_p"]; pol.D_class[...] = d["D_class"]
     return pol
 
