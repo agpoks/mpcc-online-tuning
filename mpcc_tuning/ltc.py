@@ -723,9 +723,18 @@ class PolicyTuner:
                  clock: str = "time", ds_ref: float = 0.10,
                  critic: str = "mpcc", alpha_c: float = 1e-2,
                  alpha_delta: float | None = None,
-                 trust_region_delta: float | None = None):
+                 trust_region_delta: float | None = None,
+                 skip_unused_q: bool = False):
         from mpcc_tuning.model import ACCEL_MAX, STEER_MAX
         self.mpcc, self.pol = mpcc, policy
+        # DEPLOY speed knob (default off = unchanged training behaviour): with critic="return" the actor
+        # uses the theta-noise score function and the critic uses the feature value w.x, so action_value's
+        # Q is NEVER read -- yet act() runs a SECOND acados solve to compute it (because exploration moves
+        # the applied action off pi(s), defeating the Q(s,pi)=V short-circuit). That doubles per-tick solve
+        # time (p95 ~60ms > the 50ms/20Hz budget) for a value the return update discards. When this is set
+        # AND critic="return", act() skips that solve. The applied (explored) action and the RNG stream are
+        # unchanged, so learning is byte-identical -- only the wasted solve is removed.
+        self.skip_unused_q = bool(skip_unused_q)
         self.gamma, self.lam, self.alpha = gamma, lam, alpha
         # WHAT ADVANCES THE LEARNER: the controller's clock, or the car's
         # progress along the track.
@@ -998,7 +1007,10 @@ class PolicyTuner:
         self._last_feat = feat
         out = self.mpcc.value(state5, theta)
         action = self._explore(out["u0"])
-        q = self.mpcc.action_value(state5, theta, action, v_out=out)
+        if self.skip_unused_q and self.critic == "return":
+            q = None                     # the return critic never reads Q(s,a); skip the 2nd acados solve
+        else:
+            q = self.mpcc.action_value(state5, theta, action, v_out=out)
         self._pending = (state5, theta, q)
         self._last_theta = theta
         return theta, action

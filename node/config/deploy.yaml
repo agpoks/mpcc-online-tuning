@@ -1,0 +1,40 @@
+# MPCC-online deploy params (car21 / scuderia_gym_ros interface). Load via the launch file.
+mpcc_online:
+  ros__parameters:
+    # --- what to drive ---
+    mode: "qualify"                        # "qualify" (solo fastest lap) | "race" (vs a field of opponents)
+    net_path: "results/race_multicar/qualification/best_policy_icra_t2_smooth_2_time_return.npz"  # qualifier net
+    # race net instead: "results/race_multicar/nets_physical2/race_ltc_0.npz"
+    track_name: "icra_t2_smooth"          # baseline key (horizon, q_vref). (The small map uses raceline_npz below.)
+    raceline_npz: "mpcc_tuning/tracks/try5_ev7_corridor.npz"   # the real small map; "" = icra_t2_smooth
+    kv_launch: 0.50                        # cap grip for the first lap (cold-start guard)
+
+    # --- ONLINE LEARNING (qualify mode only; the method) ---
+    learn: true                            # true -> PolicyTuner RTRL + per-lap keep-best adapts on the car
+    # alpha/explore/theta_explore use the trained defaults (2e-3 / 0.05 / 0.15). The controller sets
+    # skip_unused_q=True so the return critic's redundant 2nd acados solve is skipped (p95 60->~48ms).
+
+    # --- RACE mode (frozen physical2 net vs a field) ---
+    ego_pace: 1.77                         # ego solo pace [m/s], for opponent relative-pace classification
+    pred_r: 0.0                            # >0 overrides the blind-opponent keep-out radius (default PRED_R=0.28)
+    obstacle_topic: ""                     # race: opponents in. sim: "/perception/tracks"; real car: "/obstacles"
+    obstacle_msg: "tracked"                # "tracked" (sim TrackedObstacleArray) | "bcl" (real ObstacleList) | "list" (sim ObstacleList)
+
+    # --- ROS interface (car21 / scuderia_gym_ros) ---
+    pose_source: "pose_topic"              # "pose_topic" (real car: particle filter) or "odom" (sim bridge odom pose)
+    pose_topic: "/pf/viz/inferred_pose"    # PoseStamped (laser frame -> CoG via pose_forward_offset)
+    odom_topic: "/odom"                    # Odometry: BODY-frame twist (vx, vy, yaw-rate)
+    pose_forward_offset: 0.0678            # m, laser ahead of CoG (car21)
+    enable_topic: "/mpcc/enable"           # Bool drive+learn latch
+    drive_topic: "/ackermann_cmd"          # AckermannDriveStamped out
+    mux_cmd_topic: "/ackermann_cmd"        # mux echo (authority detection)
+    longitudinal_field: "acceleration"     # "acceleration" (real car ackermann_to_vesc) | "speed" (sim ctrl_mode='accl')
+
+    # --- safety / limits ---
+    rate_hz: 20.0
+    pose_timeout_s: 0.5                     # stale pose -> publish nothing (mux stops the car)
+    fail_decay: 0.7                        # failed solve -> accel *= 0.7, hold steering
+    accel_min: -8.0
+    accel_max: 8.0
+    steer_max: 0.42                        # rad (~24 deg; set to the car's delta_max)
+    autostart: false                       # bench only: bypass the enable latch
