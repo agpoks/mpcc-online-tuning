@@ -5,8 +5,10 @@ mpcc_online:
     mode: "qualify"                        # "qualify" (solo fastest lap) | "race" (vs a field of opponents)
     net_path: "results/race_multicar/qualification/best_policy_icra_t2_smooth_2_time_return.npz"  # qualifier net
     # race net instead: "results/race_multicar/nets_physical2/race_ltc_0.npz"
-    track_name: "icra_t2_smooth"          # baseline key (horizon, q_vref). (The small map uses raceline_npz below.)
-    raceline_npz: "mpcc_tuning/tracks/try5_ev7_corridor.npz"   # the real small map; "" = icra_t2_smooth
+    track_name: "icra_t2_smooth"          # baseline key (horizon, q_vref). (The deploy map uses raceline_npz below.)
+    raceline_npz: "mpcc_tuning/tracks/lab_test_ev8_corridor.npz"   # deploy map: optimized line + boundaries from
+    #   LABTESTEV8_v080_raceline_WORLD.csv (built by tools/build_corridor_from_world_csv.py). "" = icra_t2_smooth.
+    #   try5_ev7_corridor.npz is the other real map (map-extracted centreline, no optimized line).
     kv_launch: 0.50                        # cap grip for the first lap (cold-start guard)
 
     # --- ONLINE LEARNING (qualify mode only; the method) ---
