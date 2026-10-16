@@ -118,7 +118,7 @@ def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
      clock, keep_best, kb_tol, eval_eps, critic, theta_explore, explore,
-     validate, init_policy, plant_mu, mu_local, geom_narrow, two_layer) = job
+     validate, init_policy, plant_mu, mu_local, geom_narrow, two_layer, out_dir) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -320,7 +320,7 @@ def one(job):
     # here, keep-best found a fluke rather than a policy.
     evals = []
     if learn and keep_best and eval_eps > 0 and tu.best_score is not None:
-        _, G, cp = tu._best
+        _, G, cp, _dcl = tu._best   # _best grew a 4th field (D_class residual, None for the solo policy)
         pol.G[...] = G; pol.cell.p[...] = cp
         with tu.frozen():
             for k in range(eval_eps):
@@ -335,7 +335,9 @@ def one(job):
         # (the cell's fixed structure depends on it). Measured without them:
         # the 2.99-lap network re-driven with the default box and seed 0 gave
         # 1.31x / 2.89 / 0.81x -- on its own start it left the track.
-        np.savez(str(OUT / f"best_policy_{track_name}_{seed}_{clock}_{critic}"
+        _outdir = Path(out_dir) if out_dir else OUT
+        _outdir.mkdir(parents=True, exist_ok=True)
+        np.savez(str(_outdir / f"best_policy_{track_name}_{seed}_{clock}_{critic}"
                      f"{'_val' if validate else ''}.npz"),
                  G=G, cell_p=cp, best_laps=tu.best_score, critic=critic,
                  clock=clock, box=box, factor=factor, validated=validate,
@@ -420,13 +422,18 @@ def main(argv=None):
     ap.add_argument("--out", default="online_from_baseline.json",
                     help="filename under results/; use a distinct name when "
                          "running a subset of conditions to be merged later")
+    ap.add_argument("--out-dir", default=None,
+                    help="directory for the best_policy_*.npz nets (default: results/). Point a "
+                         "DEPLOY-MAP run here (e.g. results/deploy_labtest) so its nets never clobber "
+                         "the committed icra qualifier nets, which share the same filename because the "
+                         "baseline key (track_name) stays icra_t2_smooth.")
     a = ap.parse_args(argv)
 
     ap_conds = a.conditions
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
              a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
              a.eval_episodes, a.critic, a.theta_explore, a.explore,
-             a.validate, a.init_policy, a.plant_mu, a.mu_local, a.geom_narrow, a.two_layer)
+             a.validate, a.init_policy, a.plant_mu, a.mu_local, a.geom_narrow, a.two_layer, a.out_dir)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
