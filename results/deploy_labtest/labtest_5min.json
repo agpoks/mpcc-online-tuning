@@ -1,0 +1,60 @@
+[
+  {
+    "laps": 16.972,
+    "clean": true,
+    "crash_step": null,
+    "full_laps": 16,
+    "lap_times": [
+      19.05,
+      15.9,
+      17.3,
+      17.45,
+      18.85,
+      15.9,
+      17.35,
+      18.7,
+      18.4,
+      18.65,
+      18.8,
+      19.1,
+      19.35,
+      18.5,
+      16.75,
+      14.6
+    ],
+    "fastest_lap": 14.6,
+    "mean_speed": 1.529,
+    "solve_p50": 40.6,
+    "solve_p95": 48.4,
+    "steps_run": 6000,
+    "name": "seed2 (deploy default)",
+    "net": "best_policy_icra_t2_smooth_2_time_return.npz"
+  },
+  {
+    "laps": 12.829,
+    "clean": true,
+    "crash_step": null,
+    "full_laps": 12,
+    "lap_times": [
+      22.55,
+      23.9,
+      21.8,
+      21.8,
+      23.25,
+      22.1,
+      20.2,
+      24.15,
+      23.95,
+      23.65,
+      22.6,
+      24.15
+    ],
+    "fastest_lap": 20.2,
+    "mean_speed": 1.159,
+    "solve_p50": 40.6,
+    "solve_p95": 48.2,
+    "steps_run": 6000,
+    "name": "icra-frozen (fallback)",
+    "net": "best_policy_icra_t2_smooth_2_time_return.npz"
+  }
+]

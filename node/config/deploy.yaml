@@ -3,7 +3,12 @@ mpcc_online:
   ros__parameters:
     # --- what to drive ---
     mode: "qualify"                        # "qualify" (solo fastest lap) | "race" (vs a field of opponents)
-    net_path: "results/race_multicar/qualification/best_policy_icra_t2_smooth_2_time_return.npz"  # qualifier net
+    # QUALIFIER net. On the lab_test_ev8 deploy corridor, two options (both clean from s=0, same corridor):
+    #   FASTER (trained ON lab_test, ~1.55 m/s, 3.45 laps/1200 steps) -- default:
+    net_path: "results/deploy_labtest/best_policy_icra_t2_smooth_2_time_return.npz"
+    #   CONSERVATIVE first-run (frozen icra qualifier, ~1.18 m/s, transfers cleanly):
+    #     "results/race_multicar/qualification/best_policy_icra_t2_smooth_2_time_return.npz"
+    #   other trained seed (clean, ~1.13 m/s): "results/deploy_labtest/best_policy_icra_t2_smooth_0_time_return.npz"
     # race net instead: "results/race_multicar/nets_physical2/race_ltc_0.npz"
     track_name: "icra_t2_smooth"          # baseline key (horizon, q_vref). (The deploy map uses raceline_npz below.)
     raceline_npz: "mpcc_tuning/tracks/lab_test_ev8_corridor.npz"   # deploy map: optimized line + boundaries from

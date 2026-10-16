@@ -118,7 +118,8 @@ def one(job):
     """One (track, seed, condition) run. Builds its own solver."""
     (track_name, seed, cond, episodes, steps, alpha, grad, box, factor,
      clock, keep_best, kb_tol, eval_eps, critic, theta_explore, explore,
-     validate, init_policy, plant_mu, mu_local, geom_narrow, two_layer, out_dir) = job
+     validate, init_policy, plant_mu, mu_local, geom_narrow, two_layer, out_dir,
+     start_s0) = job
     learn = cond == "tuner"
     from mpcc_tuning.acados_mpcc import AcadosMPCC
     from mpcc_tuning.ltc import (LTCCell, N_FEATURES, THETA_HI, THETA_LO,
@@ -234,8 +235,10 @@ def one(job):
                          seed=seed, trust_region=0.01, clock=clock,
                          critic=critic, theta_explore=theta_explore)
 
-    # physical perturbation per seed -- see the module docstring
-    s0 = (seed % 4) * (t.length / 4.0)
+    # physical perturbation per seed -- see the module docstring. --start-s0 pins every seed to one start
+    # (e.g. 0 = the start line) for a DEPLOY map whose figure-8 crossover / tight apexes make a mid-track
+    # spawn infeasible; seed diversity then comes from v0 alone (a real qualifier always starts at s=0).
+    s0 = float(start_s0) if start_s0 is not None else (seed % 4) * (t.length / 4.0)
     v0 = 1.0 + 0.1 * (seed % 3)
     if learn and keep_best and init_seeded:
         with tu.frozen():
@@ -427,13 +430,18 @@ def main(argv=None):
                          "DEPLOY-MAP run here (e.g. results/deploy_labtest) so its nets never clobber "
                          "the committed icra qualifier nets, which share the same filename because the "
                          "baseline key (track_name) stays icra_t2_smooth.")
+    ap.add_argument("--start-s0", type=float, default=None,
+                    help="pin every seed's start to this arc length [m] instead of the per-seed s0 spread. "
+                         "Use 0 for a deploy map whose figure-8 crossover / tight apexes make a mid-track "
+                         "spawn infeasible (seed diversity then comes from v0; a qualifier starts at s=0).")
     a = ap.parse_args(argv)
 
     ap_conds = a.conditions
     jobs = [(t, s, c, a.episodes, a.steps or B.start(t).steps, a.alpha, a.grad,
              a.box, a.factor, a.clock, a.keep_best, a.keep_best_tol,
              a.eval_episodes, a.critic, a.theta_explore, a.explore,
-             a.validate, a.init_policy, a.plant_mu, a.mu_local, a.geom_narrow, a.two_layer, a.out_dir)
+             a.validate, a.init_policy, a.plant_mu, a.mu_local, a.geom_narrow, a.two_layer, a.out_dir,
+             a.start_s0)
             for t in a.tracks for s in range(a.seeds) for c in ap_conds]
     res, traces, eval_res = {}, {}, {}
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
