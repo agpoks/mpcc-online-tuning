@@ -57,15 +57,23 @@ frozen validation lap, the banked net is robust. Driven frozen, seed 2 → **6.8
 clean, seed 1 = 0.22 **off** — the usual seed variance; pick the best seed). This safe ratchet, not the raw
 exploration, is the paper's method. Plotted from `qual_labtest.json`, no re-run (`learning_curve.py`).
 
-### (b) Continuous on-car, direct banking — adaptation/safety layer (`online_learn.{png,pdf,npz}`)
+### (b) Continuous on-car, direct banking — adaptation/safety layer (`online_learn.{png,pdf,npz}`, `online_reward.{png,pdf}`)
 Start from the transferred frozen icra net and let the tuner adapt live for 6000 steps (no mid-drive frozen
 validation possible on the car). Result: **14.3 laps, 38/6000 off-ticks — every one recovered by keep-best
-revert**, 0 terminal crash. But it banks on the *learning* lap (with dither), so its "13.8 s" bank is an
-**exploration fluke**: driven frozen (`drive_online_learned.py`) that banked net gives only 2.5 laps / 20.25 s
-and goes off — **`online_learned_net.npz` is NOT deployable**, kept only to document the failure mode. This mode
-is valuable as an on-car **adaptation + safety layer** (it drove through 38 excursions without crashing), not as
-a source of a net to freeze. This is exactly why path (a) — frozen-validated banking — is what yields a
-deployable net.
+revert**, 0 terminal crash. The figure now shows the **keep-best incumbent ("take the best net") on the lap-time
+curve** (gold ★ = the one bank; green line = the net held in place) and the **online reward** the learner sees
+(`reward = progress − 5·off`, controller._control_learn:175, logged on the drive: 38 −5 spikes, total return
+196.1).
+
+**Why the lap times go faster then slower again:** keep-best banks exactly **once** — a 13.8 s lap — then
+**reverts every later lap**. That 13.8 s was a lucky-dither lap: the net's *true* pace is ~20 s
+(`drive_online_learned.py` frozen = 20.25 s), so every subsequent lap runs ~19–23 s, is slower than the banked
+13.8 s, and gets reverted (weights snap back to the banked net). The oscillation is the exploration dither; the
+~20 s floor is the net's real capability. So direct-banking the dithered learning lap **banks noise** —
+**`online_learned_net.npz` is NOT deployable** (2.5 laps/20.25 s + off when frozen), kept only to document the
+failure mode. This mode is valuable as an on-car **adaptation + safety layer** (it drove through 38 excursions
+without crashing), not as a source of a net to freeze. This is exactly why path (a) — frozen-validated
+banking — is what yields a deployable net.
 
 **Takeaway:** online learning here is MPCC weight adaptation made safe by keep-best. Deploy loop =
 online-learn → keep-best banks the fastest *frozen-validated* clean net → freeze → deploy. Continuous learning
@@ -101,6 +109,7 @@ python3 results/deploy_labtest/harden_5min.py
 # (d) online-learning demonstration
 python3 results/deploy_labtest/learning_curve.py          # keep-best ratchet (from qual_labtest.json)
 python3 results/deploy_labtest/online_learn_demo.py 6000  # live continuous learning drive
-python3 results/deploy_labtest/replot_online.py           # clean replot of the live drive
+python3 results/deploy_labtest/relog_reward.py            # re-drive (deterministic) logging authoritative reward/off -> augments npz
+python3 results/deploy_labtest/reward_and_keepbest_replot.py  # figure: keep-best incumbent + online reward
 python3 results/deploy_labtest/drive_online_learned.py    # shows the banked net is a fluke when frozen
 ```
