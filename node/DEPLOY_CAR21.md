@@ -61,22 +61,71 @@ Reuse scale-mpcc's `car21.launch.py` infra; it starts everything from `car21_ws`
 | `raceline_manager` | `/raceline_name` live raceline switching | **NOT needed** (we bake the raceline) |
 | `supreme_mpc`, `raceline_slicer/switcher`, FTG backup | — | **NOT started** (never run a 2nd `/drive` publisher) |
 
+## Install on car21 (copy → build → one-time)
+
+**1. What to copy.** The node reuses the repo's `mpcc_tuning` + acados directly; there are **no sim deps**
+(`scuderia_gym_jax` is sim-only and NOT needed — verified: the deploy controller imports without it). Copy the
+**whole repo** to the car, e.g. `~/mpcc-online-tuning`, including the trained net:
+```bash
+rsync -a <devbox>:~/github/mpcc-online-tuning/ car21:~/mpcc-online-tuning/
+#   minimum set if trimming: node/  mpcc_tuning/ (incl. tracks/*_corridor.npz)  experiments/ (race mode)
+#   results/deploy_labtest/best_policy_icra_t2_smooth_2_time_return.npz   node/config/deploy.yaml
+```
+
+**2. acados on the car.** car21 (NUC, x86) reuses a prebuilt acados tree or builds it once (docs.acados.org).
+Note its root as `ACADOS_SOURCE_DIR` (it has `lib/` and `interfaces/acados_template`). A C compiler (`cc`) must
+be present — the node codegens + compiles its solver on the first launch (~90 s, once).
+
+**3. Make it a ROS2 package.** `node/` **is** the `ament_python` package `mpcc_online`. Symlink it into a colcon
+workspace and build (pure-python install, ~2 s):
+```bash
+ln -s ~/mpcc-online-tuning/node ~/car21_ws/src/mpcc_online          # or copy
+cd ~/car21_ws && colcon build --packages-select mpcc_online && source install/setup.bash
+```
+colcon installs only the `mpcc_online` package + its `config/` + `launch/`; `mpcc_tuning`/acados stay in the repo
+and are put on `PYTHONPATH` by the launch file (next section) via `repo_dir` / `acados_dir`.
+
 ## Bring-up (once the two ⚠️ items are resolved)
 
+For **lab_test_ev8** the corridor is already built (`mpcc_tuning/tracks/lab_test_ev8_corridor.npz`) and
+`deploy.yaml` already points `raceline_npz` at it with the faster trained net as `net_path`. For a different map,
+first convert its raceline:
+`python3 tools/build_corridor_from_world_csv.py <raceline_WORLD.csv> <out_corridor.npz> --margin 0.05 --map <car_map.yaml>`.
+
 ```bash
-# 0. prep: convert the car's raceline CSV -> our corridor npz (like try5_ev7_corridor.npz), set
-#    deploy.yaml raceline_npz + track_name to it; set drive_topic:/drive, longitudinal per item 2.
 # 1. car stack (unchanged from car21_ws) WITHOUT scale-mpcc's controller:
-ros2 launch racecar_launches localization.launch.py map:=<car map>     # + joystick/mux/VESC/PF
+ros2 launch racecar_launches localization.launch.py map:=<car map>     # joystick/mux/VESC/PF/map_server
 # (or copy scale-mpcc car21.launch.py and replace its `mpcc` Node with `mpcc_online`)
-# 2. our controller (acados env + this repo on PYTHONPATH, same as the dev box):
-ros2 run mpcc_online mpcc_online --ros-args --params-file node/config/deploy.yaml \
-  -p drive_topic:=/drive -p pose_source:=pose_topic -p autostart:=false \
-  -p raceline_npz:=<car raceline corridor npz> -p kv_launch:=0.50
-# 3. set the initial pose in Foxglove/RViz on the start line, then HOLD the deadman (button 4)
-#    and latch us on:
+
+# 2. our controller via the launch file — it sets acados + the repo on PYTHONPATH for the node process,
+#    so prefer this over a bare `ros2 run` (which needs you to export PYTHONPATH/LD_LIBRARY_PATH yourself):
+ros2 launch mpcc_online mpcc_online.launch.py \
+  repo_dir:=$HOME/mpcc-online-tuning acados_dir:=$ACADOS_SOURCE_DIR \
+  drive_topic:=/drive \
+  raceline_npz:=mpcc_tuning/tracks/lab_test_ev8_corridor.npz \
+  learn:=true
+#   first launch compiles the acados solver (~90 s) then prints "mpcc_online up."
+#   (repo_dir/acados_dir also read from env MPCC_REPO / ACADOS_SOURCE_DIR if you omit them. Longitudinal units
+#    and kv_launch come from deploy.yaml — edit it per ⚠️ item 2.)
+
+# 3. open node/foxglove/mpcc_online_layout.json, set the initial pose on the start line (s=0),
+#    then HOLD the deadman (button 4) and latch us on:
 ros2 topic pub -r 2 /mpcc/enable std_msgs/Bool "{data: true}"
 ```
+
+**Live monitoring:** import `node/foxglove/mpcc_online_layout.json` in Foxglove Studio (its README lists the
+topics). The node publishes `/mpcc_online/debug/{vx,solve_ms,lateral,s,accel,off}` and the online-tuned weights
+`/mpcc_online/debug/{k_v,q_c,q_l,r_a}` as `std_msgs/Float32` — watch `solve_ms` (< 50 ms), `off`, and the
+weights adapting when `learn:true`.
+
+**Sim-verified (2026-10-17, `~/sim_ws` ROS2 Humble, lab_test_ev8 map).** The exact deploy config — the seed-2
+net + `lab_test_ev8_corridor.npz`, spawned at the corridor s=0 — ran end-to-end through this node: builds,
+comes up, subscribes `/odom`, publishes `/ackermann_cmd` (gym steps) and all debug topics including the new
+weight topics (`k_v≈0.49` cold-start-capped, `q_c≈4.8`, `q_l≈209`, `r_a≈6.4`), **0 % off-track**. Pace was
+NOT assessed in that run: the dev box was under a heavy parallel workload, so solve was ~131 ms p50 → the node
+ran at ~7 Hz (not 20) and the car only crawled. Idle, this config solves ~40 ms (the icra ROS test hit p95
+40 ms, 20 Hz, 2+ clean laps); re-run on an idle box, or on the car's own CPU, to judge pace. This confirms the
+integration; **the solve-time-on-onboard-compute checklist item below is the one that still gates real driving.**
 
 ## Deploy-safety checklist
 

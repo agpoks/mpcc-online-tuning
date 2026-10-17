@@ -110,6 +110,25 @@ A convenience launch that starts the sim + node together is `node/launch/sim_ws_
 verified manual recipe above is the ground truth for its params (it still needs `map_img_ext`/spawn/node-name
 added if you adapt it).
 
+### Deploy map (lab_test_ev8) — the real qualifier config
+To test the actual deploy config instead of the icra rig, load the lab_test map and the lab_test corridor, and
+spawn at its s=0 (computed from the corridor: `sx=-2.787 sy=0.012 stheta=-2.868`):
+```bash
+# term 1 (gym):  MAP=/home/poxx/github/mpcc-online-tuning/lab_test_ev8   (lab_test_ev8.pgm/.yaml, res 0.035)
+ros2 run scuderia_gym_ros gym_bridge --ros-args -r __node:=bridge \
+  --params-file ~/sim_ws/src/scuderia_gym_ros/config/sim.yaml \
+  -p model:=std -p ctrl_mode:=accl -p integrator:=rk4 -p tire_model:=full_pacejka_combined \
+  -p map_path:=$MAP -p map_img_ext:=.pgm -p sx:=-2.787 -p sy:=0.012 -p stheta:=-2.868 -p num_agent:=1
+# term 2 (node): the deploy.yaml defaults already point at the seed-2 net + lab_test corridor
+ros2 run mpcc_online mpcc_online --ros-args --params-file node/config/deploy.yaml \
+  -p mode:=qualify -p pose_source:=odom -p longitudinal_field:=speed \
+  -p raceline_npz:=mpcc_tuning/tracks/lab_test_ev8_corridor.npz -p track_name:=icra_t2_smooth
+```
+`node/ros_monitor.py <seconds>` subscribes `/odom` + the debug topics and reports laps (projected), off-track
+fraction, solve percentiles, and confirms the weight topics publish. **Verified 2026-10-17:** builds, 0 %
+off-track, all debug + weight topics publish; pace needs an idle box (a loaded box → solve ≫ 50 ms → <20 Hz
+→ crawl). See `DEPLOY_CAR21.md` → "Sim-verified".
+
 ## Stage 2 — racing (vs a field)
 
 Add opponents + perception, and switch the node to race mode:
