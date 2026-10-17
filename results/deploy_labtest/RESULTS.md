@@ -44,6 +44,34 @@ Seed 2 is ~33% more laps and a 28%-faster fastest lap, clean over the full 5 min
 **`node/config/deploy.yaml` defaults `net_path` to seed 2**, with the frozen icra net documented as the
 conservative first-run fallback.
 
+## 4. Online learning on lab_test — the keep-best mechanism (what produced seed 2)
+"Fixed" and "online-learned" are the **same net in two phases**, not two methods. Seed 2 *is* an
+online-learned net: `online_from_baseline.py` runs the on-car `PolicyTuner` (RTRL + per-lap keep-best) live on
+the fixed corridor; the deploy phase just freezes the banked result. Two ways to run the learner, and the
+difference is the whole point:
+
+### (a) Episodic + frozen-validated — how seed 2 was made (`online_learning_curve.{png,pdf}`)
+Over 15 episodes, keep-best **ratchets the banked net up monotonically** (2.19 → 2.33 → 2.49 → 2.50 laps)
+and **reverts every off-track (×) and slower (·) attempt**. Because an attempt is banked only when it passes a
+frozen validation lap, the banked net is robust. Driven frozen, seed 2 → **6.87 clean laps** (seed 0 = 4.53
+clean, seed 1 = 0.22 **off** — the usual seed variance; pick the best seed). This safe ratchet, not the raw
+exploration, is the paper's method. Plotted from `qual_labtest.json`, no re-run (`learning_curve.py`).
+
+### (b) Continuous on-car, direct banking — adaptation/safety layer (`online_learn.{png,pdf,npz}`)
+Start from the transferred frozen icra net and let the tuner adapt live for 6000 steps (no mid-drive frozen
+validation possible on the car). Result: **14.3 laps, 38/6000 off-ticks — every one recovered by keep-best
+revert**, 0 terminal crash. But it banks on the *learning* lap (with dither), so its "13.8 s" bank is an
+**exploration fluke**: driven frozen (`drive_online_learned.py`) that banked net gives only 2.5 laps / 20.25 s
+and goes off — **`online_learned_net.npz` is NOT deployable**, kept only to document the failure mode. This mode
+is valuable as an on-car **adaptation + safety layer** (it drove through 38 excursions without crashing), not as
+a source of a net to freeze. This is exactly why path (a) — frozen-validated banking — is what yields a
+deployable net.
+
+**Takeaway:** online learning here is MPCC weight adaptation made safe by keep-best. Deploy loop =
+online-learn → keep-best banks the fastest *frozen-validated* clean net → freeze → deploy. Continuous learning
+stays on as the safety/adaptation layer. `scripts: learning_curve.py, online_learn_demo.py, replot_online.py,
+drive_online_learned.py`.
+
 ## Deploy nets
 - **`best_policy_icra_t2_smooth_2_time_return.npz`** — deploy default (faster, clean).
 - `best_policy_icra_t2_smooth_0_time_return.npz` — clean, slower (backup).
@@ -69,4 +97,10 @@ python3 experiments/online_from_baseline.py --tracks icra_t2_smooth \
 # (c) head-to-head + 5-min hardening (scripts saved here)
 python3 results/deploy_labtest/compare_nets.py  <scratch_out_dir>
 python3 results/deploy_labtest/harden_5min.py
+
+# (d) online-learning demonstration
+python3 results/deploy_labtest/learning_curve.py          # keep-best ratchet (from qual_labtest.json)
+python3 results/deploy_labtest/online_learn_demo.py 6000  # live continuous learning drive
+python3 results/deploy_labtest/replot_online.py           # clean replot of the live drive
+python3 results/deploy_labtest/drive_online_learned.py    # shows the banked net is a fluke when frozen
 ```
