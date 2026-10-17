@@ -1,28 +1,65 @@
 {
   "$schema": "https://foxglove.dev/schemas/studio-layout.json",
   "configById": {
-    "3D!m3d": {
-      "followMode": "follow-pose",
-      "scene": {
-        "enableStats": false
-      },
-      "transforms": {},
-      "topics": {
-        "/pf/viz/inferred_pose": {
-          "visible": true
-        },
-        "/odom": {
-          "visible": true
-        },
-        "/ackermann_cmd": {
-          "visible": false
+    "Parameters!params": {
+      "foxglovePanelTitle": "Live tuning \u2014 expand /mpcc_online here (net_path, kv_launch, mode, learn)"
+    },
+    "Publish!enable_on": {
+      "topicName": "/mpcc/enable",
+      "datatype": "std_msgs/msg/Bool",
+      "buttonText": "Enable MPCC (hold deadman!)",
+      "buttonColor": "#1b5e20",
+      "advancedView": false,
+      "value": "{\"data\": true}",
+      "foxglovePanelTitle": "Latch MPCC ON"
+    },
+    "Publish!enable_off": {
+      "topicName": "/mpcc/enable",
+      "datatype": "std_msgs/msg/Bool",
+      "buttonText": "Disable MPCC",
+      "buttonColor": "#b71c1c",
+      "advancedView": false,
+      "value": "{\"data\": false}",
+      "foxglovePanelTitle": "Latch MPCC OFF"
+    },
+    "Publish!clear_trail": {
+      "topicName": "/mpcc_online/viz/trail_clear",
+      "datatype": "std_msgs/msg/Empty",
+      "buttonText": "Clear car trail",
+      "buttonColor": "#f5774d",
+      "advancedView": false,
+      "value": "{}",
+      "foxglovePanelTitle": "Clear trail"
+    },
+    "3D!view": {
+      "layers": {
+        "grid-map": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "Grid",
+          "instanceId": "grid-map",
+          "layerId": "foxglove.Grid",
+          "size": 80,
+          "divisions": 80,
+          "lineWidth": 1,
+          "color": "#248eff5c",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
         }
       },
-      "layers": {},
       "cameraState": {
-        "distance": 18.0,
-        "perspective": true,
-        "phi": 35.0,
+        "perspective": false,
+        "distance": 16.0,
+        "phi": 0.0,
         "thetaOffset": 0.0,
         "targetOffset": [
           0,
@@ -40,259 +77,606 @@
           0,
           1
         ],
-        "fovy": 45.0,
+        "fovy": 45,
         "near": 0.5,
-        "far": 5000.0
+        "far": 5000,
+        "logDepth": false
+      },
+      "followMode": "follow-position",
+      "scene": {
+        "enableStats": false,
+        "meshUpAxis": "z_up",
+        "transforms": {
+          "showLabel": false,
+          "axisSize": 0.2
+        }
+      },
+      "transforms": {},
+      "topics": {
+        "/map": {
+          "visible": true,
+          "alpha": 1,
+          "drawBehind": true,
+          "frameLocked": true,
+          "colorMode": "custom"
+        },
+        "/scan": {
+          "visible": true,
+          "colorField": "range",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "pointSize": 3,
+          "decayTime": 0
+        },
+        "/pf/viz/inferred_pose": {
+          "visible": true,
+          "color": "#4CAF50",
+          "size": 0.25,
+          "type": "arrow"
+        },
+        "/mpcc_online/viz/car_trail": {
+          "visible": true
+        }
       },
       "publish": {
         "type": "point",
         "poseTopic": "/move_base_simple/goal"
       },
-      "imageMode": {},
-      "synchronize": false
+      "foxglovePanelTitle": "Track / pose / trail"
     },
-    "Gauge!g_speed": {
-      "title": "Speed vx [m/s]",
-      "path": "/odom.twist.twist.linear.x",
-      "minValue": 0,
-      "maxValue": 8,
-      "colorMode": "colormap",
-      "colorMap": "turbo",
-      "reverse": false
-    },
-    "Gauge!g_solve": {
-      "title": "Solve time [ms]  (20 Hz budget = 50)",
-      "path": "/mpcc_online/debug/solve_ms.data",
-      "minValue": 0,
-      "maxValue": 80,
-      "colorMode": "colormap",
-      "colorMap": "turbo",
-      "reverse": true
-    },
-    "Gauge!g_off": {
-      "title": "Off-track flag (0=in / 1=OUT)",
-      "path": "/mpcc_online/debug/off.data",
-      "minValue": 0,
-      "maxValue": 1,
-      "colorMode": "colormap",
-      "colorMap": "red-yellow-green",
-      "reverse": true
-    },
-    "Plot!w": {
-      "title": "Online-tuned MPCC weights (adapting live)",
-      "paths": [
-        {
-          "value": "/mpcc_online/debug/k_v.data",
-          "label": "k_v",
-          "color": "#2196F3",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mpcc_online/debug/q_c.data",
-          "label": "q_c",
-          "color": "#FF9800",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mpcc_online/debug/q_l.data",
-          "label": "q_l",
-          "color": "#4CAF50",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mpcc_online/debug/r_a.data",
-          "label": "r_a",
-          "color": "#F44336",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+    "3D!obs": {
+      "layers": {
+        "grid-map": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "Grid",
+          "instanceId": "grid-map",
+          "layerId": "foxglove.Grid",
+          "size": 80,
+          "divisions": 80,
+          "lineWidth": 1,
+          "color": "#248eff5c",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
         }
-      ],
-      "xAxisVal": "timestamp",
-      "isSynced": true,
-      "showLegend": true,
-      "showPlotValuesInLegend": true,
-      "legendDisplay": "floating",
-      "followingViewWidth": 30
+      },
+      "cameraState": {
+        "perspective": false,
+        "distance": 16.0,
+        "phi": 0.0,
+        "thetaOffset": 0.0,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000,
+        "logDepth": false
+      },
+      "followMode": "follow-position",
+      "scene": {
+        "enableStats": false,
+        "meshUpAxis": "z_up",
+        "transforms": {
+          "showLabel": false,
+          "axisSize": 0.2
+        }
+      },
+      "transforms": {},
+      "topics": {
+        "/map": {
+          "visible": true,
+          "alpha": 1,
+          "drawBehind": true,
+          "frameLocked": true,
+          "colorMode": "custom"
+        },
+        "/scan": {
+          "visible": true,
+          "colorField": "range",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "pointSize": 3,
+          "decayTime": 0
+        },
+        "/pf/viz/inferred_pose": {
+          "visible": true,
+          "color": "#4CAF50",
+          "size": 0.25,
+          "type": "arrow"
+        },
+        "/mpcc_online/viz/car_trail": {
+          "visible": true
+        },
+        "/obstacles": {
+          "visible": true
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal"
+      },
+      "foxglovePanelTitle": "Obstacles"
     },
-    "Plot!pace": {
-      "title": "Pace \u2014 vx actual vs drive command",
+    "Plot!speed": {
       "paths": [
         {
+          "timestampMethod": "receiveTime",
           "value": "/odom.twist.twist.linear.x",
-          "label": "vx actual [m/s]",
+          "enabled": true,
           "color": "#4CAF50",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "label": "vx (odom)"
         },
         {
-          "value": "/mpcc_online/debug/accel.data",
-          "label": "accel cmd [m/s^2]",
-          "color": "#9C27B0",
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/vx.data",
           "enabled": true,
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/ackermann_cmd.drive.steering_angle",
-          "label": "steer cmd [rad]",
-          "color": "#FFC107",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "color": "#81C784",
+          "label": "vx (node)"
         }
       ],
-      "xAxisVal": "timestamp",
-      "isSynced": true,
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
       "showLegend": true,
-      "showPlotValuesInLegend": true,
       "legendDisplay": "floating",
-      "followingViewWidth": 30
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "foxglovePanelTitle": "Speed \u2014 vx [m/s]",
+      "minYValue": 0,
+      "maxYValue": 8
+    },
+    "Plot!drive": {
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/accel.data",
+          "enabled": true,
+          "color": "#9C27B0",
+          "label": "accel cmd [m/s^2]"
+        },
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/ackermann_cmd.drive.steering_angle",
+          "enabled": true,
+          "color": "#FFC107",
+          "label": "steer cmd [rad]"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "foxglovePanelTitle": "Drive command \u2014 accel & steer"
+    },
+    "Plot!weights": {
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/k_v.data",
+          "enabled": true,
+          "color": "#2196F3",
+          "label": "k_v"
+        },
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/q_c.data",
+          "enabled": true,
+          "color": "#FF9800",
+          "label": "q_c"
+        },
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/q_l.data",
+          "enabled": true,
+          "color": "#4CAF50",
+          "label": "q_l"
+        },
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/r_a.data",
+          "enabled": true,
+          "color": "#F44336",
+          "label": "r_a"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "foxglovePanelTitle": "Online-tuned MPCC weights (adapting live)"
     },
     "Plot!track": {
-      "title": "Tracking \u2014 lateral error & off-track",
       "paths": [
         {
+          "timestampMethod": "receiveTime",
           "value": "/mpcc_online/debug/lateral.data",
-          "label": "lateral error [m]",
-          "color": "#00BCD4",
           "enabled": true,
-          "timestampMethod": "receiveTime"
+          "color": "#00BCD4",
+          "label": "lateral error [m]"
+        },
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/off.data",
+          "enabled": true,
+          "color": "#F44336",
+          "label": "off-track (0/1)"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "foxglovePanelTitle": "Tracking \u2014 lateral error & off-track"
+    },
+    "Plot!beta": {
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/diag/beta_angle.data",
+          "enabled": true,
+          "color": "#E91E63",
+          "label": "beta"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "foxglovePanelTitle": "Sideslip beta [rad]  (atan2(vy, vx))"
+    },
+    "Plot!solve": {
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/solve_ms.data",
+          "enabled": true,
+          "color": "#FF5722",
+          "label": "solve_ms"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "foxglovePanelTitle": "Solve time [ms]  (20 Hz budget = 50)",
+      "minYValue": 0,
+      "maxYValue": 80
+    },
+    "Plot!prog": {
+      "paths": [
+        {
+          "timestampMethod": "receiveTime",
+          "value": "/mpcc_online/debug/s.data",
+          "enabled": true,
+          "color": "#3F51B5",
+          "label": "s [m]"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240,
+      "foxglovePanelTitle": "Progress s [m] along the corridor"
+    },
+    "Indicator!off": {
+      "path": "/mpcc_online/debug/off.data",
+      "style": "background",
+      "fallbackColor": "#1b5e20",
+      "fallbackLabel": "in corridor",
+      "rules": [
+        {
+          "operator": ">",
+          "rawValue": "0.5",
+          "color": "#b71c1c",
+          "label": "OFF-TRACK"
+        },
+        {
+          "operator": "<",
+          "rawValue": "0.5",
+          "color": "#1b5e20",
+          "label": "in corridor"
+        }
+      ],
+      "foxglovePanelTitle": "Off-track status (1 = OUT of corridor)",
+      "fontSize": 20
+    },
+    "Indicator!lateral": {
+      "path": "/mpcc_online/debug/lateral.data",
+      "style": "background",
+      "fallbackColor": "#1b5e20",
+      "fallbackLabel": "Tracking",
+      "rules": [
+        {
+          "operator": ">",
+          "rawValue": "0.3",
+          "color": "#b71c1c",
+          "label": "Diverged (e > +0.3)"
+        },
+        {
+          "operator": "<",
+          "rawValue": "-0.3",
+          "color": "#b71c1c",
+          "label": "Diverged (e < -0.3)"
+        },
+        {
+          "operator": ">",
+          "rawValue": "0.1",
+          "color": "#f9a825",
+          "label": "Warning (e > +0.1)"
+        },
+        {
+          "operator": "<",
+          "rawValue": "-0.1",
+          "color": "#f9a825",
+          "label": "Warning (e < -0.1)"
+        }
+      ],
+      "foxglovePanelTitle": "Lateral-error status",
+      "fontSize": 20
+    },
+    "Indicator!solve": {
+      "path": "/mpcc_online/debug/solve_ms.data",
+      "style": "background",
+      "fallbackColor": "#424242",
+      "fallbackLabel": "\u2014",
+      "rules": [
+        {
+          "operator": ">",
+          "rawValue": "50",
+          "color": "#b71c1c",
+          "label": "OVER 20 Hz budget"
+        },
+        {
+          "operator": ">",
+          "rawValue": "40",
+          "color": "#f9a825",
+          "label": "near budget"
+        },
+        {
+          "operator": "<",
+          "rawValue": "40",
+          "color": "#1b5e20",
+          "label": "OK"
+        }
+      ],
+      "foxglovePanelTitle": "Solve-time budget (ms)",
+      "fontSize": 20
+    },
+    "StateTransitions!switch": {
+      "paths": [
+        {
+          "value": "/mpcc/enable.data",
+          "timestampMethod": "receiveTime",
+          "label": "MPCC enabled"
         },
         {
           "value": "/mpcc_online/debug/off.data",
-          "label": "off-track (0/1)",
-          "color": "#F44336",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "timestampMethod": "receiveTime",
+          "label": "off-track"
         }
       ],
-      "xAxisVal": "timestamp",
       "isSynced": true,
-      "showLegend": true,
-      "showPlotValuesInLegend": true,
-      "legendDisplay": "floating",
-      "followingViewWidth": 30
+      "foxglovePanelTitle": "Enable / off-track timeline",
+      "showPoints": false
     },
-    "Plot!solve": {
-      "title": "Solve time [ms] (keep < 50 for 20 Hz)",
-      "paths": [
-        {
-          "value": "/mpcc_online/debug/solve_ms.data",
-          "label": "solve_ms",
-          "color": "#FF5722",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+    "Log!log": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "nameFilter": {
+        "mpcc_online": {
+          "visible": true
         }
-      ],
-      "xAxisVal": "timestamp",
-      "isSynced": true,
-      "showLegend": true,
-      "showPlotValuesInLegend": true,
-      "legendDisplay": "floating",
-      "followingViewWidth": 30
-    },
-    "Plot!prog": {
-      "title": "Progress s [m] along the corridor",
-      "paths": [
-        {
-          "value": "/mpcc_online/debug/s.data",
-          "label": "s [m]",
-          "color": "#3F51B5",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "xAxisVal": "timestamp",
-      "isSynced": true,
-      "showLegend": true,
-      "showPlotValuesInLegend": true,
-      "legendDisplay": "floating",
-      "followingViewWidth": 30
+      },
+      "topicToRender": "/rosout",
+      "foxglovePanelTitle": "mpcc_online log (rosout, INFO+)"
     },
     "RawMessages!drive": {
-      "topicPath": "/ackermann_cmd"
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "topicPath": "/ackermann_cmd",
+      "fontSize": 13,
+      "foxglovePanelTitle": "Drive cmd",
+      "defaultExpanded": false
     },
     "RawMessages!enable": {
-      "topicPath": "/mpcc/enable"
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "topicPath": "/mpcc/enable.data",
+      "fontSize": 13,
+      "foxglovePanelTitle": "Enable latch",
+      "defaultExpanded": false
     },
-    "Tab!main": {
-      "activeTabIdx": 0,
+    "RawMessages!obstacles": {
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "topicPath": "/obstacles",
+      "fontSize": 13,
+      "foxglovePanelTitle": "Obstacles (race)",
+      "defaultExpanded": true
+    },
+    "Tab!root": {
+      "activeTabIdx": 1,
       "tabs": [
         {
-          "title": "MPCC Online",
+          "title": "Setup",
           "layout": {
             "direction": "row",
-            "first": "3D!m3d",
-            "splitPercentage": 44,
+            "first": "Parameters!params",
             "second": {
               "direction": "column",
-              "splitPercentage": 26,
-              "first": {
-                "direction": "row",
-                "first": "Gauge!g_speed",
-                "splitPercentage": 34,
-                "second": {
-                  "direction": "row",
-                  "first": "Gauge!g_solve",
-                  "second": "Gauge!g_off",
-                  "splitPercentage": 50
-                }
-              },
+              "first": "Publish!enable_on",
               "second": {
                 "direction": "column",
-                "first": "Plot!w",
-                "second": "Plot!pace",
-                "splitPercentage": 58
-              }
-            }
+                "first": "Publish!enable_off",
+                "second": "Publish!clear_trail",
+                "splitPercentage": 50
+              },
+              "splitPercentage": 34
+            },
+            "splitPercentage": 60
+          }
+        },
+        {
+          "title": "Overview",
+          "layout": {
+            "direction": "column",
+            "first": {
+              "direction": "row",
+              "first": "3D!view",
+              "second": {
+                "direction": "column",
+                "first": "Plot!speed",
+                "second": "Plot!drive",
+                "splitPercentage": 50
+              },
+              "splitPercentage": 48
+            },
+            "second": {
+              "direction": "row",
+              "first": "Indicator!off",
+              "second": {
+                "direction": "row",
+                "first": "Indicator!lateral",
+                "second": "RawMessages!drive",
+                "splitPercentage": 55
+              },
+              "splitPercentage": 34
+            },
+            "splitPercentage": 66
           }
         },
         {
           "title": "Online tuning",
           "layout": {
             "direction": "row",
-            "splitPercentage": 58,
-            "first": "Plot!w",
+            "first": {
+              "direction": "column",
+              "first": "Plot!weights",
+              "second": "Plot!prog",
+              "splitPercentage": 64
+            },
             "second": {
               "direction": "column",
-              "splitPercentage": 50,
               "first": "Plot!track",
               "second": {
                 "direction": "column",
                 "first": "Plot!solve",
-                "second": "RawMessages!enable",
-                "splitPercentage": 60
-              }
-            }
+                "second": "Plot!beta",
+                "splitPercentage": 50
+              },
+              "splitPercentage": 50
+            },
+            "splitPercentage": 58
           }
         },
         {
-          "title": "Control",
+          "title": "Health",
           "layout": {
-            "direction": "row",
-            "splitPercentage": 60,
+            "direction": "column",
             "first": {
-              "direction": "column",
-              "first": "Plot!pace",
-              "second": "Plot!prog",
-              "splitPercentage": 55
+              "direction": "row",
+              "first": "Plot!solve",
+              "second": "StateTransitions!switch",
+              "splitPercentage": 50
             },
             "second": {
-              "direction": "column",
-              "first": "RawMessages!drive",
-              "second": "Gauge!g_off",
+              "direction": "row",
+              "first": "Log!log",
+              "second": {
+                "direction": "column",
+                "first": "RawMessages!drive",
+                "second": "RawMessages!enable",
+                "splitPercentage": 50
+              },
               "splitPercentage": 55
-            }
+            },
+            "splitPercentage": 38
+          }
+        },
+        {
+          "title": "Obstacles (race)",
+          "layout": {
+            "direction": "row",
+            "first": "3D!obs",
+            "second": "RawMessages!obstacles",
+            "splitPercentage": 68
           }
         }
       ]
     }
   },
   "globalVariables": {},
-  "userNodes": {},
+  "userNodes": {
+    "mpcc_car_trail": {
+      "name": "Car Trajectory Trail",
+      "sourceCode": "import { Input, Message } from \"./types\";\n\n// Accumulates the car's pose history into a single LINE_STRIP marker, with\n// distance-based sampling, a bounded buffer, a rate-limited emit and an\n// oldest->newest alpha fade. A Publish of std_msgs/Empty on the clear topic\n// drops the buffer and emits a DELETE marker.\n// Vendored from the car21 race dashboard (\"Car Trajectory Trail\"), rebound.\n\ntype Marker = Message<\"visualization_msgs/msg/Marker\">;\ntype Point = { x: number; y: number; z: number };\ntype Color = { r: number; g: number; b: number; a: number };\ntype ClearEvent = { topic: \"/mpcc_online/viz/trail_clear\"; message: Record<string, never> };\n\nexport const inputs = [\"/pf/viz/inferred_pose\", \"/mpcc_online/viz/trail_clear\"];\nexport const output = \"/mpcc_online/viz/car_trail\";\n\nconst MAX_POINTS = 1500;\nconst MIN_DIST_M = 0.10;\nconst MIN_DIST_SQ = MIN_DIST_M * MIN_DIST_M;\nconst EMIT_PERIOD_NS = 200_000_000; // 5 Hz\n\nlet points: Point[] = [];\nlet last_emit_ns = 0;\n\nfunction emptyDeleteMarker(): Marker {\n  return {\n    header: { stamp: { sec: 0, nsec: 0 }, frame_id: \"map\" },\n    ns: \"mpcc_online\", id: 1001, type: 4, action: 2,\n    pose: { position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } },\n    scale: { x: 0, y: 0, z: 0 }, color: { r: 0, g: 0, b: 0, a: 0 },\n    lifetime: { sec: 0, nsec: 0 }, frame_locked: false, points: [], colors: [],\n    texture_resource: \"\",\n    texture: { header: { stamp: { sec: 0, nsec: 0 }, frame_id: \"\" }, format: \"\",\n               data: new Uint8Array(0) as Uint8Array<ArrayBufferLike> },\n    uv_coordinates: [], text: \"\", mesh_resource: \"\",\n    mesh_file: { filename: \"\", data: new Uint8Array(0) as Uint8Array<ArrayBufferLike> },\n    mesh_use_embedded_materials: false,\n  };\n}\n\nexport default function script(event: Input<\"/pf/viz/inferred_pose\"> | ClearEvent): Marker | undefined {\n  if (event.topic === \"/mpcc_online/viz/trail_clear\") {\n    points = [];\n    last_emit_ns = 0;\n    return emptyDeleteMarker();\n  }\n\n  const p = event.message.pose.position;\n  const last = points.length > 0 ? points[points.length - 1] : null;\n  if (last === null) {\n    points.push({ x: p.x, y: p.y, z: 0.15 });\n  } else {\n    const dx = p.x - last.x;\n    const dy = p.y - last.y;\n    if (dx * dx + dy * dy >= MIN_DIST_SQ) {\n      points.push({ x: p.x, y: p.y, z: 0.15 });\n      if (points.length > MAX_POINTS) { points.shift(); }\n    }\n  }\n\n  const stamp = event.message.header.stamp;\n  const now_ns = stamp.sec * 1_000_000_000 + stamp.nsec;\n  if (now_ns - last_emit_ns < EMIT_PERIOD_NS) { return undefined; }\n  last_emit_ns = now_ns;\n\n  const n = points.length;\n  const denom = Math.max(1, n - 1);\n  const colors: Color[] = points.map((_, i) => {\n    const t = i / denom;\n    return { r: 1.0, g: 0.5, b: 0.0, a: 0.15 + 0.85 * t };\n  });\n\n  return {\n    header: { stamp: event.message.header.stamp, frame_id: \"map\" },\n    ns: \"mpcc_online\", id: 1001, type: 4, action: 0,\n    pose: { position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } },\n    scale: { x: 0.04, y: 0, z: 0 }, color: { r: 1.0, g: 0.5, b: 0.0, a: 1.0 },\n    lifetime: { sec: 0, nsec: 0 }, frame_locked: false,\n    points: points.slice(), colors: colors, texture_resource: \"\",\n    texture: { header: { stamp: { sec: 0, nsec: 0 }, frame_id: \"\" }, format: \"\",\n               data: new Uint8Array(0) as Uint8Array<ArrayBufferLike> },\n    uv_coordinates: [], text: \"\", mesh_resource: \"\",\n    mesh_file: { filename: \"\", data: new Uint8Array(0) as Uint8Array<ArrayBufferLike> },\n    mesh_use_embedded_materials: false,\n  };\n}\n"
+    },
+    "mpcc_beta_angle": {
+      "name": "Sideslip Beta Angle (atan2(vy, vx))",
+      "sourceCode": "import { Input } from \"./types\";\n\n// Body-frame sideslip angle beta = atan2(vy, vx) from the odometry twist\n// (base_link frame: linear.x longitudinal, linear.y lateral). Held at 0\n// below MIN_SPEED where beta is meaningless. Valid only if the source\n// actually estimates vy (VESC wheel odometry has vy=0).\n// Vendored from the car21 race dashboard (\"Sideslip Beta Angle\"), rebound.\n\ntype Output = { data: number };\nconst MIN_SPEED = 0.3; // m/s\n\nexport const inputs = [\"/odom\"];\nexport const output = \"/mpcc_online/diag/beta_angle\";\n\nexport default function script(event: Input<\"/odom\">): Output {\n  const vx = Number(event.message.twist.twist.linear.x ?? 0);\n  const vy = Number(event.message.twist.twist.linear.y ?? 0);\n  if (Math.abs(vx) < MIN_SPEED) { return { data: 0 }; }\n  return { data: Math.atan2(vy, vx) };\n}\n"
+    }
+  },
   "playbackConfig": {
     "speed": 1.0
   },
-  "layout": "Tab!main"
+  "layout": {
+    "direction": "row",
+    "first": "Parameters!params",
+    "second": "Tab!root",
+    "splitPercentage": 16
+  }
 }
