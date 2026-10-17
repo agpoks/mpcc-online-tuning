@@ -80,6 +80,17 @@ online-learn → keep-best banks the fastest *frozen-validated* clean net → fr
 stays on as the safety/adaptation layer. `scripts: learning_curve.py, online_learn_demo.py, replot_online.py,
 drive_online_learned.py`.
 
+## 5. Paper figures (TikZ) + live monitoring (Foxglove)
+- **TikZ / pgfplots** (`tikz/`, `tools/paper_online_tikz.py`): standalone-compilable vector versions of the
+  online-learning panels for the paper — `online_keepbest_laptime.tex` (the one bank + incumbent + frozen
+  pace), `online_weights.tex` (+`.dat`, weights adapting), `online_reward.tex` (+`online_return.dat`, return
+  with off-track −5), `online_episodic_ratchet.tex` (the frozen-validated episodic ratchet that makes seed 2).
+  Same committed data as the PNGs; compile on Overleaf (pgfplots ≥ 1.16) or `\input` the tikzpicture.
+- **Foxglove layout** (`node/foxglove/mpcc_online_layout.json`, `make_layout.py`, `README.md`): live-monitoring
+  layout for the deploy node, same schema as `~/sim_ws/.../foxglove/`. 3 tabs (MPCC Online · Online tuning ·
+  Control) binding to the node's `/mpcc_online/debug/*` topics — including the **online-tuned weights**
+  `k_v/q_c/q_l/r_a`, which `ros2_node.py` now publishes as `Float32` so the adaptation is visible on the car.
+
 ## Deploy nets
 - **`best_policy_icra_t2_smooth_2_time_return.npz`** — deploy default (faster, clean).
 - `best_policy_icra_t2_smooth_0_time_return.npz` — clean, slower (backup).

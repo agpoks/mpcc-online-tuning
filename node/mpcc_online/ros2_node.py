@@ -19,6 +19,10 @@ from __future__ import annotations
 import math
 import numpy as np
 from .controller import OnlineMPCCController
+from mpcc_tuning.mpcc import WEIGHT_NAMES         # already imported by controller; for the weight debug topics
+
+# the headline online-tuned weights to publish for live monitoring (Foxglove) -- the paper's adaptation signal
+DEBUG_WEIGHTS = ("k_v", "q_c", "q_l", "r_a")
 
 
 def _yaw(q) -> float:
@@ -79,6 +83,10 @@ def main(args=None):
             self._pub = self.create_publisher(AckermannDriveStamped, g("drive_topic"), 10)
             self._dbg = {n: self.create_publisher(Float32, f"~/debug/{n}", 10)
                          for n in ("vx", "solve_ms", "lateral", "s", "accel", "off")}
+            # online-tuned weights (k_v/q_c/q_l/r_a): one Float32 each so Foxglove plots them adapting live
+            self._widx = [WEIGHT_NAMES.index(w) for w in DEBUG_WEIGHTS]
+            for w in DEBUG_WEIGHTS:
+                self._dbg[w] = self.create_publisher(Float32, f"~/debug/{w}", 10)
             self.create_timer(1.0 / float(g("rate_hz")), self._tick)
             self.get_logger().info("mpcc_online up.")
 
@@ -182,6 +190,10 @@ def main(args=None):
             for n, val in (("vx", self.vx), ("solve_ms", out["solve_ms"]), ("lateral", out["lateral"]),
                            ("s", out["s"]), ("accel", accel), ("off", float(out.get("off", 0)))):
                 self._dbg[n].publish(Float32(data=float(val)))
+            th = out.get("theta")                       # online-tuned weights (exp-space), WEIGHT_NAMES order
+            if th is not None and len(th) == len(WEIGHT_NAMES):
+                for w, i in zip(DEBUG_WEIGHTS, self._widx):
+                    self._dbg[w].publish(Float32(data=float(th[i])))
 
         def _publish(self, accel, steer):
             m = AckermannDriveStamped()
