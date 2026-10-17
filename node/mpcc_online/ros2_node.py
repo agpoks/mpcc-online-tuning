@@ -10,10 +10,15 @@ Interface (confirmed against scuderia_gym_ros + the real car21 stack):
       enable : /mpcc/enable (Bool) -- drive + learn latch
       mux    : /ackermann_cmd (AckermannDriveStamped) -- who owns the car
   OUT drive  : /ackermann_cmd (AckermannDriveStamped)
-               longitudinal_field='acceleration' -> drive.acceleration = a_x [m/s^2]  (real car ackermann_to_vesc)
-               longitudinal_field='speed'        -> drive.speed        = a_x [m/s^2]  (sim bridge ctrl_mode='accl')
+               longitudinal_field='acceleration' -> drive.acceleration = a_x [m/s^2], drive.speed = +inf  (real car)
+               longitudinal_field='speed'        -> drive.speed        = a_x [m/s^2]                      (sim ctrl_mode='accl')
                drive.steering_angle = delta [rad]
-Our MPCC outputs acceleration natively, so the car's ackermann_to_vesc (current = C_acc*a + C_v*v) handles it.
+Our MPCC outputs acceleration natively. On car21 (verified against the backup's ackermann_to_vesc.cpp +
+vesc.yaml, 2026-10-17) the `drive.speed` field SELECTS how `drive.acceleration` is read: speed=+inf -> accel
+is an a_x REFERENCE [m/s^2] tracked by a closed-loop PID against IMU a_x -> motor current; speed=-inf -> accel
+is raw current [A] (scale-mpcc's mode); finite speed -> erpm speed mode. We send speed=+inf, so the car's own
+on-track-tuned PID (accel kP35/kI60, brake kP5/kI20) converts our m/s^2 to current -- no accel->current map
+needed here. Requires the car's `use_current_control:=true` (its default). See node/DEPLOY_CAR21.md item 2.
 """
 from __future__ import annotations
 import math

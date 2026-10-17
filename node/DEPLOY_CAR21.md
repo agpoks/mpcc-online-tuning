@@ -1,24 +1,33 @@
 # Deploying `mpcc_online` on **car21** (F1TENTH / scale-mpcc hardware)
 
-How to run this node on the real car, what it needs, and the two things that **must** be resolved first.
-Grounded in the real `scale-mpcc/ros2/mpcc_node` (`car21.launch.py`, `node.py`) — the stack this node replaces.
+How to run this node on the real car, what it needs, and the one config step to get right before the first drive.
+Grounded in the real `scale-mpcc/ros2/mpcc_node` (`car21.launch.py`, `node.py`) and the car21 backup's drive chain
+(`ackermann_to_vesc.cpp`, `vesc.yaml`, `ackermann_mux.toml`) — the stack this node replaces.
 
 ---
 
-## ⚠️ MUST RESOLVE before the first drive (both are safety-relevant)
+## ✅ The two formerly-open safety items — RESOLVED against the car21 backup (2026-10-17)
 
-**1. Drive topic — publish to `/drive`, NOT `/ackermann_cmd`.**
-On car21 the chain is: controller → **`/drive`** → `ackermann_mux_ng` (joystick deadman, button 4) → **`/ackermann_cmd`** (mux output) → `ackermann_to_vesc` → VESC. scale-mpcc's node publishes `/drive` and only *listens* to `/ackermann_cmd` for authority. **Our `deploy.yaml` currently sets `drive_topic: /ackermann_cmd`** — on car21 that would publish straight to the mux *output*, bypassing the joystick deadman. For car21 set:
+Both were verified from `car7nuc_backup_2026-10-04/car21_ws` (`ackermann_to_vesc.cpp`, `f1tenth_stack/config/vesc.yaml`, `ackermann-mux-ng/ackermann_mux.toml`) and scale-mpcc's `node.py`. Item 1 is still a **config step you must set** (it has a wrong default); item 2 needs **no code change** — our output is already correct.
+
+**1. Drive topic — publish to `/drive`, NOT `/ackermann_cmd`.** *(confirmed; still a required setting)*
+The chain is: controller → **`/drive`** → `ackermann_mux_ng` → **`/ackermann_cmd`** (mux output) → `ackermann_to_vesc` → VESC. The mux toml confirms it: `[[input]] topic = "/drive", priority = 10` and the deadman is `autonomous_control = { button = 4 }`. scale-mpcc publishes `/drive` and only *listens* to `/ackermann_cmd` for authority. **Our launch/`deploy.yaml` default is `/ackermann_cmd`** (correct for the sim bridge, wrong for the car) — on car21 that would publish straight to the mux *output*, bypassing the deadman. For car21 set:
 ```
-drive_topic:   "/drive"          # mux autonomous input (deadman-gated)
+drive_topic:   "/drive"          # mux autonomous input (deadman-gated, button 4)
 mux_cmd_topic: "/ackermann_cmd"  # mux output, for authority/override tracking (already correct)
 ```
 
-**2. Longitudinal units — Amps vs m/s². THIS is why the car would crawl if left as-is.**
-scale-mpcc's node puts **motor current [A]** in `drive.acceleration` (`speed = -inf`): it computes the current itself (`current ≈ 8.938·a + 3.693·v`, plus a traction cap) and `ackermann_to_vesc` passes that field through as current. **Our node puts raw acceleration [m/s²] in `drive.acceleration`** (e.g. 0.15) — if car21's `ackermann_to_vesc` treats that field as **current**, 0.15 A ≈ a parked car. Before driving, confirm which `ackermann_to_vesc` expects, then either:
-- **(a)** keep our accel output and configure/confirm `ackermann_to_vesc` does `current = Ca·a + Cv·v` (then our output is correct), **or**
-- **(b)** add the `accel → current` map (the scale-mpcc formula + traction cap) to `ros2_node._publish` so we emit current like scale-mpcc does.
-This is the single highest-risk item — it is a units mismatch, not a tuning knob. (Resolving it needs `ackermann_to_vesc`'s config from `car21_ws` — in the backup.)
+**2. Longitudinal units — Amps vs m/s². RESOLVED: our m/s² output is already correct, no map needed.**
+car21's `ackermann_to_vesc` is **not stock** — `drive.speed` is a *sentinel that selects how `drive.acceleration` is read* (`ackermann_to_vesc.cpp`, `ackermannCmdCallback`):
+| `drive.speed` | `drive.acceleration` means | how it becomes current |
+|---|---|---|
+| `+inf` | **acceleration reference [m/s²]** | **closed-loop PID** tracks it against IMU `a_x` → current/brake |
+| `−inf` | **raw motor current [A]** | passed straight through (this is scale-mpcc's mode) |
+| finite | speed [m/s] | erpm = `speed_to_erpm_gain·v` (3014·v) |
+
+Our node emits `drive.acceleration = a_x [m/s²]` with **`drive.speed = +inf`** (`ros2_node._publish`) → it hits the **PID acceleration branch**, so the car's own controller converts our m/s² to current. The mux toml's manual-drive blocks show the same convention (`speed=inf` ↔ accel in m/s², `speed=−inf` ↔ accel in A). The PID is **on-track-tuned** (`vesc.yaml`, 2026-09-03: accel `kP 35 / kI 60`, brake `kP 5 / kI 20`; a config note records the brake PID is the one actually used since the MPC never commands above the 4.5 m/s² hysteresis threshold). So there is **no units mismatch and nothing to add** to `_publish` — the earlier "(b) add accel→current map" option is *not* needed. The only requirement is that the car keeps **`use_current_control:=true`** (the cpp default; not overridden in `vesc.yaml`). If that param is ever forced `false`, `speed=+inf` would fall into the erpm branch (`3014·inf`) → bad — so verify it stays true.
+
+> Note: scale-mpcc put **current [A]** in `drive.acceleration` with `speed=−inf` and computed the current itself (its `node.py`: *"speed −inf, acceleration = motor current [A]"*, plus a traction cap). We take the *other* supported branch — emit acceleration and let the car's PID make the current. Both are first-class modes of the same `ackermann_to_vesc`; ours is the branch whose gains the team tuned on-track.
 
 ---
 
@@ -105,8 +114,9 @@ ros2 launch mpcc_online mpcc_online.launch.py \
   raceline_npz:=mpcc_tuning/tracks/lab_test_ev8_corridor.npz \
   learn:=true
 #   first launch compiles the acados solver (~90 s) then prints "mpcc_online up."
-#   (repo_dir/acados_dir also read from env MPCC_REPO / ACADOS_SOURCE_DIR if you omit them. Longitudinal units
-#    and kv_launch come from deploy.yaml — edit it per ⚠️ item 2.)
+#   (repo_dir/acados_dir also read from env MPCC_REPO / ACADOS_SOURCE_DIR if you omit them. kv_launch + limits
+#    come from deploy.yaml. Longitudinal units need NO change — our m/s² output is the car's PID accel branch
+#    (item 2); just confirm the car's ackermann_to_vesc has use_current_control:=true, its default.)
 
 # 3. open node/foxglove/mpcc_online_layout.json, set the initial pose on the start line (s=0),
 #    then HOLD the deadman (button 4) and latch us on:
@@ -129,8 +139,8 @@ integration; **the solve-time-on-onboard-compute checklist item below is the one
 
 ## Deploy-safety checklist
 
-- [ ] **Drive topic = `/drive`** (deadman-gated), not `/ackermann_cmd`.
-- [ ] **Longitudinal units resolved** (A vs m/s²) — confirm `ackermann_to_vesc`, add accel→current if needed.
+- [ ] **Drive topic = `/drive`** (deadman-gated, button 4), not `/ackermann_cmd` — `drive_topic:=/drive`. *(default is wrong; confirmed against the mux toml)*
+- [x] **Longitudinal units** (A vs m/s²) — **resolved 2026-10-17**: our `speed=+inf`/accel-in-m/s² output is the car's PID acceleration branch; no accel→current map needed. Only keep `use_current_control:=true` (its default). *(see item 2 above)*
 - [ ] `/odom` twist is **body-frame** vₓ on car21 (else velocity feedback is wrong → bad speed tracking).
 - [ ] Raceline CSV → corridor npz, geometry matches the car's map; **start on s=0**.
 - [ ] `kv_launch ≤ 0.50` for the cold first lap (grip over-claim guard); `steer_max`/`accel_*` = car limits.
