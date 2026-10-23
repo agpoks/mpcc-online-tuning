@@ -31,20 +31,22 @@ plt.rcParams.update({"font.family": "serif",
                      "mathtext.fontset": "stix", "font.size": 9})
 
 
-def draw_track_bg(ax, b):
-    ax.set_facecolor("0.93")
-    ax.fill(np.r_[b["left_x"], b["right_x"][::-1]], np.r_[b["left_y"], b["right_y"][::-1]],
-            facecolor="white", edgecolor="none", zorder=0.5)
+def draw_track_bg(ax, b, scalebar=True):
+    """Clean paper style: white ground (no grey, no frame), thin grey boundaries, dashed raceline."""
     ax.plot(b["left_x"], b["left_y"], color="0.6", lw=0.8, zorder=1)
     ax.plot(b["right_x"], b["right_y"], color="0.6", lw=0.8, zorder=1)
     if "ref_x" in b.files:                      # the raceline = the equal-pace opponent's line
         ax.plot(b["ref_x"], b["ref_y"], color="0.45", lw=0.8, ls=(0, (4, 3)), zorder=1.5)
     xs = np.r_[b["left_x"], b["right_x"]]; ys = np.r_[b["left_y"], b["right_y"]]
     xlo, ylo = xs.min(), ys.min()
-    ax.plot([xlo, xlo + 1.0], [ylo - 0.4, ylo - 0.4], color="k", lw=2.2, zorder=6)
-    ax.text(xlo + 0.5, ylo - 0.3, "1 m", ha="center", va="bottom", fontsize=7, zorder=6)
-    ax.set_xlim(xs.min() - 0.6, xs.max() + 0.6); ax.set_ylim(ys.min() - 0.7, ys.max() + 0.6)
+    if scalebar:                                # 1 m bar in the bottom-left margin
+        y = ylo - 0.34
+        ax.plot([xlo, xlo + 1.0], [y, y], color="k", lw=1.6, zorder=6)
+        ax.text(xlo + 0.5, y - 0.05, "1 m", ha="center", va="top", fontsize=7, zorder=6)
+    ax.set_xlim(xs.min() - 0.3, xs.max() + 0.3); ax.set_ylim(ys.min() - 0.55, ys.max() + 0.25)
     ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
+    for s in ax.spines.values():
+        s.set_visible(False)
 
 
 def seen_blind_line(ax, X, Y, det, lw=2.4):
@@ -70,34 +72,37 @@ def main():
         else (lambda arm: OUT / f"sensor_equal_{arm}_{a.seed}.npz")
     srctag = f"net {a.net} start {a.start} (deployed frozen)" if use_sweep else f"seed {a.seed}"
     b = np.load(BND); W = int(a.window / DT)
-    fig, axs = plt.subplots(1, 2, figsize=(7.0, 3.9), constrained_layout=True)
-    for ax, arm, lab in ((axs[0], "ltc", "LTC (recurrent)"), (axs[1], "mlp", "MLP (memoryless)")):
+    # figsize width ~ the column it is placed in, so font 9 renders at 9 pt on the page
+    # (a 7-inch figure squeezed into a 3.4-inch column halves every font -- that was the bug).
+    fig, axs = plt.subplots(1, 2, figsize=(3.5, 2.5), constrained_layout=True)
+    for ax, arm, lab, letter in ((axs[0], "ltc", "LTC (recurrent)", "a"),
+                                 (axs[1], "mlp", "MLP (memoryless)", "b")):
         d = np.load(srcfile(arm), allow_pickle=True)
         EX, EY = np.asarray(d["EX"], float), np.asarray(d["EY"], float)
         OX, OY = np.asarray(d["OX"], float), np.asarray(d["OY"], float)
         det = np.asarray(d["DET"], float).astype(bool); G = np.asarray(d["GAP"], float)
         n = min(W, len(EX)); sl = slice(0, n)
-        draw_track_bg(ax, b)
-        seen_blind_line(ax, EX[sl], EY[sl], det[sl])
-        ax.plot(EX[0], EY[0], marker="o", mfc="none", mec="k", mew=1.4, ms=8, zorder=6)  # start
-        ax.plot(EX[n - 1], EY[n - 1], marker="o", mfc=SEEN, mec="k", mew=0.8, ms=9, zorder=7)  # ego now
-        ax.plot(OX[n - 1], OY[n - 1], marker="s", mfc="0.4", mec="k", mew=0.8, ms=9, zorder=7)  # opp now
+        draw_track_bg(ax, b, scalebar=(ax is axs[0]))
+        seen_blind_line(ax, EX[sl], EY[sl], det[sl], lw=1.8)
+        ax.plot(EX[0], EY[0], marker="o", mfc="none", mec="k", mew=1.2, ms=6, zorder=6)  # start
+        ax.plot(EX[n - 1], EY[n - 1], marker="o", mfc=SEEN, mec="k", mew=0.7, ms=6, zorder=7)  # ego now
+        ax.plot(OX[n - 1], OY[n - 1], marker="s", mfc="0.4", mec="k", mew=0.7, ms=6, zorder=7)  # opp now
         pt = passtick(G)
         passed = pt is not None and pt < n
         if passed:
-            ax.scatter(EX[pt], EY[pt], marker="*", s=230, facecolor="gold", edgecolor="k", lw=0.8, zorder=8)
+            ax.scatter(EX[pt], EY[pt], marker="*", s=130, facecolor="gold", edgecolor="k", lw=0.7, zorder=8)
         allpt = passtick(G)
         tag = (f"passed at {allpt * DT:.0f} s" if passed else
-               (f"still trailing (passes at {allpt * DT:.0f} s)" if allpt is not None else "no pass"))
-        ax.set_title(f"{lab}\n{tag}", fontsize=9)
+               (f"still trailing (pass at {allpt * DT:.0f} s)" if allpt is not None else "no pass"))
+        ax.set_title(f"({letter}) {lab}\n{tag}", fontsize=9, loc="left")
     # shared legend
     from matplotlib.lines import Line2D
-    leg = [Line2D([0], [0], color=SEEN, lw=2.4, label="opponent in view"),
-           Line2D([0], [0], color=BLIND, lw=2.4, label="opponent occluded (blind)"),
+    leg = [Line2D([0], [0], color=SEEN, lw=1.8, label="opponent in view"),
+           Line2D([0], [0], color=BLIND, lw=1.8, label="opponent occluded (blind)"),
            Line2D([0], [0], marker="o", mfc="none", mec="k", ls="", label="start"),
            Line2D([0], [0], marker="s", mfc="0.4", mec="k", ls="", label="opponent"),
            Line2D([0], [0], marker="*", mfc="gold", mec="k", ls="", label="overtake")]
-    fig.legend(handles=leg, loc="lower center", ncol=5, fontsize=7.2, frameon=False, bbox_to_anchor=(0.5, -0.04))
+    fig.legend(handles=leg, loc="lower center", ncol=3, fontsize=7, frameon=False, bbox_to_anchor=(0.5, -0.06))
     FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIG, bbox_inches="tight"); fig.savefig(FIG.with_suffix(".png"), dpi=200, bbox_inches="tight")
     print("wrote", FIG, f"(window {a.window:.0f}s, {srctag})")

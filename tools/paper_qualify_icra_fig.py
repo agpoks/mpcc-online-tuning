@@ -88,7 +88,7 @@ def main():
     lt = np.asarray(d["lap_times"], float)
     banked = [str(x) for x in np.asarray(d["lap_banked"], dtype=object).tolist()]
 
-    fig = plt.figure(figsize=(7.0, 4.3))
+    fig = plt.figure(figsize=(4.4, 2.7))   # ~column width so font 9 renders near 9 pt on the page
     gs = fig.add_gridspec(2, 2, height_ratios=[1.3, 0.72], hspace=0.16, wspace=0.06)
     axA = fig.add_subplot(gs[0, 0]); axB = fig.add_subplot(gs[0, 1]); axC = fig.add_subplot(gs[1, :])
 

@@ -47,7 +47,7 @@ RIGHT = 1                           # q_l
 BAND_L, BAND_R = 7, 4               # k_v (left scale), r_a (right scale)
 WCOL = {0: C(0), 2: C(2), 3: C(3), 5: C(4), 6: C(5), 8: C(6), 1: C(1)}
 
-fig, axs = plt.subplots(3, 3, figsize=(10.0, 5.6), constrained_layout=True,
+fig, axs = plt.subplots(3, 3, figsize=(7.5, 4.2), constrained_layout=True,   # ~\textwidth so font 9 ~ 9 pt
                         gridspec_kw={"height_ratios": [1.0, 0.8, 0.8]})
 sc = None
 for j, N in enumerate((1, 2, 3)):

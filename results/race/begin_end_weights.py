@@ -60,14 +60,14 @@ def heat(ax, M, title, xlabels=True):
             v = Z[i, j]
             ax.text(j, i, f"{v:+.1f}", ha="center", va="center", fontsize=6,
                     color="white" if abs(v) > 0.55 else "black")
-    ax.set_title(title, fontsize=9, weight="bold", loc="left")
+    ax.set_title(title, fontsize=9, loc="left")
     return im
 
 
 # Single-column IEEE figure: the two heatmaps are STACKED (start on top, best
 # policy below) so each keeps full column width and the fonts stay readable.
 BEG, END = begin_end(SRC)
-fig, axs = plt.subplots(2, 1, figsize=(3.5, 4.4), constrained_layout=True)
+fig, axs = plt.subplots(2, 1, figsize=(3.4, 3.7), constrained_layout=True)   # a bit smaller; font stays 9 pt
 heat(axs[0], BEG, "(a) start of race (base policy)", xlabels=False)
 im = heat(axs[1], END, "(b) banked best (keep-best)", xlabels=True)
 for ax in axs:
