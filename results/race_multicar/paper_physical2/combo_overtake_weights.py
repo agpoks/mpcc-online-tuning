@@ -24,7 +24,7 @@ plt.rcParams.update({"font.family": "serif",
                      "mathtext.fontset": "stix", "font.size": 9, "axes.grid": True,
                      "grid.alpha": 0.25, "axes.axisbelow": True})
 vmin, vmax = 1.2, 2.0
-OPP_PATH = "#F2A65A"   # light orange: the opponent path reads against the grey track/ground
+OPP_PATH = "#EE7733"   # clear orange (Tol): reads against the grey ground and the viridis ego
 xlo, xhi = bnd["left_x"].min() - 0.3, bnd["left_x"].max() + 0.3
 ylo_m, yhi_m = bnd["left_y"].min() - 0.3, bnd["left_y"].max() + 0.3
 
@@ -50,6 +50,12 @@ WCOL = {0: C(0), 2: C(2), 3: C(3), 5: C(4), 6: C(5), 8: C(6), 1: C(1)}
 fig, axs = plt.subplots(3, 3, figsize=(7.5, 4.2), constrained_layout=True,   # ~\textwidth so font 9 ~ 9 pt
                         gridspec_kw={"height_ratios": [1.0, 0.8, 0.8]})
 sc = None
+# one common y-range for the reward row so the three panels share a scale (no scaling "gap")
+_rlo, _rhi = np.inf, -np.inf
+for _N in (1, 2, 3):
+    _s = smooth(np.asarray(tel(_N)["R"], float))
+    _rlo = min(_rlo, float(_s.min())); _rhi = max(_rhi, float(_s.max()))
+RLO, RHI = _rlo - 0.3, _rhi + 0.4
 for j, N in enumerate((1, 2, 3)):
     d = tel(N); T = d["THETA"].shape[0]; t = np.arange(T) * 0.05
     inview = np.asarray(d["DET"]).astype(float) > 0
@@ -111,12 +117,13 @@ for j, N in enumerate((1, 2, 3)):
     c = axs[2, j]
     R = np.asarray(d["R"]).astype(float)
     if inview.any():
-        c.fill_between(t, R.min(), R.max(), where=inview, color="0.88", step="mid", zorder=0)
+        c.fill_between(t, RLO, RHI, where=inview, color="0.88", step="mid", zorder=0)
     c.plot(t, R, color="0.7", lw=0.5, zorder=1)
     c.plot(t, smooth(R), color="#6A1B9A", lw=1.6, zorder=2)
     for (tk, oi) in d["PASS"]:
         c.axvline(tk * 0.05, color="gold", lw=1.0, ls=":", zorder=3)
-    c.set_xlim(0, t[-1]); c.set_xlabel("race time (s)"); c.tick_params(labelsize=9)
+    c.set_xlim(0, t[-1]); c.set_ylim(RLO, RHI)      # shared reward scale across the three panels
+    c.set_xlabel("race time (s)"); c.tick_params(labelsize=9)
     if j == 0:
         c.set_ylabel("reward / tick")
 

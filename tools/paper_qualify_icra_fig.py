@@ -88,26 +88,26 @@ def main():
     lt = np.asarray(d["lap_times"], float)
     banked = [str(x) for x in np.asarray(d["lap_banked"], dtype=object).tolist()]
 
-    fig = plt.figure(figsize=(4.4, 2.7))   # ~column width so font 9 renders near 9 pt on the page
+    fig = plt.figure(figsize=(4.8, 2.9))   # ~column width; a touch bigger so colorbars/legend don't dominate
     gs = fig.add_gridspec(2, 2, height_ratios=[1.3, 0.72], hspace=0.16, wspace=0.06)
     axA = fig.add_subplot(gs[0, 0]); axB = fig.add_subplot(gs[0, 1]); axC = fig.add_subplot(gs[1, :])
 
     # (a) speed map
-    draw_track_bg(axA, b, scalebar=True)
+    draw_track_bg(axA, b, scalebar=False)
     scA = _color_line(axA, EX, EY, vh, "viridis", float(np.percentile(vh, 99)))
-    axA.plot(EX[0], EY[0], marker="o", mfc="none", mec="k", mew=1.4, ms=8, zorder=6)
-    cbA = fig.colorbar(scA, ax=axA, shrink=0.8, pad=0.02); cbA.set_label("speed [m/s]", fontsize=8)
-    cbA.ax.tick_params(labelsize=7); _panel_label(axA, "(a)")
+    axA.plot(EX[0], EY[0], marker="o", mfc="none", mec="k", mew=1.2, ms=6, zorder=6)
+    cbA = fig.colorbar(scA, ax=axA, shrink=0.7, aspect=22, pad=0.02); cbA.set_label("speed [m/s]", fontsize=7)
+    cbA.ax.tick_params(labelsize=6); _panel_label(axA, "(a)")
 
     # (b) adaptation-intensity map
     draw_track_bg(axB, b, scalebar=False)
     scB = _color_line(axB, EX, EY, inten, "inferno", vmax_a)
-    axB.plot(EX[0], EY[0], marker="o", mfc="none", mec="k", mew=1.4, ms=8, zorder=6)
+    axB.plot(EX[0], EY[0], marker="o", mfc="none", mec="k", mew=1.2, ms=6, zorder=6)
     if off.any():
         axB.scatter(EX[off], EY[off], s=10, marker="x", color="red", lw=0.8, zorder=5, label="off-track (reverted)")
-        axB.legend(fontsize=6.5, loc="lower right", framealpha=0.9)
-    cbB = fig.colorbar(scB, ax=axB, shrink=0.8, pad=0.02)
-    cbB.set_label(r"$\|\mathrm{d}\log\theta/\mathrm{d}t\|$", fontsize=8); cbB.ax.tick_params(labelsize=7)
+        axB.legend(fontsize=6, loc="lower right", framealpha=0.9)
+    cbB = fig.colorbar(scB, ax=axB, shrink=0.7, aspect=22, pad=0.02)
+    cbB.set_label(r"$\|\mathrm{d}\log\theta/\mathrm{d}t\|$", fontsize=7); cbB.ax.tick_params(labelsize=6)
     _panel_label(axB, "(b)")
 
     # (c) keep-best lap ratchet
@@ -115,13 +115,14 @@ def main():
         li = np.arange(1, lt.size + 1)
         best = np.minimum.accumulate(lt)                      # banked-best so-far (monotone down)
         is_rev = np.array([("revert" in banked[i] if i < len(banked) else False) for i in range(lt.size)])
-        axC.step(li, best, where="post", color="#1f4e8c", lw=1.6, zorder=2, label="banked best (keep-best)")
-        axC.scatter(li[~is_rev], lt[~is_rev], s=28, color="#1f4e8c", zorder=3, label="lap banked")
-        axC.scatter(li[is_rev], lt[is_rev], s=28, facecolor="none", edgecolor="#c23b3b", lw=1.1,
-                    zorder=3, label="slower/off → reverted")
+        axC.step(li, best, where="post", color="#1f4e8c", lw=1.6, zorder=2, label="banked best")
+        axC.scatter(li[~is_rev], lt[~is_rev], s=22, color="#1f4e8c", zorder=3, label="banked")
+        axC.scatter(li[is_rev], lt[is_rev], s=22, facecolor="none", edgecolor="#c23b3b", lw=1.1,
+                    zorder=3, label="reverted")
         axC.set_xlabel("lap", fontsize=9); axC.set_ylabel("lap time [s]", fontsize=9)
         axC.set_xticks(li); axC.grid(alpha=0.3)
-        axC.legend(fontsize=7, loc="upper right", framealpha=0.9, ncol=1)
+        axC.legend(fontsize=6, loc="upper right", framealpha=0.9, ncol=1,
+                   handlelength=1.2, handletextpad=0.4, labelspacing=0.25, borderpad=0.3)
     else:
         axC.text(0.5, 0.5, "no completed laps logged", ha="center", va="center", transform=axC.transAxes)
     _panel_label(axC, "(c)", inside=False)
