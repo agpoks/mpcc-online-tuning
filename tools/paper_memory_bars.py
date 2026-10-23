@@ -58,7 +58,7 @@ def emit_tex(on, dp):
 % online-learning n={on['ltc']['n']}/arm (equal episodes); deployed frozen n={dp['ltc']['n']}/arm (matched starts).
 \begin{{tikzpicture}}
 \begin{{axis}}[
-  width=\linewidth, height=4.3cm,
+  width=\linewidth, height=3.6cm,
   ybar=1.2pt, bar width=7pt,
   ymin=0, ymax=1.18, ytick={{0,0.25,0.5,0.75,1.0}},
   ylabel={{rate}}, ylabel near ticks,

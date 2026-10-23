@@ -67,7 +67,7 @@ def heat(ax, M, title, xlabels=True):
 # Single-column IEEE figure: the two heatmaps are STACKED (start on top, best
 # policy below) so each keeps full column width and the fonts stay readable.
 BEG, END = begin_end(SRC)
-fig, axs = plt.subplots(2, 1, figsize=(3.4, 3.7), constrained_layout=True)   # a bit smaller; font stays 9 pt
+fig, axs = plt.subplots(2, 1, figsize=(3.4, 3.0), constrained_layout=True)   # compact; cell text stays readable
 heat(axs[0], BEG, "(a) start of race (base policy)", xlabels=False)
 im = heat(axs[1], END, "(b) banked best (keep-best)", xlabels=True)
 for ax in axs:
