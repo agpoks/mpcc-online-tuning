@@ -300,8 +300,12 @@ class MPCC:
         if terminal_speed:
             w = ca.vertcat(w, St)
 
+        # d_bound (9th weight) is the inner-corridor margin. This kinematic reference
+        # controller does not price it -- its corridor margin is the fixed car half-width
+        # (see the corridor rows below) -- so it is unpacked for shape and left inert here;
+        # the deployed acados MPCC (acados_mpcc.py) is what actually prices the inner margin.
         (q_c, q_l, q_v, r_d, r_a, r_dv,
-         d_obs, k_v) = (ca.exp(theta[i]) for i in range(self.n_theta))
+         d_obs, k_v, _d_bound) = (ca.exp(theta[i]) for i in range(self.n_theta))
 
         g, lbg, ubg = [ca.reshape(X[:, 0] - x0, -1, 1)], [0.0] * NS, [0.0] * NS
         J = 0
