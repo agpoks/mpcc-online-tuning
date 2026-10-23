@@ -108,10 +108,8 @@ for j, N in enumerate((1, 2, 3)):
     b.set_ylim(0.2, 2.15); b.set_xlim(0, t[-1]); b.set_xticklabels([]); b.tick_params(labelsize=9)
     if j == 0:
         b.set_ylabel(r"weight / base  $\theta/\theta_0$")
-        b.legend(hs + [hql, hkv, hra],
-                 [WLAB[w] for w in LEFT] + [r"$q_l$", r"$k_v$ (band)", r"$r_a$ (band)"],
-                 fontsize=6.8, loc="upper left", ncol=5, framealpha=0.92,
-                 handlelength=1.3, columnspacing=0.7, handletextpad=0.4)
+        wleg_h = hs + [hql, hkv, hra]        # keep handles for a figure-level legend (below, out of the data)
+        wleg_l = [WLAB[w] for w in LEFT] + [r"$q_l$", r"$k_v$ (band)", r"$r_a$ (band)"]
 
     # ---- row 3: per-tick reward over the race ----
     c = axs[2, j]
@@ -129,7 +127,12 @@ for j, N in enumerate((1, 2, 3)):
 
 cb = fig.colorbar(sc, ax=axs[0, :], shrink=0.85, aspect=24, pad=0.01)
 cb.set_label("Speed [m/s]", fontsize=9); cb.ax.tick_params(labelsize=8)
-# ONE shared legend for the 2D markers, outside the panels (bottom)
+# TWO figure-level legends stacked BELOW the panels so neither overlaps the data: the nine
+# weight colours (upper) -- which used to sit inside panel (a) and bury the traces -- and the
+# 2D race markers (lower).
+fig.legend(wleg_h, wleg_l, loc="upper center", ncol=5, fontsize=8, frameon=True,
+           framealpha=0.9, handlelength=1.3, columnspacing=1.0, handletextpad=0.4,
+           bbox_to_anchor=(0.5, -0.02))
 fig.legend(handles=[Line2D([], [], marker="D", color="w", markerfacecolor="gold", markeredgecolor="k", ms=8),
                     Line2D([], [], marker="o", color="w", markerfacecolor="none", markeredgecolor="k", mew=1.4, ms=9),
                     Line2D([], [], color="0.2", lw=0.9, ls=(0, (4, 3))),
@@ -137,7 +140,7 @@ fig.legend(handles=[Line2D([], [], marker="D", color="w", markerfacecolor="gold"
                     Line2D([], [], color="0.85", lw=7)],
            labels=["overtake", "ego start", "raceline", "opponent path", "opponent in view"],
            loc="upper center", ncol=5, fontsize=8.5, frameon=True, framealpha=0.9,
-           bbox_to_anchor=(0.5, -0.04))
+           bbox_to_anchor=(0.5, -0.17))
 fig.savefig(OUT, bbox_inches="tight"); fig.savefig(OUT.with_suffix(".png"), dpi=200, bbox_inches="tight")
 print("wrote", OUT)
 for N in (1, 2, 3):
