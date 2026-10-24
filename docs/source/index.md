@@ -51,6 +51,7 @@ behaviour_policy
 safety
 obstacles
 plant
+code_map
 policies_in_the_table
 results
 ```
