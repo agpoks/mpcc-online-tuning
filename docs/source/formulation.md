@@ -1,12 +1,12 @@
-# The formulation, written out
+# The controller
 
-Notes to myself while building the spike. The point of writing these down is
-that three of the four things that went wrong were sign or scaling errors that
-looked like tuning problems, and each one is obvious in the algebra.
+The object being tuned is a model predictive contouring controller. This page
+states it: the geometry it is built on, the model it predicts with, the cost
+whose weights are learned, and the constrained problem acados solves every tick.
+The weights enter as an ordinary run-time parameter — the whole safe-learning
+argument rests on that, so it is made precise here.
 
-## 0. What the two errors are
-
-Everything below assumes this picture, so it goes first.
+## Contouring, not tracking
 
 ```{image} _static/plots/mpcc_geometry.png
 :alt: contouring error and lag error against the reference path
@@ -14,127 +14,106 @@ Everything below assumes this picture, so it goes first.
 ```
 
 MPCC does not track a *trajectory* — a path plus a schedule saying where to be
-when. It tracks a **path**, and carries its own progress along that path as an
-optimisation variable $s$. The reference point $p(s)$ is therefore chosen by
-the solver, not obtained by projecting the car onto the path, and the vector
-from it to the car splits into two pieces:
+when. It tracks a **path**, and carries its own progress along it as an
+optimisation variable $s$. The reference point $p(s)$ is therefore chosen by the
+solver, not obtained by projecting the car onto the path, and the vector from it
+to the car splits into two pieces:
 
 $$e_c = \sin\phi\,\Delta x - \cos\phi\,\Delta y \qquad
   e_l = -\cos\phi\,\Delta x - \sin\phi\,\Delta y$$
 
-with $\phi$ the path heading at $s$. $e_c$ is **across** the path and is what
-you want small. $e_l$ is **along** it, and exists only because $s$ is free.
+with $\phi$ the path heading at $s$. The **contouring error** $e_c$ is *across*
+the path and is what you want small. The **lag error** $e_l$ is *along* it, and
+exists only because $s$ is free.
 
-The lag term is not a refinement. Drop it and the solver finds the cheapest
-possible way to collect the $-q_v v_s \Delta t$ progress reward: run $s$ forward
-and leave the car behind. Penalising $e_l$ is what keeps the progress variable
-honest, and it is why there are two error weights to tune rather than one.
+The lag term is not a refinement. Drop it and the solver finds the cheapest way
+to collect the progress reward: run $s$ forward and leave the car behind.
+Penalising $e_l$ is what keeps the progress variable honest, and it is why there
+are two error weights to tune, not one.
 
-## 1. The MPC is the function approximator
+## The prediction model
 
-Let the MPCC's parametrised optimal-control problem be
+The controller predicts with a dynamic single-track model augmented by the
+steering and progress states. The state $\vect{x}\in\R^7$ and input
+$\vect{u}\in\R^3$ are
 
-$$
-J^*(s;\theta) \;=\; \min_{w}\; f(w,\theta)
-\quad\text{s.t.}\quad g(w, s, \theta) = 0,\; h(w,\theta) \le 0
-$$
+$$\vect{x}=[\,X\;Y\;\psi\;v_x\;v_y\;r\;s\,]^\top,\qquad
+  \vect{u}=[\,a\;\delta\;v_s\,]^\top,$$
 
-where $w$ collects the predicted states and controls and $\theta$ the log cost
-weights. Then three RL objects come out of *one* problem:
+with pose $(X,Y,\psi)$, body-frame velocity $(v_x,v_y)$, yaw rate $r$, and
+progress $s$ evolving as $\dot s=v_s$. The inputs are a commanded longitudinal
+acceleration $a$, a steering angle $\delta$, and the progress rate $v_s$.
+Lateral forces follow a combined-slip tyre model with sideslip
+$\beta=\arctan(v_y/v_x)$. The model is discretised with an implicit integrator
+to $\vect{x}_{k+1}=f_d(\vect{x}_k,\vect{u}_k)$.
 
-| RL object | MPC object |
-|---|---|
-| policy $\pi_\theta(s)$ | the first control of the solution, $u_0^*$ |
-| state value $V_\theta(s)$ | $-J^*(s;\theta)$ |
-| action value $Q_\theta(s,a)$ | $-J^*(s;\theta)$ with $u_0$ pinned to $a$ |
+This is **not** the plant. The evaluation plant is a different, higher-fidelity
+drift model, so model mismatch is part of every test — see {doc}`plant`.
 
-**The minus signs are not cosmetic.** The MPC minimises a cost; RL maximises a
-return. Both the value *and its gradient* carry the negation, and applying one
-without the other drives every weight the wrong way while looking exactly like
-a learning rate that is too high. That is what the first working version did,
-and `tests/test_gradient.py::test_tuner_moves_progress_weight_up_when_progress_pays`
-exists so it cannot happen twice.
+## The cost, and the weights that are learned
 
-Pinning $u_0$ is not a second problem. It is the same NLP with
-$\text{lb} = \text{ub} = a$ on two decision variables — and when $a = \pi(s)$,
-$Q = V$ by construction and the solve can be skipped entirely.
+The reference is a periodic spline in $s$. With the grip-utilisation factor
+$k_v\in(0,1]$ scaling how much lateral-acceleration budget the controller is
+willing to claim, the stage cost over the horizon $k=1\dots N$ is
 
-## 2. The gradient is free (envelope theorem)
+$$J=\sum_{k=1}^{N} q_c\,e_{c,k}^2 + q_l\,e_{l,k}^2 - q_v\,\dot s_k\,\Delta t
+      + r_\delta\,\delta_k^2 + r_a\,a_k^2 + r_{\dot s}(\dot s_k - v_{\mathrm{ref},k})^2 .$$
 
-The one that makes this real-time. Write the Lagrangian
+The progress term $-q_v\dot s\,\Delta t$ rewards advancement along the
+reference, the speed term couples $\dot s$ to a curvature-derived target
+$v_{\mathrm{ref}}$, and the input terms penalise steering and drive effort. The
+tunable cost weights are collected **in log space**,
 
-$$\mathcal{L}(w,\lambda,\mu,\theta) = f(w,\theta) + \lambda^\top g(w,s,\theta) + \mu^\top h(w,\theta)$$
+$$\vect\theta=\log\big(q_c,\;q_l,\;q_v,\;r_\delta,\;r_a,\;r_{\dot s}\big),\qquad
+  k_v\ \text{carried alongside},$$
 
-At a solution $(w^*, \lambda^*, \mu^*)$, under the usual constraint
-qualification,
+so a multiplicative change is an additive step and positivity is automatic.
+Together with the two constraint-side quantities — the opponent keep-out radius
+$d_{\mathrm{obs}}$ and the boundary margin $d_{\mathrm{bnd}}$ — these make the
+**nine** quantities the policy emits. The policy is what {doc}`behaviour_policy`
+and {doc}`tutorial/learning_algorithm` describe; here they are just numbers the
+OCP reads.
 
-$$\frac{\mathrm{d}J^*}{\mathrm{d}\theta} \;=\; \frac{\partial \mathcal{L}}{\partial \theta}\Big|_{w^*,\lambda^*,\mu^*}$$
+One line each: $q_c$ how expensive it is to leave the line, $q_l$ lag along the
+path, $q_v$ how much progress is rewarded, $r_\delta/r_a/r_{\dot s}$ how much
+steering, drive and progress-rate effort are damped, $d_{\mathrm{obs}}$ the
+berth around an opponent, $k_v$ how much grip the plan claims,
+$d_{\mathrm{bnd}}$ the margin kept to the wall.
 
-The primal and dual variables are held **fixed**. There is no
-$\mathrm{d}w^*/\mathrm{d}\theta$ term — it is annihilated by the stationarity
-condition. So the gradient of the value with respect to the tuning parameters
-costs one evaluation of a function built once at construction, on quantities
-the solver already returned.
+## Constraints and the optimal control problem
 
-Contrast with deterministic policy gradient, which needs
-$\mathrm{d}u_0^*/\mathrm{d}\theta$: *that* requires differentiating the KKT
-system (implicit function theorem, one linear solve with the KKT matrix).
-Affordable, but a different and larger piece of machinery. Q-learning is the
-cheap door.
+Track boundaries bound the contouring error, and drive acceleration $a_x$ and
+quasi-steady lateral demand $a_y=v_x r$ share a grip budget scaled by $k_v$:
 
-Here $\theta$ only enters $f$, so the $\lambda$ and $\mu$ terms vanish — but
-they are implemented anyway, because the moment $\theta$ includes a *model*
-parameter it enters $g$ and the term is the whole point.
+$$|e_c|\le w - r_{\mathrm{car}},\qquad a_x^2 + a_y^2 \le (k_v\,a_{\mathrm{lat,max}})^2 .$$
 
-## 3. TD(λ) on top
+Opponents enter as oriented keep-out ellipses (see {doc}`obstacles`). Because
+the geometric, grip and speed demands can conflict, these rows are **softened**
+with nonnegative slacks under a linear–quadratic penalty $P$, while actuator
+bounds stay hard. Over stages $k=0\dots N-1$,
 
-$$\delta_t = r_t + \gamma V_\theta(s_{t+1}) - Q_\theta(s_t, a_t), \qquad
-e \leftarrow \gamma\lambda e + \nabla_\theta Q, \qquad
-\theta \leftarrow \theta + \alpha\,\delta\,e$$
+$$\begin{aligned}
+\min_{\vect{x},\vect{u},\vect\epsilon}\;\;
+  & \Phi(\vect{x}_N)+\sum_{k=0}^{N-1}\ell(\vect{x}_k,\vect{u}_k;\vect\theta,k_v)+P(\vect\epsilon)\\
+\text{s.t.}\;\; & \vect{x}_0=\hat{\vect{x}},\quad \vect{x}_{k+1}=f_d(\vect{x}_k,\vect{u}_k),\\
+  & \vect{u}_k\in\mathcal U,\quad h(\vect{x}_k,\vect{u}_k,\vect{p}_k)\le\vect\epsilon_k,\;\;\vect\epsilon_k\ge 0,
+\end{aligned}$$
 
-$r$ is the **real** objective — metres covered, leaving the track penalised —
-and deliberately not the MPCC's internal cost. If they were the same quantity
-there would be nothing to learn: the MPC would already be optimal for it by
-construction.
+with $\hat{\vect{x}}$ the state estimate, $\mathcal U$ the hard actuator set,
+$h$ the softened rows, and $\vect{p}_k$ the stage parameters carrying the
+reference, the grip budget, and the opponent ellipses.
 
-Traces because the consequence of a weight being wrong shows up several ticks
-after the tick it was wrong on. One number per parameter, six parameters.
+```{admonition} The one sentence the safety argument rests on
+:class: important
+**The cost weights $\vect\theta$ and $k_v$ enter only through $\ell$.** The
+dynamics and the constraints are untouched by learning, so whatever weights the
+policy emits, every predicted step still satisfies the vehicle's limits. A
+learned weight can change the *behaviour* the controller optimises for; it
+cannot relax a constraint.
+```
 
-## 4. Two scaling traps
-
-**The gradient has no natural scale.** $J^*$ is a sum of weighted squared
-errors and can be any magnitude, so $\nabla_\theta J^*$ can too, and a fixed
-$\alpha$ means nothing across problems. Normalising by a running RMS of the
-gradient makes $\alpha$ a step in *relative* terms — the only version of it
-that transfers between tracks.
-
-**The TD error must be clipped.** Leaving the track pays $-5$; an ordinary tick
-pays about $+0.07$. The terminal transition therefore produces a $\delta$ two
-orders of magnitude larger than any other, arriving multiplied by a trace that
-has been accumulating for ten steps. Unclipped, one crash moves every weight
-further than the whole preceding episode did and the run never recovers. This
-was observed, on episode 2, not anticipated.
-
-**Parametrise in logs.** The weights span orders of magnitude and must stay
-positive. $\theta = \log(\text{weight})$ gives both for free, and makes a
-gradient step multiplicative, which is what a scale parameter wants.
-
-## 5. What is still missing for a vehicle
-
-* ~~**Solve time.**~~ Done, and measured: `mpcc_tuning/rti.py` solves one full
-  QP per tick, warm-started, in **1.9 ms mean / 3.4 ms worst** at $N=12$ against
-  a 50 ms budget — see [Results](results.md#real-time-solved-and-measured).
-  IPOPT to convergence misses on the worst case even where its mean fits. What
-  is *still* not real-time is the tuner: a learning step needs a second solve
-  when the action was perturbed for exploration.
-* **Safety during tuning.** The weights are being changed on a moving vehicle.
-  This is exactly the case for a predictive safety filter around the whole
-  thing — including around the tuner, not just the controller — and
-  [`rtrrl-playground`](https://github.com/agpoks/rtrrl-playground)'s
-  `safety.py` is the same construction.
-* **The interesting gap.** The MPC-RL literature treats the controller as a
-  memoryless map from state to action. It is not: warm-starting, an MHE state
-  estimate, and an online-adapted model all mean $\theta$ influences *future*
-  solves through a carried state. That is precisely the situation forward-mode
-  influence propagation (RTRL/RFLO) exists for, and I have not found anyone
-  doing it. It is the reason these two repos belong next to each other.
+The problem is generated as C code and solved with **one SQP real-time
+iteration** in acados; on a failed solve the controller holds the last feasible
+steering and brakes gently. The code lives in `mpcc_tuning/acados_mpcc.py` and
+`mpcc_tuning/acados_ocp.py`; the solver settings and bounds are in the paper's
+`tab:controller`. Real-time numbers are in {doc}`results`.

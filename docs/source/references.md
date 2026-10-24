@@ -44,11 +44,22 @@
 * **van Seijen, Mahmood, Pilarski, Machado & Sutton**, *True Online
   Temporal-Difference Learning*, JMLR 2016.
 
-## Safety, for the open problem in {doc}`results`
+## Safe learning for control
 
+The shipped method keeps learning safe by constraining the *weights* before the
+OCP — an anchored, measurement-bounded policy with class-conditioned bands and a
+validated keep-best rule ({doc}`safety`). The surveys and the predictive-filter
+line below are the broader context, and the filter is the approach explored in
+{doc}`filters` and {doc}`safety_filter_for_the_tuner`.
+
+* **Brunke, Greeff, Hall, Yuan, Zhou, Panerati & Schoellig**, *Safe Learning in
+  Robotics: From Learning-Based Control to Safe Reinforcement Learning*, Annual
+  Review of Control, Robotics, and Autonomous Systems, 2022 — the survey to read
+  first.
+* **Berkenkamp, Turchetta, Schoellig & Krause**, *Safe Model-based Reinforcement
+  Learning with Stability Guarantees*, NeurIPS 2017.
 * **Wabersich & Zeilinger**, *A predictive safety filter for learning-based
   control of constrained nonlinear dynamical systems*, Automatica 2021 —
-  [arXiv:1812.05506](https://arxiv.org/abs/1812.05506). Implemented from
-  scratch in
-  [`rtrrl-playground`](https://github.com/agpoks/rtrrl-playground)'s
-  `rtrrl_playground/safety.py`.
+  [arXiv:1812.05506](https://arxiv.org/abs/1812.05506). Implemented from scratch
+  in [`rtrrl-playground`](https://github.com/agpoks/rtrrl-playground)'s
+  `rtrrl_playground/safety.py`; this is the filter explored in {doc}`filters`.

@@ -1,280 +1,98 @@
-# Results, including the failure
+# Results
 
-Everything below is from `examples/tune_online.py` on a 26.7 m oval with 2.5 m
-corners, 200 control ticks per episode at 20 Hz, plant grip 1.0, `alpha = 2e-4`.
+This is what the shipped method does, measured. The detailed per-policy table —
+baseline, best constant, offline-fitted network, online-refined — is
+{doc}`policies_in_the_table`; this page is the higher-level findings, in the order
+the paper makes them, each with the honest caveat.
 
-## The gradient is exact
+All numbers are on the acados controller and the dynamic drift plant
+({doc}`plant`), from seeded scripts; the plant is deterministic, so a seed is a
+draw of the exploration noise and scenario variation is physical.
 
-The claim the whole approach rests on: at the solution of the MPCC's NLP,
+## Safe online refinement improves pace, and stays clean
 
-$$\frac{\mathrm{d}J^*}{\mathrm{d}\theta} \;=\; \frac{\partial \mathcal{L}}{\partial \theta}\Big|_{w^*,\lambda^*}$$
+Starting from the offline base policy, the validated keep-best tuner refines the
+weights during a qualifying session: lap time falls from **54.9 s to 44.3 s**,
+the keep-best staircase monotone down, every slower or off-track attempt reverted
+after a frozen validation lap. The refinement is localised — it concentrates in
+the corners where the base policy left margin — while the settled line carries
+speed through them.
 
-Checked against central finite differences on the optimal value:
+Run continuously as the on-vehicle adaptation-and-safety layer on the deployment
+map, the tuner drove **14.3 laps through 38 track-departure ticks, every one
+recovered by a revert and none terminal.** The bounding is what makes this safe:
+the grip band on $k_v$ cuts grip-over-claim departures from 100% to 12% of runs,
+and the $r_a$ floor eliminates the over-driven wall-out ({doc}`safety`).
 
-```{image} _static/plots/gradient_check.png
-:alt: envelope-theorem gradient against finite differences
-:width: 70%
-```
+## One policy races a variable, occluded field
 
-54 components, at states the controller actually visits during a run — the
-gradient is checked where it is used, not at points placed on the centreline.
-Each finite difference costs two extra solves; the envelope-theorem value costs
-one evaluation of an expression that CasADi already has.
+A single online-learned policy races one, two and three opponents of mixed pace
+under the $270^\circ$ occluding sensor, **no retraining**. Both the recurrent and
+memoryless arms solve one- and two-car races cleanly (zero contact, zero
+departures); at three occluded cars the recurrent policy is 67% clean (75% at the
+firmer sample) and the memoryless one 83%, with passes scaling as the field grows
+(LTC $1.0/2.5/3.3$, MLP $1.2/2.5/3.7$).
 
-| | |
-|---|---|
-| cosine to finite differences | **0.99999** |
-| relative error | **< 1e-3** |
-| cost, against the solve | 0.079% |
+> **The residual is the hard floor of three cars hidden most of the time.** Track
+> departures are zero throughout; the three-car imperfection is occluded-opponent
+> *contact* (33% of three-car runs for the recurrent policy, 17% for the
+> memoryless one), which calls for better occluded-opponent estimation, not a
+> different reward.
 
-`tests/test_gradient.py` asserts this, and `examples/gradient_check.py` shows
-it across states and weight settings. It costs one evaluation of a function
-built once, on quantities the solver already returned.
+## Why recurrent: the ablation
 
-## It tunes itself into a good controller
+Memory helps specifically where an **equal-pace** opponent must be tracked
+through occlusion. The claim rests on **pass completion**, the quantity stable
+from learning to deployment:
 
-Starting from `q_l = 200`, `q_v = 0.05` — far too much lag penalty, almost no
-reward for progress, so the MPCC crawls:
-
-| episode | metres covered | `q_l` | `q_v` |
-|---|---|---|---|
-| 0 | 19.3 | 195 | 0.05 |
-| 3 | 23.7 | 183 | 0.06 |
-| 6 | 30.9 | 144 | 0.10 |
-| 8 | 37.1 | 101 | 0.48 |
-| 10 | **37.2** | 66 | 3.5 |
-| 12 | 37.1 | 43 | 27 |
-
-Distance covered nearly doubles in a dozen episodes, no crashes on the way up.
-37.2 m in 200 ticks is 3.7 m/s average against a grip-limited corner speed of
-3.9 — it has essentially found the optimum, and nobody touched the weights.
-
-## Then it destroys itself
-
-| episode | metres covered | `q_c` | `q_v` |
-|---|---|---|---|
-| 12 | 37.1 | 0.36 | 27 |
-| **13** | **20.1  OFF-TRACK** | 0.30 | 36 |
-| 20 | 5.2  OFF-TRACK | 0.26 | 37 |
-| 23 | 5.1  OFF-TRACK | 0.22 | 45 |
-
-The mechanism is worth more than the success. Once performance saturates the TD
-error stays slightly positive — the critic under-estimates a policy that is
-already at the limit — so `q_v` keeps climbing and `q_c` keeps falling long
-after either helps. By episode 13 the MPCC is willing to ride the constraint
-boundary, the tyre limit it does not model puts it off the track, and with
-`q_c ≈ 0.2` it has no way back.
-
-**The tuner optimised a proxy past the point where the proxy was valid, with
-nothing to stop it.** That is the honest result of the spike: the gradient is
-exact and cheap, the loop works, and it has no stopping criterion.
-
-Candidate fixes, none tried here:
-
-* a **decaying step size** — the cheapest thing that would work;
-* **keep the best `theta` and revert on regression** — cheap and crude, and it
-  needs a notion of "the same conditions" to compare across;
-* a **trust region on `theta`** — principled, and the right long-term answer;
-* a **predictive safety filter around the whole thing** — the interesting one,
-  because this failure is exactly what such a filter exists for. That
-  construction is in
-  [`rtrrl-playground`](https://github.com/agpoks/rtrrl-playground)'s
-  `safety.py`; on a comparable task it took an unfiltered learner from crashing
-  in 61% of training episodes to 0%, with no cost in final performance.
-
-## Situation-dependent weights, over six seeds
-
-The best result on this problem, and the one that needed confirming: one
-$\theta$ per curvature segment, the segment read from the path *ahead*
-(`experiments/per_segment_weights.py`). It was measured on **one seed**, and the
-failure it claims to fix — the tuner walking $\theta$ out of the good region —
-is stochastic, so one draw could get it wrong in either direction.
-
-`experiments/per_segment_seeds.py`, six independent seeds, 26 episodes each,
-oval, everything else identical:
-
-| | last 8 episodes | spread | seeds ending collapsed |
-|---|---|---|---|
-| global $\theta$ | 8.9 m | sd 0.9, range 7.6–9.8 | **6 / 6** |
-| **per-segment $\theta$** | **77.8 m** | sd 0.2, range 77.5–78.0 | **0 / 6** |
-
-**It reproduces.** The distributions do not overlap — the *worst* per-segment
-seed is eight times the *best* global one — and the per-segment spread (0.2 m)
-is tighter than the global one despite being nine times the magnitude. Seed 0
-returns 7.6 m and 78.0 m, the published pair, to the decimal.
-
-### What it does is not "find better weights"
-
-The row that matters is the best episode, not the last:
-
-| | best episode | first off-track |
+| | online-learning | deployed (frozen) |
 |---|---|---|
-| global $\theta$ | 77.6 – 79.1 m | episode 3, 3, 4, 5, 5, 5 |
-| per-segment $\theta$ | 78.0 – 78.3 m | **never, on any seed** |
+| clean rate, LTC vs MLP | 0.91 vs 0.36 | 1.00 vs 0.89 |
+| **pass completion, LTC vs MLP** | **0.82 vs 0.64** | **0.89 vs 0.67** |
 
-The global tuner finds a ~78 m controller on **every** seed, and then destroys
-it on **every** seed, within five episodes. Per-segment weights reach the same
-peak and *keep* it. So the mechanism is not that per-segment $\theta$ is a
-richer parameterisation that reaches a better policy — it reaches the same
-policy — it is that **a bad update made in a corner no longer moves the
-straight's weights**, so there is no longer a single vector for the collapse to
-propagate through.
+The large clean-rate gap is mostly the adaptation transient — the memoryless arm
+takes contact while it explores — and it closes once both are frozen. The
+**pass-completion gap (~0.2) is stable across both regimes**: the recurrent net
+keeps tracking the occluded car through the blind stretches and clears it, where
+the memoryless net loses it more often (74% vs 60% of the window blind) and
+stalls. On static, faster and slower traffic the two arms pass at the same rate,
+so the advantage is equal-pace specific — a design choice reported with its
+ablation, not the contribution ({doc}`behaviour_policy`).
 
-### The counter-intuitive weights, explained
+## Real-time
 
-The single-seed run reported `q_v = 71.2` in the tightest segment against
-`29.5` on the straight — progress weighted *higher* in the hairpin, which is
-backwards — and the honest note at the time was that reading a mechanism into
-one seed would be over-interpretation. Six seeds say it was.
+The single acados solve holds the 20 Hz budget throughout, including with up to
+three opponents. On the deployment map, over a 5-minute continuous drive, the
+solve runs at **41 / 48 ms (p50 / p95)** in simulation. Recurrence is effectively
+free: policy inference is **61 µs (LTC) against 29 µs (MLP)**, both negligible
+beside the solve. Online tuning adds only the linear critic and the
+score-function update — a handful of microseconds — and, because the
+return-fitted critic draws its direction from the measured outcome rather than the
+envelope gradient, it needs **no exact Hessian and no second solve.** The deployed
+controller runs the same single solve whether it is learning or frozen. The
+on-board solve timing is re-measured on the vehicle.
 
-The direction survives weakly (hairpin above straight on 5 of 6 seeds, mean 35.5
-against 24.5) but the dramatic figure does not: **71.2 is a seed-0 outlier**, and
-the other five sit between 24.7 and 30.8.
+## The cautionary case, kept on purpose
 
-More to the point, the comparison is meaningless. Across all six seeds and all
-three segments, `q_v` lands between **19.7 and 71.2** — and
-`q_v` saturates above ≈2 (`experiments/weights_as_behaviour.py`: mean speed
-0.40 → 3.92 m/s over `q_v` 0.02 → 2, and flat thereafter). Every one of
-those numbers is in the dead zone, so they are all the *same behaviour*, and
-ordering them is reading structure into a flat region.
+The shelved `V=−J*` (MPCC-critic) policy is genuinely the *fastest* once the car
+is moving — 2.79 laps from a flying start — but from a cold standstill it
+over-claims grip, over-drives the first hairpin, and the QP goes infeasible. It
+is kept in {doc}`policies_in_the_table` because it separates the **policy** (fast)
+from the **deployment condition** (needs a warm-up lap), and because it is the
+measured reason the project uses the return-fitted critic instead. The full
+argument for why the envelope gradient collapses the opponent classes onto one
+behaviour is in {doc}`tutorial/learning_algorithm` §5.
 
-**The weight that actually carries the schedule is `q_c`**, and it is not
-counter-intuitive at all:
+## Toward hardware
 
-| | straight | long curve | hairpin |
-|---|---|---|---|
-| mean `q_c` | **0.42** | 1.95 | 1.22 |
-
-`q_c` on the straight is the lowest of the three on **6 of 6 seeds**, by a
-factor of three to six. Hold the line through the corners; let it run wide on
-the straight. That is the schedule, it is stable across seeds, and it was
-invisible while `q_v` was being read.
-
-## The same comparison on a different track reverses it
-
-```{image} _static/plots/tracks.png
-:alt: the three tracks, coloured by named sector
-:width: 100%
-```
-
-The oval has straights and two 180-degree corners; `mixed` adds 90s but no long
-curve; only `circuit` has all four. Note the circuit's 90-degree and 180-degree
-corners are labelled with the **same radius**, which is the whole reason
-pointwise curvature cannot tell them apart.
-
-`experiments/per_sector_weights.py`, `Track.circuit()` — a 47.2 m lap with
-straights, a chicane of two 90-degree corners, two 180-degree hairpins and a
-pair of sweepers, minimum radius 2.59 m. Six seeds, 26 episodes, everything else
-identical to the oval runs above.
-
-| | $\theta$ vectors | last 8 episodes | sd | seeds collapsed |
-|---|---|---|---|---|
-| **global** | 1 | **79.84 m** | 0.07 | **0 / 6** |
-| curvature bins | 3 | 78.99 m | 0.19 | 0 / 6 |
-| named sectors | 4 | 78.92 m | 0.07 | 0 / 6 |
-
-Two results, and the second is not the one the experiment was built to get.
-
-```{image} _static/plots/reversal.png
-:alt: learning curves on the oval and the circuit, showing the reversal
-:width: 100%
-```
-
-### The collapse is a property of the track, not of the parameterisation
-
-On the oval a global $\theta$ collapsed on **6 of 6** seeds. On the circuit it
-collapses on **0 of 6**, and reaches 79.84 m with a standard deviation of 7 cm.
-
-So the six-seed result above shows that per-segment weights fix **the oval's**
-failure. It is not evidence that they are a better parameterisation, and it
-should not be read as any. The honest statement of what was demonstrated is
-narrower than it first appeared.
-
-The likely mechanism, which the two tracks together suggest: the oval is mostly
-straight, so the tuner is rewarded for raising `q_v` over most of the lap and
-then meets a 180-degree corner carrying weights tuned for a straight. The
-circuit is 82% non-straight, so that feedback arrives constantly and $\theta$
-never gets the room to run away. **The variable is how much of the lap rewards
-the wrong thing**, not how many weight vectors are held.
-
-### Scheduling is not free
-
-With no collapse to prevent, performance *decreases* monotonically in the number
-of parameters, and the gaps are large relative to the seed spread:
-
-| | difference | separation |
-|---|---|---|
-| named sectors − curvature bins | −0.07 m | 0.8 SE — **not separated** |
-| global − curvature bins | +0.85 m | 10.4 SE — separated |
-| global − named sectors | +0.92 m | 22.5 SE — separated |
-
-**Named sectors buy nothing over curvature bins.** That is the question the
-circuit was built to answer and the answer is no: four labels cost twice the
-parameters of three and return a difference of 7 cm against a seed spread that
-swamps it.
-
-And the unscheduled controller beats both, by ten and twenty-two standard
-errors. Extra weight vectors are extra freedom for the tuner to wander, and on a
-track where nothing is going wrong that freedom has nothing to buy.
-
-Taken with the oval, the defensible claim is narrower and more useful than
-"situation-dependent weights help":
-
-> **Situation-dependent weights pay when part of the lap rewards the wrong
-> thing, and cost a little when it does not.**
-
-### The caveat, which is not small
-
-All three arms sit within 1 m of each other, at 4.0 m/s — the vehicle's speed
-cap — for the whole run. This is a **ceiling-limited task**: the car is at its
-limit and the grip constraint the controller does not model is active in the
-corners (4.0 m/s at a 2.59 m radius demands 6.18 m/s² against a 6.0 limit).
-
-So "scheduling does not help *here*" is measured, and "scheduling does not help"
-is not. A task where scheduling has something to win — a track with genuinely
-conflicting demands between sectors, or a speed range the cap does not truncate
-— would be needed before the null result generalises. That experiment has not
-been run.
-
-## Real-time: solved, and measured
-
-This section used to say the solve took ~150 ms against a 50 ms budget and was
-"far too slow for a car". That was true of IPOPT solved to convergence. It is
-not true of the SQP-RTI in `mpcc_tuning/rti.py` — one full QP per tick,
-warm-started, which is what real-time iteration actually means.
-
-`python benchmarks/solve_time.py`, 60 replayed states:
-
-| solver | mean | **worst** | 20 Hz | 50 Hz | 100 Hz |
-|---|---|---|---|---|---|
-| IPOPT converged, N=12 | 27.3 ms | **53.4 ms** | miss | miss | miss |
-| IPOPT converged, N=20 | 51.1 ms | **87.5 ms** | miss | miss | miss |
-| **SQP-RTI, N=12** | **1.9 ms** | **3.4 ms** | **ok** | **ok** | **ok** |
-| SQP-RTI, N=20 | 3.6 ms | 10.3 ms | ok | ok | miss |
-
-**Read the worst case, not the mean.** IPOPT at N=12 averages 27 ms, inside the
-20 Hz budget, and its worst case is 53 ms — outside it. A controller whose mean
-fits and whose tail does not is a controller that misses deadlines, and the
-distinction is invisible if only the mean is reported.
-
-At N=12 the RTI has **14× headroom at 20 Hz** and fits 100 Hz. This is CasADi's
-`qrqp` from Python; acados would be faster again, and
-`MPCC_planner_acados` already runs `SQP_RTI`.
-
-The gradient survives the change. The envelope-theorem sensitivity computed at
-the RTI solution agrees with the converged one **exactly in direction** (cosine
-1.0000) and is 16% smaller in magnitude — see
-[Influence through a solver](influence_through_a_solver.md). So the tuning does
-not have to be redone for the fast solver.
-
-### What is still not real-time
-
-The **tuner**, not the controller. Each learning step needs `Q(s,a)` at the
-executed action, which is a second solve when the action was perturbed for
-exploration. And the safety filters cost 0.6–57 ms on top (see
-[Safety filters](filters.md)), so the total tick budget has to be counted with
-whichever filter is in the loop, not with the controller alone.
-
-Note also that the second solve is usually free. `Q(s, π(s)) = V(s)` by
-definition, so the action-value solve is skipped entirely unless the applied
-action was perturbed for exploration.
+The method transfers to the SLAM-mapped figure-eight lab track (the deployment
+map) when the corridor is built raceline-referenced — the representation the net
+trains on — rather than by ray-casting the mapped walls. Driven frozen it laps
+the lab map cleanly, and the keep-best tuner refines it there. The ROS 2
+deployment node has been exercised end-to-end in software-in-the-loop (it
+consumes pose and odometry, publishes the drive command and the live tuned
+weights, holds 0% off-track). The on-vehicle trial on the `car21` platform — the
+on-board solve budget, live online refinement, and a two-car laboratory
+demonstration — is the immediate next step and is set up in the paper's
+deployment section; the lab-map and keep-best figures are regenerated by
+`results/deploy_labtest/paper_deploy_labmap.py`.

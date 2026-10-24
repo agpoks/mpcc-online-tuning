@@ -174,7 +174,7 @@ Given a warm-up lap — the normal race procedure — it drives clean.
 
 This row is kept in the paper because it separates two things a single number
 hides: the **policy** (fast) from the **deployment condition** (needs a warm-up
-lap, or a solver-failure guard in the control loop). See {doc}`safety` and the
+lap, or a solver-failure guard in the control loop). See {doc}`results` and the
 start-scenario analysis.
 
 **Result.** cold: crashes (1.0–2.3 laps); **flying start: 2.79 laps, clean**.
@@ -202,7 +202,7 @@ the hairpin QP fails; after a warm-up lap it stays ≤2.9 m/s and drives clean f
 state** (which sets the speed regime), not the solver's warm-start — a standard
 recurrent-controller property, exactly like a driver's warm-up lap. The
 grid-fitted network needs no warm-up because it was fitted to safe per-sector
-targets. Full analysis and the reproducible scenarios: {doc}`safety` and
+targets. Full analysis and the reproducible scenarios: {doc}`results` and
 `results/paper/scenarios/README.md`.
 
 ## Reproducing the whole table

@@ -1,8 +1,11 @@
 # Animations
 
-The results page reports that the tuner improves the controller and then
-destroys it, in two separate tables. The point of animating it is that the
-collapse and the weight that causes it are visible in the same frame.
+The clips here make the mechanisms visible in a single frame: what the controller
+predicts, how two cost weights decide overtake-vs-follow, and how the weights move
+as the policy learns. One of them — *the tuner, tuning* — is the **spike's**
+collapse on the kinematic bicycle, kept as a historical exhibit because it is the
+failure the validated keep-best was built to stop ({doc}`history`); the rest are
+on the current controller.
 
 Everything here comes from `mpcc_tuning.viz`, which is part of the package
 rather than a docs-only script:
@@ -33,7 +36,7 @@ renders on Read the Docs with no player.
 The orange line is the MPCC's predicted state trajectory over the next $N$
 steps, re-solved from scratch every 50 ms, and the orange dot is the reference
 point $p(s)$ — which the solver *chooses*, rather than obtaining by projecting
-the car onto the path. See [the formulation](formulation.md#0-what-the-two-errors-are)
+the car onto the path. See [the formulation](formulation.md#contouring-not-tracking)
 for why that distinction is what the lag term exists to police.
 
 Drawing the horizon is the cheapest available diagnostic for a model-predictive
@@ -97,6 +100,15 @@ differ. See [the behaviour policy](behaviour_policy.md).
 
 ## The tuner, tuning
 
+```{admonition} Historical exhibit — the spike's collapse
+:class: caution
+This is the spike's unconstrained tuner on the kinematic bicycle — it improves
+the controller, then walks a weight past the point the proxy is valid and leaves
+the track, with nothing to stop it. The shipped method prevents exactly this with
+the box, bands and validated keep-best ({doc}`safety`); the current learning
+animation is *the weights being learned, on a competition track* below.
+```
+
 ```{image} _static/anim/mpcc_tuning.gif
 :alt: trajectory and the six cost weights across an online tuning session
 :width: 100%
@@ -133,7 +145,7 @@ a path any more; it is being paid to advance the progress variable and is
 barely penalised for where the car ends up.
 
 Two things worth taking from that, and neither is about the gradient — which is
-exact to [five decimal places](results.md#the-gradient-is-exact):
+exact to [five decimal places](spike_results.md#the-gradient-is-exact):
 
 **It is a reward-design failure.** Distance covered with a single terminal $-5$
 for leaving the track gives almost no gradient signal about the boundary until
@@ -150,8 +162,8 @@ sets up.
 ### A note on which learning rate this is
 
 The clip runs at `examples/tune_online.py`'s argparse default, $\alpha = 2\times
-10^{-3}$. The table in [Results](results.md#it-tunes-itself-into-a-good-controller)
-and the README were measured at $\alpha = 2\times 10^{-4}$ — ten times smaller —
+10^{-3}$. The table in [the spike results](spike_results.md#it-tunes-itself-into-a-good-controller)
+was measured at $\alpha = 2\times 10^{-4}$ — ten times smaller —
 and 200 ticks per episode rather than 400.
 
 Both runs are real and they are the same story at two speeds, which is worth

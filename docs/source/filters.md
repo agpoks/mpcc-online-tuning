@@ -1,5 +1,14 @@
 # Safety filters
 
+```{admonition} Historical — explored, not shipped
+:class: caution
+The shipped method does **not** use a safety filter; it constrains the weights
+with an anchored box + class bands + validated keep-best ({doc}`safety`). This
+page is the survey of the seven filters explored in the spike, kept because its
+central measurement — *a wrong filter intervenes less, not more* — shaped how the
+shipped method measures safety. See {doc}`history`.
+```
+
 Seven implementations, one interface, one comparison. This page is the
 reference for all of them: what each one checks, the equations it checks it
 with, what it costs, and where it fails.

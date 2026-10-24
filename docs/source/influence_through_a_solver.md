@@ -1,5 +1,15 @@
 # Influence through a solver
 
+```{admonition} Historical — a question settled by measurement, not a shipped component
+:class: caution
+This asks whether the solver's warm-start memory needs its own influence term in
+the weight gradient, and answers — with the measurement — that under real-time
+iteration it does **not**. It is kept for the measurement. The RTRL the shipped
+method *does* use is for the recurrent **policy** network's $\partial\theta/
+\partial\phi$ ({doc}`tutorial/learning_algorithm`), not for the solver. See
+{doc}`history`.
+```
+
 *A formulation note, and the experiment that settles it.*
 
 **Result, up front: the idea is not needed.** For a genuine real-time

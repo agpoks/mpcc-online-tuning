@@ -1,229 +1,99 @@
-# A behaviour policy over θ, and whether it should be liquid
+# The weight policy
 
-*A design note, written after reading the evidence rather than before.*
+A small recurrent network maps the *situation* to the MPCC weights, afresh every
+tick. This page is what that network is, why it is recurrent, and the honest
+scope of the recurrence — which is a justified design choice, not the paper's
+contribution.
 
-The idea in [TODO](https://github.com/agpoks/mpcc-online-tuning/blob/main/TODO.md)
-item 2d is that a **recurrent or spiking net** should map *situation* → θ,
-because a closing gap is a temporal pattern that no threshold on the
-instantaneous gap can represent. The specific proposal considered here is a
-**Liquid Time-Constant** head (Hasani et al., AAAI 2021), whose selling point —
-a learned, input-dependent time constant — looks like exactly the right shape
-for "decide once, hold between".
+## Situation → weights
 
-**The evidence is against it, and it is already measured.** That goes first.
+Let $\vect f$ be a feature vector describing the situation ahead: curvature
+preview at several distances, speed as a fraction of the cap, the margin to the
+boundary, the time-to-collision and gap to the car ahead, the lateral
+acceleration a pass would need given the grip left after cornering, a soft
+membership of the sector ahead (straight, long curve, 90°, hairpin), the corridor
+width in car widths, and a one-hot opponent class (static, slower, equal, faster)
+graded by *relative* speed. A policy $\pi_\phi$ maps $\vect f$ to the weight
+vector $\vect\theta$.
 
-## `rtrrl-playground` has already run this experiment
+The policy does not emit the weights freely: it is anchored at a verified
+baseline and squashed into a measured box, then its safety weights are clamped by
+class-conditioned bands. That construction is {doc}`safety`; here the policy is
+the thing those bounds wrap.
 
-`rtrrl-playground`'s `overtake` task is the same problem in a different action
-space: the same 1:10 car, the same oval, two slower cars holding the racing
-line, the opponent's speed deliberately hidden. Every cell in that repo was run
-on it, 400k steps, 6 seeds:
-
-| cell | return | passes | crashes |
-|---|---|---|---|
-| `physics_ligru` | 425.7 | 2.07 | **14%** |
-| `ligru` | 397.9 | **2.55** | 21% |
-| `mlp` *(no memory)* | 374.2 | **3.07** | 35% |
-| `liquid_gru` | 344.9 | 2.24 | 31% |
-| `ctrnn` | 283.2 | 2.25 | 35% |
-| **`ltc`** | **267.5** | **1.29** | 17% |
-| `lrcu` | 186.6 | 1.40 | 28% |
-
-**LTC came sixth of seven, made the fewest passes of any cell, and scored below
-the memoryless MLP.** And `liquid_gru`'s own docstring in that repo is blunt
-about the family: *"Being straight about the outcome: this cell does not win."*
-
-Two honest qualifications, in both directions:
-
-* That page also says **"nothing else here is separated"** — standard deviations
-  of 137–296 on means of 187–426. The ranking should not be read. LTC is not
-  *demonstrated* worse; it is *not demonstrated better*, which for a component
-  one is proposing to add is the same practical answer.
-* The one clearly separated result is that **every learned cell roughly halves
-  the scripted policy's crash rate** (14–35% against 65%). The win there is
-  *learning over scripting*, not *liquid over gated*.
-
-## What does not transfer, and what does
-
-**The task is genuinely different, so this is a prior and not a verdict.** There
-the network emits nine discrete actions from eighteen lidar numbers and has to
-learn to drive. Here it would emit **six log weights** and the MPCC drives —
-with the keep-out constraint holding feasibility, which in fifteen runs never
-once failed. That is a far smaller job, and a prior from the harder task does
-not settle the easier one.
-
-**One signal transfers, and it is a warning.** LTC is the *cautious* end of that
-table: fewest passes, low crashes. In this repo caution has a name and a
-measurement — `experiments/overtake_or_follow.py` shows *following* is a stable,
-safe, low-progress attractor: 12.0 m covered, 0.73 m behind, 7 mm of lateral
-wander, held for the entire run, on every one of six cells that chose it.
-Passing pays 36.8 m. An LTC head risks parking in the follow region and
-**scoring respectably for never trying**, which is the exact failure
-`rtrrl-playground`'s own page warns about: *"An agent that never passes anybody
-and never crashes scores respectably, because progress alone pays."*
-
-## The architecture the measurement actually argues for
-
-Today's grid changes the design, and it argues *against* a network doing the
-whole job. The behaviour boundary is:
-
-$$\frac{q_v}{q_c} \;\lessgtr\; 1 \qquad \text{15 of 15 cells}$$
-
-and since θ is already the **log** weights, that is a *difference of two
-components of θ* — a **linear** boundary. The geometric half of the decision is
-linear, and measured.
-
-So the recurrence is not needed for the decision. It is needed for exactly one
-quantity: the **closing rate**, which is a derivative of a range and therefore
-genuinely unavailable from one frame. That suggests
-
-```
-  opponent range (+ curvature preview)
-        │
-        ▼
-  small recurrent estimator  ──►  closing rate, time-to-collision
-        │
-        ▼
-  linear map (measured: the q_v/q_c boundary)
-        │
-        ▼
-  θ, clamped to the q_v ceiling
+```{admonition} The geometric half of the decision is linear — and measured
+:class: tip
+Overtake-vs-follow is set by the ratio $q_v/q_c$: every weight setting with
+$q_v/q_c \le 1$ follows, every setting with $q_v/q_c > 1$ passes — 15 of 15
+across two decades of each weight ({doc}`obstacles`). Since $\vect\theta$ is the
+*log* weights, that boundary is a **difference of two components of
+$\vect\theta$** — linear. So a strong fixed or feed-forward policy already
+expresses the behaviour *choice*. The recurrence is not for the choice.
 ```
 
-**Recurrence confined to the one quantity that provably needs it**, and
-everything downstream linear, bounded, and already measured. That is a smaller
-claim than "an LTC chooses the behaviour", and it is the one the evidence
-supports.
+## Why recurrent: tracking through occlusion
 
-## The precondition that decides whether any of this is needed
+The one quantity a single frame cannot give is what a *closing* or *occluded*
+opponent is doing. Traffic is observed through a realistic $270^\circ$ sensor
+with car-height occlusion; on the twisty circuit an opponent is unseen 80–90% of
+the time. A rival sitting in the ego car's blind arc has to be **remembered**:
+its position over time, not its position now, is what says whether a pass is on.
+That is a temporal pattern, and it is the role the recurrent state fills.
 
-**In this repo the controller is handed the true state, and opponents are passed
-to `MPCC.set_obstacles` as exact $(x, y, r)$.** If the policy is also handed the
-opponent's *velocity*, there is no hidden state, no temporal pattern, and no
-role for recurrence — an LTC head would be decoration, and item 2d's own gate
-would correctly kill it.
+The state is produced by a **liquid-time-constant (LTC) cell**. Its effective
+time constant
 
-**The temporal argument requires deliberately withholding the opponent's
-velocity.** That is a design decision to be made explicitly and defended, not
-inherited by accident. `rtrrl-playground` makes it deliberately and says so
-("*The speed of the car in front. Never observed, redrawn every episode.*"), and
-it is defensible here for the same reason — a real car downstream of
-`obstacle_perception` gets positions, not velocities. But it must be *chosen*,
-and the choice is what creates the problem the network is then credited with
-solving.
+$$\tau_{\mathrm{eff}} = \frac{\tau}{1 + \tau\,f(\vect x, \vect h)}$$
 
-## The τ argument, restated honestly
+is a **run-time hold duration set by what is happening** — long when the gate is
+quiet, short when the input drives it. A behaviour decision against traffic
+should be taken once and *held*, not re-decided at 20 Hz, and the LTC makes that
+hold duration a learned, input-dependent quantity rather than a guessed cap. The
+same denominator keeps the online influence estimate from diverging without an
+arbitrary clip (the sensitivity leak is structurally below one) — see
+{doc}`influence_through_a_solver` for where that $\tau$-as-leak idea came from.
 
-The structural argument survives the benchmark and is worth keeping. LTC's
-effective time constant
+## The honest scope of the claim
 
-$$\tau_{\text{eff}} = \frac{\tau}{1 + \tau f(x, h)}$$
+```{admonition} Memory is a design choice justified by ablation, not the contribution
+:class: important
+The paper rests the recurrence claim on **pass completion**, the quantity stable
+from learning to deployment. On the equal-pace occluded opponent the LTC finishes
+0.89 of passes once frozen against the MLP's 0.67; it keeps tracking the car
+through the blind stretches and clears it where the memoryless net loses it and
+stalls. On static, faster and slower traffic the two arms pass at the same rate,
+so the advantage is *equal-pace specific*. The memoryless MLP is competitive as a
+single net and slightly cleaner at three cars — so the policy class is a choice,
+reported with its ablation, not the claim.
+```
 
-is a **run-time hold duration set by what is happening** — fast when the gate
-opens, holding when it closes. That is the principled form of item 2d's
-"re-decide on events, hold between", and it is a stronger claim than "recurrent
-nets handle sequences". This repo already names τ as the thing one otherwise has
-to guess: see
-[Influence through a solver](influence_through_a_solver.md), where `leak_max =
-0.99` is called an arbitrary cap and `liquid_gru`'s learned τ is what replaces
-it.
+This is a deliberately narrower statement than "a recurrent network chooses the
+behaviour," and it is the one the evidence supports. It also reverses an earlier
+prediction on this page.
 
-The flip side is measured too, in `liquid_gru`'s docstring: the τ floor that
-guarantees the influence series converges is simultaneously a **ceiling on
-memory**, and the price is monotone and visible on a pure-memory task (+0.291
-at a leak floor of 0.89, rising to +0.775 at 0.980, against LiGRU's +0.883 with
-no floor). τ is not free.
+```{admonition} What an earlier draft predicted, and why it was wrong
+:class: note
+An earlier version of this page, reading a benchmark where an LTC head came sixth
+of seven cells, concluded the honest prior was that recurrence *would not* beat a
+memoryless MLP here. That prediction was made against an **instantaneous**
+observation, where it was correct — the LTC tied the MLP. What changed the
+outcome was enriching the observation with the quantities occlusion makes
+temporal (slip, closing rate, opponent speed, per-sector map): with those, the
+LTC beats the MLP on the equal-pace occluded opponent, and a memory-driven crowd
+rule (open the line once the full field has been counted through occlusion)
+recovers the three-car case a memoryless policy cannot express. The gate — *only
+claim the network if it beats a fixed schedule and a per-tick MLP* — was the
+right gate; the observation was what had to change for it to pass.
+```
 
-## If it is built
+## Where this lives
 
-Per the repo's standing rule, **copy in, do not import.** `ltc.py` there is 117
-self-contained NumPy lines with analytic derivatives and a `leak` output, which
-is the whole file worth taking.
+| idea | where |
+|---|---|
+| the LTC cell, forward step and analytic leak | `mpcc_tuning/ltc.py` |
+| squash, anchor, class residual | `mpcc_tuning/ltc.py::WeightPolicy` |
+| the features $\vect f$ | the observation builder in the race/qualify experiments |
+| the memoryless ablation (MLP on identical features) | the `--arm mlp` path |
 
-The gate is item 2d's own, unchanged: **only claim the network if it beats (i) a
-fixed schedule and (ii) a per-tick MLP.** With a specific prediction attached
-now — the fixed schedule should be *strong*, because the boundary is linear —
-so the network can only win on the temporal axis, and if it does not beat a
-per-tick MLP given identical features, it is decoration. Given the table above,
-the honest prior is that it will not.
-
-## Testing it against more than one car
-
-The keep-out is already built for several: `max_obstacles` is a construction
-parameter and `Plant(opponents=[...])` takes a list, so two or three opponents
-on the bicycle plant work today.
-
-For a realistic multi-car test, `scuderia_gym_jax` has it —
-`examples/overtake.py` and `envs/multi_agent_env.py`, where `num_agents` cars
-share one `State`, one `step` integrates all of them, and a pairwise SAT check
-runs on their actual rectangles, with ST/STD vehicle models underneath. Its
-traffic is dumb by the same deliberate choice made here.
-
-Two things gate that, and neither is about the network:
-
-* **The tuner does not yet survive that plant at all** — see
-  [the plant page](plant.md) and TODO item 4. It is a reward-design problem
-  ("do not drive" scores ≈ 0 against a crash's −5), and it comes first.
-* **Its maps have no centreline**, so track geometry stays with
-  `mpcc_tuning.track.Track` and only the dynamics are borrowed, exactly as the
-  existing bridge does.
-
-So: multiple cars on the bicycle plant now; multiple cars on `scuderia` after
-item 4.
-
-
-## Measured: the behaviours, on a circuit we did not design
-
-`experiments/behaviour_modes.py`, on the Red Bull Ring at F1TENTH's 1:10
-scaling (`Track.spielberg()`, public `f1tenth_racetracks` data, see
-`mpcc_tuning/tracks/PROVENANCE.md`).
-
-The synthetic `circuit` could not be used for this. Its tightest corner admits
-3.9 m/s against the car's 4.0 m/s cap, so the car sits flat out for the whole
-lap and every weight setting lands within 1 m of every other. Spielberg's
-tightest corner admits 2.5 m/s, so the controller *must* modulate speed — three
-weight settings gave 45.9, 54.3 and 57.6 m.
-
-| posture | aggression | covered | passes | switches |
-|---|---|---|---|---|
-| stay behind | cautious / neutral / aggressive | 33.6 / 34.7 / 34.7 m | 0.00 | 0 / 0 / 0 |
-| overtake when safe | cautious / neutral / aggressive | 33.6 / 54.7 / **74.6** m | 0.00 / 0.67 / **1.00** | 1.3 / 2.0 / 2.0 |
-| always try | cautious / neutral / aggressive | 33.6 / 54.7 / **74.6** m | 0.00 / 0.67 / **1.00** | 0.7 / 1.7 / 2.0 |
-
-Zero collisions in 27 runs; closest approach +0.056 m outside the keep-out.
-
-**The behaviours are expressible and the effect is large** — 34 m following
-against 74.6 m overtaking, 2.2×, no crashes, from two cost weights with the
-MPCC enforcing every constraint unchanged.
-
-**But aggression is the axis that decides the outcome, and the posture is
-not.** The two overtaking postures differ in what they *decide* — the switch
-counts separate, so the availability gate does fire — and are identical in what
-they *achieve*. That is a criticism of the experiment, not of the policy: one
-slower car on a wide circuit makes a pass almost always available, so "when
-safe" and "always" should coincide. **So this establishes that a weight policy
-can express overtaking, and not that it can express *safe* overtaking.**
-Separating them needs a case where the pass is genuinely unavailable.
-
-### Three defects, and the one that mattered
-
-Each was silent and each produced a plausible table.
-
-**Aggression crossed the behaviour boundary.** Scaling `q_c` and `q_v`
-oppositely put "cautious overtake" at ratio 0.71 — below 1, so it followed.
-Measured, it was byte-identical to never passing.
-
-**The safety ceiling and the aggression dial collided.** With `q_v` clipped at
-the measured ceiling, aggressive and neutral overtaking became the same
-weights. Aggression above neutral now acts on `q_c` instead.
-
-**The engagement test was denominated in braking distance**, which vanishes at
-low speed. At 1.4 m/s it demanded a 0.54 m gap while the keep-out holds the car
-at 1.04 m — it asked for a proximity the safety constraint forbids — and fired
-on **0 of 400 ticks**.
-
-Only the third mattered, and the first two were fixed *first*: the table did
-not move, and re-running is what showed the diagnosis was wrong. A
-safety-relevant component that is silently inert reads as working rather than
-as broken, which is the same failure this project already records for its
-[safety filters](filters.md) — *a wrong filter intervenes less, not more.*
+The learning rule that updates the policy online — the return-fitted critic and
+the score-function actor carried by RTRL — is {doc}`tutorial/learning_algorithm`.
