@@ -69,13 +69,15 @@ def emit_tex(on, dp):
   enlarge x limits=0.14,
   tick align=outside, tickpos=left,
   axis lines*=left,
-  legend style={{at={{(0.5,1.02)}}, anchor=south, legend columns=2, font=\footnotesize, draw=none}},
+  legend style={{at={{(0.985,0.985)}}, anchor=north east, legend columns=-1,
+    font=\scriptsize, draw=none, fill=none, inner sep=1pt,
+    /tikz/every even column/.append style={{column sep=5pt}}}},
   nodes near coords, nodes near coords style={{font=\tiny, /pgf/number format/fixed, /pgf/number format/precision=2}},
   every node near coord/.append style={{yshift=-1pt}},
 ]
 \addplot[fill={{rgb,255:red,31;green,119;blue,180}}, draw=black!40] coordinates {{{coords(ltc)}}};
 \addplot[fill={{rgb,255:red,255;green,127;blue,14}}, draw=black!40] coordinates {{{coords(mlp)}}};
-\legend{{LTC (recurrent), MLP (memoryless)}}
+\legend{{LTC, MLP}}
 % divider between the two regimes within each metric is implicit in the xtick labels.
 \end{{axis}}
 \end{{tikzpicture}}
