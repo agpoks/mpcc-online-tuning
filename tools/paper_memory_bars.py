@@ -59,21 +59,21 @@ def emit_tex(on, dp):
 \begin{{tikzpicture}}
 \begin{{axis}}[
   width=\linewidth, height=3.6cm,
-  ybar=1.2pt, bar width=7pt,
+  ybar=1pt, bar width=11pt,
   ymin=0, ymax=1.18, ytick={{0,0.25,0.5,0.75,1.0}},
   ylabel={{rate}}, ylabel near ticks,
   xtick={{0,1,2,3}},
   xticklabels={{{', '.join('{'+c+'}' for c in cats)}}},
   xticklabel style={{align=center, font=\scriptsize}},
   x tick label as interval=false,
-  enlarge x limits=0.14,
+  enlarge x limits=0.12,
   tick align=outside, tickpos=left,
   axis lines*=left,
   legend style={{at={{(0.985,0.985)}}, anchor=north east, legend columns=-1,
     font=\scriptsize, draw=none, fill=none, inner sep=1pt,
     /tikz/every even column/.append style={{column sep=5pt}}}},
-  nodes near coords, nodes near coords style={{font=\tiny, /pgf/number format/fixed, /pgf/number format/precision=2}},
-  every node near coord/.append style={{yshift=-1pt}},
+  nodes near coords, nodes near coords style={{font=\tiny, text=white, anchor=north,
+    /pgf/number format/fixed, /pgf/number format/precision=2, yshift=-1.5pt}},
 ]
 \addplot[fill={{rgb,255:red,31;green,119;blue,180}}, draw=black!40] coordinates {{{coords(ltc)}}};
 \addplot[fill={{rgb,255:red,255;green,127;blue,14}}, draw=black!40] coordinates {{{coords(mlp)}}};
