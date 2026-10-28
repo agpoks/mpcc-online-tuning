@@ -47,8 +47,10 @@ RIGHT = 1                           # q_l
 BAND_L, BAND_R = 7, 4               # k_v (left scale), r_a (right scale)
 WCOL = {0: C(0), 2: C(2), 3: C(3), 5: C(4), 6: C(5), 8: C(6), 1: C(1)}
 
-fig, axs = plt.subplots(3, 3, figsize=(7.5, 4.2), constrained_layout=True,   # ~\textwidth so font 9 ~ 9 pt
+fig, axs = plt.subplots(3, 3, figsize=(7.5, 4.3), constrained_layout=True,   # ~\textwidth so font 9 ~ 9 pt
                         gridspec_kw={"height_ratios": [1.0, 0.8, 0.8]})
+# open a vertical gap between rows so the one-row weight legend fits in the maps/weights gap
+fig.set_constrained_layout_pads(h_pad=0.03, w_pad=0.03, hspace=0.11, wspace=0.03)
 sc = None
 # one common y-range for the reward row so the three panels share a scale (no scaling "gap")
 _rlo, _rhi = np.inf, -np.inf
@@ -128,7 +130,8 @@ for j, N in enumerate((1, 2, 3)):
 cb = fig.colorbar(sc, ax=axs[0, :], shrink=0.85, aspect=24, pad=0.01)
 cb.set_label("Speed [m/s]", fontsize=9); cb.ax.tick_params(labelsize=8)
 # The 2D-map markers legend sits ABOVE the maps row (near what it explains); the nine weight
-# colours go at the BOTTOM, out of the data. This keeps each legend next to the panels it labels.
+# colours sit in the gap BETWEEN the maps and the weight panels, as a single row -- there is
+# whitespace there, and it frees the bottom margin the two-row legend used to take.
 fig.legend(handles=[Line2D([], [], marker="D", color="w", markerfacecolor="gold", markeredgecolor="k", ms=8),
                     Line2D([], [], marker="o", color="w", markerfacecolor="none", markeredgecolor="k", mew=1.4, ms=9),
                     Line2D([], [], color="0.2", lw=0.9, ls=(0, (4, 3))),
@@ -137,9 +140,10 @@ fig.legend(handles=[Line2D([], [], marker="D", color="w", markerfacecolor="gold"
            labels=["overtake", "ego start", "raceline", "opponent path", "opponent in view"],
            loc="lower center", ncol=5, fontsize=8.5, frameon=True, framealpha=0.9,
            bbox_to_anchor=(0.5, 1.005))
-fig.legend(wleg_h, wleg_l, loc="upper center", ncol=5, fontsize=8, frameon=True,
-           framealpha=0.9, handlelength=1.3, columnspacing=1.0, handletextpad=0.4,
-           bbox_to_anchor=(0.5, -0.02))
+# nine weight colours as ONE row, anchored just above the centre weight panel (in the gap)
+axs[1, 1].legend(wleg_h, wleg_l, loc="lower center", bbox_to_anchor=(0.5, 1.02),
+                 ncol=9, fontsize=7.5, frameon=True, framealpha=0.9, handlelength=1.1,
+                 columnspacing=0.8, handletextpad=0.3, borderaxespad=0.0)
 fig.savefig(OUT, bbox_inches="tight"); fig.savefig(OUT.with_suffix(".png"), dpi=200, bbox_inches="tight")
 print("wrote", OUT)
 for N in (1, 2, 3):
