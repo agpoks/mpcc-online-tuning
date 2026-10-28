@@ -47,16 +47,8 @@ RIGHT = 1                           # q_l
 BAND_L, BAND_R = 7, 4               # k_v (left scale), r_a (right scale)
 WCOL = {0: C(0), 2: C(2), 3: C(3), 5: C(4), 6: C(5), 8: C(6), 1: C(1)}
 
-fig = plt.figure(figsize=(7.5, 4.2), constrained_layout=True)   # ~\textwidth so font 9 ~ 9 pt
-# 4-row grid: a THIN spacer row (0.12) between the maps and the weights holds the one-row
-# weight legend; every other gap stays tight, as before.
-gs = fig.add_gridspec(4, 3, height_ratios=[1.0, 0.12, 0.8, 0.8])
-axs = np.empty((3, 3), dtype=object)
-for _j in range(3):
-    axs[0, _j] = fig.add_subplot(gs[0, _j])   # maps
-    axs[1, _j] = fig.add_subplot(gs[2, _j])   # weights
-    axs[2, _j] = fig.add_subplot(gs[3, _j])   # reward
-fig.set_constrained_layout_pads(h_pad=0.02, w_pad=0.02, hspace=0.02, wspace=0.03)
+fig, axs = plt.subplots(3, 3, figsize=(7.5, 4.2), constrained_layout=True,   # ~\textwidth so font 9 ~ 9 pt
+                        gridspec_kw={"height_ratios": [1.0, 0.8, 0.8]})
 sc = None
 # one common y-range for the reward row so the three panels share a scale (no scaling "gap")
 _rlo, _rhi = np.inf, -np.inf
@@ -136,8 +128,7 @@ for j, N in enumerate((1, 2, 3)):
 cb = fig.colorbar(sc, ax=axs[0, :], shrink=0.85, aspect=24, pad=0.01)
 cb.set_label("Speed [m/s]", fontsize=9); cb.ax.tick_params(labelsize=8)
 # The 2D-map markers legend sits ABOVE the maps row (near what it explains); the nine weight
-# colours sit in the gap BETWEEN the maps and the weight panels, as a single row -- there is
-# whitespace there, and it frees the bottom margin the two-row legend used to take.
+# colours go in a SINGLE row below the figure, out of the data (no extra inter-row space).
 fig.legend(handles=[Line2D([], [], marker="D", color="w", markerfacecolor="gold", markeredgecolor="k", ms=8),
                     Line2D([], [], marker="o", color="w", markerfacecolor="none", markeredgecolor="k", mew=1.4, ms=9),
                     Line2D([], [], color="0.2", lw=0.9, ls=(0, (4, 3))),
@@ -146,10 +137,10 @@ fig.legend(handles=[Line2D([], [], marker="D", color="w", markerfacecolor="gold"
            labels=["overtake", "ego start", "raceline", "opponent path", "opponent in view"],
            loc="lower center", ncol=5, fontsize=8.5, frameon=True, framealpha=0.9,
            bbox_to_anchor=(0.5, 1.005))
-# nine weight colours as ONE row, anchored just above the centre weight panel (in the gap)
-axs[1, 1].legend(wleg_h, wleg_l, loc="lower center", bbox_to_anchor=(0.5, 1.02),
-                 ncol=9, fontsize=7.5, frameon=True, framealpha=0.9, handlelength=1.1,
-                 columnspacing=0.8, handletextpad=0.3, borderaxespad=0.0)
+# nine weight colours as a single row below the figure
+fig.legend(wleg_h, wleg_l, loc="upper center", ncol=9, fontsize=7.5, frameon=True,
+           framealpha=0.9, handlelength=1.1, columnspacing=0.8, handletextpad=0.3,
+           bbox_to_anchor=(0.5, -0.02))
 fig.savefig(OUT, bbox_inches="tight"); fig.savefig(OUT.with_suffix(".png"), dpi=200, bbox_inches="tight")
 print("wrote", OUT)
 for N in (1, 2, 3):
