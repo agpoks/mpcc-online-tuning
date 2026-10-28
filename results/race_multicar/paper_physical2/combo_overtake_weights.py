@@ -47,10 +47,16 @@ RIGHT = 1                           # q_l
 BAND_L, BAND_R = 7, 4               # k_v (left scale), r_a (right scale)
 WCOL = {0: C(0), 2: C(2), 3: C(3), 5: C(4), 6: C(5), 8: C(6), 1: C(1)}
 
-fig, axs = plt.subplots(3, 3, figsize=(7.5, 4.3), constrained_layout=True,   # ~\textwidth so font 9 ~ 9 pt
-                        gridspec_kw={"height_ratios": [1.0, 0.8, 0.8]})
-# open a vertical gap between rows so the one-row weight legend fits in the maps/weights gap
-fig.set_constrained_layout_pads(h_pad=0.03, w_pad=0.03, hspace=0.11, wspace=0.03)
+fig = plt.figure(figsize=(7.5, 4.2), constrained_layout=True)   # ~\textwidth so font 9 ~ 9 pt
+# 4-row grid: a THIN spacer row (0.12) between the maps and the weights holds the one-row
+# weight legend; every other gap stays tight, as before.
+gs = fig.add_gridspec(4, 3, height_ratios=[1.0, 0.12, 0.8, 0.8])
+axs = np.empty((3, 3), dtype=object)
+for _j in range(3):
+    axs[0, _j] = fig.add_subplot(gs[0, _j])   # maps
+    axs[1, _j] = fig.add_subplot(gs[2, _j])   # weights
+    axs[2, _j] = fig.add_subplot(gs[3, _j])   # reward
+fig.set_constrained_layout_pads(h_pad=0.02, w_pad=0.02, hspace=0.02, wspace=0.03)
 sc = None
 # one common y-range for the reward row so the three panels share a scale (no scaling "gap")
 _rlo, _rhi = np.inf, -np.inf
