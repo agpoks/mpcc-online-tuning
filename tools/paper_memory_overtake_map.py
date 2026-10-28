@@ -90,7 +90,7 @@ def main():
         pt = passtick(G)
         passed = pt is not None and pt < n
         if passed:
-            ax.scatter(EX[pt], EY[pt], marker="*", s=130, facecolor="gold", edgecolor="k", lw=0.7, zorder=8)
+            ax.scatter(EX[pt], EY[pt], marker="D", s=60, facecolor="gold", edgecolor="k", lw=0.6, zorder=8)  # overtake = gold diamond (matches Fig 3)
         allpt = passtick(G)
         tag = (f"passed at {allpt * DT:.0f} s" if passed else
                (f"still trailing (pass at {allpt * DT:.0f} s)" if allpt is not None else "no pass"))
@@ -101,7 +101,7 @@ def main():
            Line2D([0], [0], color=BLIND, lw=1.8, label="opponent occluded (blind)"),
            Line2D([0], [0], marker="o", mfc="none", mec="k", ls="", label="start"),
            Line2D([0], [0], marker="s", mfc="0.4", mec="k", ls="", label="opponent"),
-           Line2D([0], [0], marker="*", mfc="gold", mec="k", ls="", label="overtake")]
+           Line2D([0], [0], marker="D", mfc="gold", mec="k", ms=7, ls="", label="overtake")]
     fig.legend(handles=leg, loc="lower center", ncol=3, fontsize=7, frameon=False, bbox_to_anchor=(0.5, -0.06))
     FIG.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIG, bbox_inches="tight"); fig.savefig(FIG.with_suffix(".png"), dpi=200, bbox_inches="tight")
